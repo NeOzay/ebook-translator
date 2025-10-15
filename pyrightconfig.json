@@ -1,0 +1,14 @@
+{
+    "venvPath": "C:\\Users\\colpa\\AppData\\Local\\pypoetry\\Cache\\virtualenvs",
+    "venv": "ebook-translator-VgIQI3m7-py3.12",
+    "executionEnvironments": [
+        {
+            "root": "src"
+        }
+    ],
+    "include": [
+        "src"
+    ],
+    "typeCheckingMode": "basic",
+    "useLibraryCodeForTypes": true
+}
