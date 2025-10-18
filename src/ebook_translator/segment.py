@@ -51,33 +51,6 @@ class Chunk:
     head: list[str] = field(default_factory=list)
     body: dict[TagKey, str] = field(default_factory=dict)
     tail: list[str] = field(default_factory=list)
-    file_range: dict[HtmlPage, int] = field(default_factory=dict)
-
-    def get_file_from_range(self, index: int) -> HtmlPage | None:
-        """
-        Trouve la page source correspondant à un index de ligne dans le chunk.
-
-        Cette méthode parcourt file_range et calcule quelle page contient
-        le fragment à l'index donné.
-
-        Args:
-            index: L'index du fragment dans le body (commence à 0)
-
-        Returns:
-            La HtmlPage contenant ce fragment, ou None si non trouvé
-
-        Example:
-            >>> chunk.file_range = {page1: 5, page2: 3}
-            >>> chunk.get_file_from_range(0)  # page1
-            >>> chunk.get_file_from_range(4)  # page1 (dernier de page1)
-            >>> chunk.get_file_from_range(5)  # page2 (premier de page2)
-        """
-        remaining_index = index
-        for page, line_count in self.file_range.items():
-            if remaining_index < line_count:
-                return page
-            remaining_index -= line_count
-        return None
 
     def fetch(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
         """
@@ -97,24 +70,9 @@ class Chunk:
             ...     translation = translate(text)
             ...     page.replace_text(tag, translation)
         """
-        file_iterator = iter(self.file_range.items())
-        current_page, lines_in_page = next(file_iterator, (None, 0))
-        current_line_index = 0
 
-        for fragment_index, (tag_key, text) in enumerate(self.body.items()):
-            # Passer au fichier suivant si nécessaire
-            while current_line_index >= lines_in_page:
-                current_page, lines_in_page = next(file_iterator, (None, 0))
-                current_line_index = 0
-
-            if not current_page:
-                raise ValueError(
-                    f"Unable to find source page for fragment at index {fragment_index}. "
-                    f"This indicates a mismatch in file_range accounting."
-                )
-
-            yield current_page, tag_key, text
-            current_line_index += 1
+        for tag_key, text in self.body.items():
+            yield tag_key.page, tag_key, text
 
     def __str__(self) -> str:
         """
@@ -155,7 +113,6 @@ class Chunk:
             f"body_items={len(self.body)}, "
             f"head_items={len(self.head)}, "
             f"tail_items={len(self.tail)}, "
-            f"pages={len(self.file_range)})"
         )
 
 
@@ -312,11 +269,6 @@ class Segmentator:
             text: Le texte du fragment
         """
         chunk.body[tag_key] = text
-
-        if page in chunk.file_range:
-            chunk.file_range[page] += 1
-        else:
-            chunk.file_range[page] = 1
 
     def _fill_head_from_previous(
         self, previous_chunk: Chunk, current_chunk: Chunk

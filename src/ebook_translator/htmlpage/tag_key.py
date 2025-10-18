@@ -2,7 +2,13 @@
 Wrapper pour utiliser des Tags BeautifulSoup comme clés de dictionnaire.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from bs4.element import Tag
+
+if TYPE_CHECKING:
+    from .page import HtmlPage
 
 
 class TagKey:
@@ -18,9 +24,9 @@ class TagKey:
         _id: L'identité unique de l'objet tag (résultat de id())
     """
 
-    __slots__ = ("tag", "_id", "index")
+    __slots__ = ("tag", "_id", "index", "page")
 
-    def __init__(self, index: int, tag: Tag) -> None:
+    def __init__(self, index: int, tag: Tag, page: HtmlPage) -> None:
         """
         Initialise un TagKey.
 
@@ -29,7 +35,8 @@ class TagKey:
         """
         self.tag = tag
         self._id = id(tag)
-        self.index = index
+        self.index = str(index)
+        self.page = page
 
     def __hash__(self) -> int:
         """Retourne le hash basé sur l'identité de l'objet."""
@@ -51,4 +58,4 @@ class TagKey:
 
     def __repr__(self) -> str:
         """Représentation en chaîne pour le debug."""
-        return f"TagKey(id={self._id}, tag={self.tag.name})"
+        return f"TagKey(index={self.index}, tag={self.tag.name}, page={self.page.epub_html.file_name})"

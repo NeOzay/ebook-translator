@@ -1,9 +1,37 @@
 import os
 import datetime
+import sys
+from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import Optional, Callable, Awaitable
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
+
+
+def get_api_key() -> str:
+    # Charger les variables d'environnement depuis .env
+    load_dotenv()
+
+    # Configuration du LLM avec validation
+    api_key = os.getenv("API_KEY")
+    if not api_key:
+        print("\n❌ ERREUR : La clé API DeepSeek n'est pas définie.", file=sys.stderr)
+        print("\nPour configurer :", file=sys.stderr)
+        print("  1. Copiez .env.example en .env", file=sys.stderr)
+        print(
+            "  2. Obtenez une clé API sur https://platform.deepseek.com/api_keys",
+            file=sys.stderr,
+        )
+        print(
+            "  3. Ajoutez votre clé dans .env : DEEPSEEK_API_KEY=sk-votre-cle",
+            file=sys.stderr,
+        )
+        print(
+            "\nDocumentation : voir CLAUDE.md section 'Configuration des clés API'\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return api_key
 
 
 class LLM:
@@ -27,7 +55,7 @@ class LLM:
         max_tokens: int = 1500,
     ):
         self.model_name = model_name
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or get_api_key()
         self.client = OpenAI(api_key=self.api_key, base_url=url)
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -84,7 +112,6 @@ class LLM:
         self,
         system_prompt: str,
         content: str,
-        user_prompt: Optional[str] = None,
     ) -> str:
         """Envoie une requête asynchrone et appelle le callback à la fin."""
         log_path = self._create_log(system_prompt, content)

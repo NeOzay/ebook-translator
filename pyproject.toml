@@ -1,19 +1,40 @@
 [project]
 name = "ebook-translator"
 version = "0.1.0"
-description = ""
+description = "Traduisez des fichiers EPUB en utilisant des Large Language Models (DeepSeek, OpenAI, etc.)"
 authors = [
-    {name = "NeOzay",email = "colpaert.benoit@gmail.com"}
+    {name = "NeOzay", email = "neozay.ozay@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+keywords = ["epub", "translation", "llm", "deepseek", "openai", "ebook"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "ebooklib (>=0.19,<0.20)",
     "openai (>=2.1.0,<3.0.0)",
     "bs4 (>=0.0.2,<0.0.3)",
     "tiktoken (==0.12.0)",
     "jinja2 (==3.1.6)",
+    "python-dotenv (>=1.0.0,<2.0.0)",
 ]
+
+[project.scripts]
+ebook-translator = "ebook_translator.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/NeOzay/ebook-translator"
+Repository = "https://github.com/NeOzay/ebook-translator"
+Issues = "https://github.com/NeOzay/ebook-translator/issues"
 
 [tool.poetry]
 packages = [{include = "ebook_translator", from = "src"}]

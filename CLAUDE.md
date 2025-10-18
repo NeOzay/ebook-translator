@@ -6,6 +6,46 @@ Ce fichier fournit des instructions à Claude Code (claude.ai/code) lors du trav
 
 Ceci est un outil de traduction d'ebooks qui utilise des API LLM (compatibles OpenAI) pour traduire des fichiers EPUB. L'outil segmente intelligemment le contenu des ebooks, le traduit à l'aide d'appels LLM asynchrones, et reconstruit l'EPUB traduit tout en préservant la structure et les métadonnées.
 
+## Configuration des clés API
+
+Le projet nécessite une clé API pour utiliser les services LLM (DeepSeek, OpenAI, etc.).
+
+### Configuration initiale
+
+1. **Copier le fichier d'exemple** :
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Obtenir une clé API DeepSeek** :
+   - Créez un compte sur [DeepSeek Platform](https://platform.deepseek.com)
+   - Accédez à [API Keys](https://platform.deepseek.com/api_keys)
+   - Générez une nouvelle clé API
+
+3. **Configurer le fichier `.env`** :
+   ```bash
+   # Éditez .env et ajoutez votre clé
+   API_KEY=sk-votre-cle-api-ici
+
+   ```
+
+### Variables d'environnement
+
+| Variable | Obligatoire | Défaut | Description |
+|----------|-------------|--------|-------------|
+| `DEEPSEEK_API_KEY` | ✅ Oui | - | Clé API DeepSeek pour l'authentification |
+| `DEEPSEEK_URL` | ❌ Non | `https://api.deepseek.com` | URL de base de l'API DeepSeek |
+| `OPENAI_API_KEY` | ❌ Non | - | Clé API OpenAI (alternative à DeepSeek) |
+
+### Sécurité
+
+**IMPORTANT** :
+- ⚠️ Ne commitez **JAMAIS** le fichier `.env` dans git (déjà dans `.gitignore`)
+- ⚠️ Ne partagez **JAMAIS** vos clés API publiquement
+- ⚠️ Si une clé est compromise, **révoquez-la immédiatement** sur la plateforme
+
+Le projet utilise `python-dotenv` pour charger automatiquement les variables d'environnement depuis `.env` au démarrage.
+
 ## Commandes de développement
 
 ### Dépendances

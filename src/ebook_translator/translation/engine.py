@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 def build_translation_map(
     chunk: "Chunk", translated_texts: dict[int, str]
-) -> tuple[dict[str, dict[int, str]], dict[str, dict[int, str]]]:
+) -> dict[str, dict[str, str]]:
     """
     Construit un mapping {fichier_source: {line_index: texte_traduit}}.
 
@@ -41,8 +41,7 @@ def build_translation_map(
     Raises:
         KeyError: Si un index est manquant dans translated_texts
     """
-    translation_map: dict[str, dict[int, str]] = {}
-    text_mapping: dict[str, dict[int, str]] = {}
+    translation_map: dict[str, dict[str, str]] = {}
 
     for i, (current_file, tag_key, original_text) in enumerate(chunk.fetch()):
         # Obtenir la traduction
@@ -56,14 +55,11 @@ def build_translation_map(
         # Initialiser les dictionnaires pour ce fichier si nécessaire
         if source_path not in translation_map:
             translation_map[source_path] = {}
-            text_mapping[source_path] = {}
 
         # Ajouter la traduction avec l'index de ligne comme clé
         translation_map[source_path][line_index] = translated_text
-        # Aussi garder le texte original pour le fallback
-        text_mapping[source_path][line_index] = original_text
 
-    return translation_map, text_mapping
+    return translation_map
 
 
 def flatten_translation_map(
@@ -109,7 +105,7 @@ class TranslationEngine:
         self,
         chunk: "Chunk",
         user_prompt: Optional[str] = None,
-    ) -> dict[int, str]:
+    ) -> tuple[list[str], bool]:
         """
         Effectue une requête de traduction via LLM et sauvegarde les résultats.
 
@@ -137,13 +133,13 @@ class TranslationEngine:
         translated_texts = parse_llm_translation_output(llm_output)
 
         # Mapper les traductions par fichier source
-        translation_map, text_mapping = build_translation_map(chunk, translated_texts)
+        translation_map = build_translation_map(chunk, translated_texts)
 
         # Sauvegarder toutes les traductions
-        self._save_translations(translation_map, text_mapping)
+        self._save_translations(translation_map)
 
         # Retourner un dictionnaire plat pour utilisation directe
-        return flatten_translation_map(translation_map)
+        return self.store.get_from_chunk(chunk)
 
     def translate_chunk(
         self,
@@ -169,13 +165,21 @@ class TranslationEngine:
 
         # Si des traductions manquent, faire un appel LLM
         if has_missing:
-            cached_translations = self._request_translation(chunk, user_prompt)
+            cached_translations, has_missing = self._request_translation(
+                chunk, user_prompt
+            )
+            if has_missing:
+                raise ValueError(
+                    "Des traductions sont toujours manquantes après l'appel LLM."
+                )
 
         # Appliquer les traductions aux pages HTML
-        for page, tag_key, _ in chunk.fetch():
+        for (page, tag_key, _), translated_text in zip(
+            chunk.fetch(), cached_translations
+        ):
             # Utiliser l'index du TagKey pour récupérer la traduction
-            line_index = tag_key.index
-            translated_text = cached_translations.get(line_index)
+            # line_index = tag_key.index
+            # translated_text = cached_translations.get(index)
             if translated_text:
                 page.replace_text(
                     tag_key,
@@ -185,8 +189,7 @@ class TranslationEngine:
 
     def _save_translations(
         self,
-        translation_map: dict[str, dict[int, str]],
-        text_mapping: dict[str, dict[int, str]]
+        translation_map: dict[str, dict[str, str]],
     ) -> None:
         """
         Sauvegarde toutes les traductions dans le store.
@@ -196,6 +199,4 @@ class TranslationEngine:
             text_mapping: Dictionnaire {fichier_source: {line_index: texte_original}}
         """
         for source_file, translations in translation_map.items():
-            # Récupérer le mapping texte pour ce fichier
-            text_map = text_mapping.get(source_file, {})
-            self.store.save_all(source_file, translations, text_map)
+            self.store.save_all(source_file, translations)

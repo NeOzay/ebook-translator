@@ -8,6 +8,7 @@ de bout en bout, incluant :
 - Traduction via LLM
 - Reconstruction de l'EPUB traduit
 """
+
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,18 +28,20 @@ from .epub_handler import (
 if TYPE_CHECKING:
     from ..llm import LLM
 
+
 class Language(Enum):
-  SIMPLIFIED_CHINESE = "Chinois simplifié"
-  TRADITIONAL_CHINESE = "Chinois Traditionnel"
-  ENGLISH = "Anglais"
-  FRENCH = "Francais"
-  GERMAN = "Allemand"
-  SPANISH = "Espagnole"
-  RUSSIAN = "Russe"
-  ITALIAN = "Italien"
-  PORTUGUESE = "Portugais"
-  JAPANESE = "Japonais"
-  KOREAN = "Coréen"
+    SIMPLIFIED_CHINESE = "Chinois simplifié"
+    TRADITIONAL_CHINESE = "Chinois Traditionnel"
+    ENGLISH = "Anglais"
+    FRENCH = "Francais"
+    GERMAN = "Allemand"
+    SPANISH = "Espagnole"
+    RUSSIAN = "Russe"
+    ITALIAN = "Italien"
+    PORTUGUESE = "Portugais"
+    JAPANESE = "Japonais"
+    KOREAN = "Coréen"
+
 
 class EpubTranslator:
     """
@@ -64,7 +67,7 @@ class EpubTranslator:
 
     def translate(
         self,
-        target_language: Language,
+        target_language: Language | str,
         output_epub: str,
         max_concurrent: int = 1,
         bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
@@ -99,6 +102,12 @@ class EpubTranslator:
                 f"Le fichier EPUB source n'existe pas : {self.epub_path}"
             )
 
+        target_language = (
+            target_language
+            if isinstance(target_language, str)
+            else target_language.value
+        )
+
         print(f"📖 Chargement de l'EPUB : {self.epub_path}")
         source_book = epub.read_epub(self.epub_path)
 
@@ -115,7 +124,7 @@ class EpubTranslator:
 
         # Initialiser le worker de traduction
         print(f"🤖 Initialisation du traducteur (langue cible: {target_language})")
-        worker = TranslationWorker(self.llm, str(target_language), store, bilingual_format)
+        worker = TranslationWorker(self.llm, target_language, store, bilingual_format)
 
         # Segmenter et traduire
         print(

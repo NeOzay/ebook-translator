@@ -1,6 +1,7 @@
 """
 Parsing des sorties de traduction des LLM.
 """
+
 import re
 
 
@@ -44,20 +45,15 @@ def parse_llm_translation_output(output: str) -> dict[int, str]:
     # - ^<(\\d+)\\/> : capture le numéro de ligne
     # - (.*?) : capture le texte traduit (non-greedy)
     # - (?=^<\\d+\\/>|$) : arrêt avant la prochaine balise ou fin
-    pattern = re.compile(
-        r"^<(\d+)\/>(.*?)(?=^<\d+\/>|$)",
-        re.DOTALL | re.MULTILINE
-    )
+    pattern = re.compile(r"^<(\d+)\/>(.*?)(?=^<\d+\/>|$)", re.DOTALL | re.MULTILINE)
 
-    translations = {}
+    translations: dict[int, str] = {}
     for match in pattern.finditer(output):
         line_number = int(match.group(1))
         text = match.group(2).strip()
         translations[line_number] = text
 
     if not translations:
-        raise ValueError(
-            "❌ Aucun segment trouvé. Vérifie le format de la sortie LLM."
-        )
+        raise ValueError("❌ Aucun segment trouvé. Vérifie le format de la sortie LLM.")
 
     return translations

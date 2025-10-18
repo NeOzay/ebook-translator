@@ -48,6 +48,7 @@ Thumbs.db
 output/
 translated_books/
 temp/
+.translation_cache
 
 # Environment variables
 .env

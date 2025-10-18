@@ -261,7 +261,7 @@ class HtmlPage:
         Returns:
             Tuple (TagKey, texte formaté)
         """
-        tag_key = TagKey(index, parent)
+        tag_key = TagKey(index, parent, self)
         self.to_translate[tag_key] = fragments
         text = self._format_text(fragments)
         return tag_key, text
