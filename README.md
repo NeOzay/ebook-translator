@@ -2,7 +2,7 @@
 
 > Translate EPUB files using Large Language Models (DeepSeek, OpenAI, and other OpenAI-compatible APIs)
 
-[<�<� Version fran�aise](README.fr.md)
+[🇫🇷 Version française](README.fr.md)
 
 ## Overview
 
@@ -75,9 +75,9 @@ python src/ebook_translator/__main__.py
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `API_KEY` |  Yes | - | DeepSeek API key for authentication |
-| `DEEPSEEK_URL` | L No | `https://api.deepseek.com` | DeepSeek API base URL |
-| `OPENAI_API_KEY` | L No | - | OpenAI API key (alternative) |
+| `API_KEY` | ✅ Yes | - | DeepSeek API key for authentication |
+| `DEEPSEEK_URL` | ❌ No | `https://api.deepseek.com` | DeepSeek API base URL |
+| `OPENAI_API_KEY` | ❌ No | - | OpenAI API key (alternative) |
 
 ## Development
 
@@ -111,9 +111,9 @@ The translation pipeline follows this flow:
 ## Security
 
 **IMPORTANT**:
-- � **NEVER** commit the `.env` file to git (already in `.gitignore`)
-- � **NEVER** share your API keys publicly
-- � If a key is compromised, **revoke it immediately** on the platform
+- ⚠️ **NEVER** commit the `.env` file to git (already in `.gitignore`)
+- ⚠️ **NEVER** share your API keys publicly
+- ⚠️ If a key is compromised, **revoke it immediately** on the platform
 
 ## License
 
