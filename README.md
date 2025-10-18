@@ -60,14 +60,46 @@
 
 ## Usage
 
-```bash
-python -m ebook_translator
+### Basic Usage
+
+Create a Python file (e.g., `translate.py`):
+
+```python
+from ebook_translator.translation.translator import Language
+from ebook_translator import LLM, BilingualFormat, EpubTranslator
+
+# Configure the LLM
+llm = LLM(
+    model_name="deepseek-chat",
+    log_dir="logs",
+    url="https://api.deepseek.com",
+    max_tokens=1300,
+)
+
+# Translate the EPUB
+translator = EpubTranslator(llm, epub_path="my_book.epub")
+translator.translate(
+    target_language=Language.FRENCH,
+    output_epub="my_book_translated.epub",
+    max_concurrent=5,
+    bilingual_format=BilingualFormat.SEPARATE_TAG,
+)
 ```
 
-Or directly:
+Then run:
 ```bash
-python src/ebook_translator/__main__.py
+python translate.py
 ```
+
+### Bilingual Format Options
+
+- `BilingualFormat.INLINE`: Original and translation in the same paragraph
+- `BilingualFormat.SEPARATE_TAG`: Original and translation in separate paragraphs
+- `BilingualFormat.DISABLE`: Completely replaces the original
+
+### Complete Example
+
+See [start.py](start.py) for a complete configuration example with all available parameters.
 
 ## Configuration
 

@@ -60,14 +60,46 @@
 
 ## Utilisation
 
-```bash
-python -m ebook_translator
+### Utilisation de base
+
+Créez un fichier Python (par exemple `translate.py`) :
+
+```python
+from ebook_translator.translation.translator import Language
+from ebook_translator import LLM, BilingualFormat, EpubTranslator
+
+# Configuration du LLM
+llm = LLM(
+    model_name="deepseek-chat",
+    log_dir="logs",
+    url="https://api.deepseek.com",
+    max_tokens=1300,
+)
+
+# Traduction de l'EPUB
+translator = EpubTranslator(llm, epub_path="mon_livre.epub")
+translator.translate(
+    target_language=Language.FRENCH,
+    output_epub="mon_livre_traduit.epub",
+    max_concurrent=5,
+    bilingual_format=BilingualFormat.SEPARATE_TAG,
+)
 ```
 
-Ou directement:
+Puis exécutez :
 ```bash
-python src/ebook_translator/__main__.py
+python translate.py
 ```
+
+### Options de format bilingue
+
+- `BilingualFormat.INLINE` : Original et traduction dans le même paragraphe
+- `BilingualFormat.SEPARATE_TAG` : Original et traduction en paragraphes séparés
+- `BilingualFormat.DISABLE` : Remplace complètement l'original
+
+### Exemple complet
+
+Voir [start.py](start.py) pour un exemple de configuration complète avec tous les paramètres disponibles.
 
 ## Configuration
 
@@ -76,8 +108,6 @@ python src/ebook_translator/__main__.py
 | Variable | Obligatoire | Défaut | Description |
 |----------|-------------|--------|-------------|
 | `API_KEY` | ✅ Oui | - | Clé API DeepSeek pour l'authentification |
-| `DEEPSEEK_URL` | ❌ Non | `https://api.deepseek.com` | URL de base de l'API DeepSeek |
-| `OPENAI_API_KEY` | ❌ Non | - | Clé API OpenAI (alternative) |
 
 ## Développement
 
