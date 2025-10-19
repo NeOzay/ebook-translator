@@ -145,4 +145,5 @@ __all__ = [
     "IGNORED_TAGS",
     "DEFAULT_OVERLAP_RATIO",
     "DEFAULT_ENCODING",
+    "Language",
 ]
