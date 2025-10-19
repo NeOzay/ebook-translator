@@ -39,7 +39,7 @@ class Store:
         cache_dir: Répertoire où sont stockés les fichiers de cache
     """
 
-    def __init__(self, cache_dir: str = ".translation_cache") -> None:
+    def __init__(self, cache_dir: Path) -> None:
         """
         Initialise le store avec un répertoire de cache.
 
@@ -47,7 +47,7 @@ class Store:
             cache_dir: Répertoire où sauvegarder les fichiers de traduction.
                       Créé automatiquement s'il n'existe pas.
         """
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_cache_file(self, source_file: str) -> Path:
