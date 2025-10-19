@@ -170,7 +170,9 @@ class TestSegmentator:
         # Remplir le head
         segmentator._fill_head_from_previous(prev_chunk, current_chunk)
 
-        # Le head devrait contenir du contexte (ordre inverse)
+        # Le head devrait contenir du contexte
         assert len(current_chunk.head) > 0
-        # Le dernier élément du body devrait être en premier dans le head
-        assert current_chunk.head[0] == "Text 3"
+        # L'ordre devrait être préservé (text1, text2, text3)
+        assert current_chunk.head[0] == "Text 1"
+        # Tous les textes devraient être présents (budget=500, chaque text~2 tokens)
+        assert len(current_chunk.head) == 3

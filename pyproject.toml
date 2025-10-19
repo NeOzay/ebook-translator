@@ -37,13 +37,6 @@ Homepage = "https://github.com/NeOzay/ebook-translator"
 Repository = "https://github.com/NeOzay/ebook-translator"
 Issues = "https://github.com/NeOzay/ebook-translator/issues"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0,<9.0.0",
-    "pytest-cov>=4.0.0,<6.0.0",
-    "pyright>=1.1.0,<2.0.0",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
@@ -67,3 +60,10 @@ packages = [{include = "ebook_translator", from = "src"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=8.4.2,<9.0.0)",
+    "pytest-cov (>=7.0.0,<8.0.0)",
+    "pyright (>=1.1.406,<2.0.0)"
+]
