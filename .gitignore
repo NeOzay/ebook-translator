@@ -50,6 +50,7 @@ translated_books/
 temp/
 .translation_cache
 *_traduit.epub
+books
 
 # Environment variables
 .env
