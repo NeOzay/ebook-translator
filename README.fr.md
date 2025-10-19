@@ -65,7 +65,7 @@
 Créez un fichier Python (par exemple `translate.py`) :
 
 ```python
-from ebook_translator.translation.translator import Language
+from ebook_translator import Language
 from ebook_translator import LLM, BilingualFormat, EpubTranslator
 
 # Configuration du LLM

@@ -65,7 +65,7 @@
 Create a Python file (e.g., `translate.py`):
 
 ```python
-from ebook_translator.translation.translator import Language
+from ebook_translator import Language
 from ebook_translator import LLM, BilingualFormat, EpubTranslator
 
 # Configure the LLM
@@ -108,8 +108,6 @@ See [start.py](start.py) for a complete configuration example with all available
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `API_KEY` | ✅ Yes | - | DeepSeek API key for authentication |
-| `DEEPSEEK_URL` | ❌ No | `https://api.deepseek.com` | DeepSeek API base URL |
-| `OPENAI_API_KEY` | ❌ No | - | OpenAI API key (alternative) |
 
 ## Development
 
