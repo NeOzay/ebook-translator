@@ -15,9 +15,7 @@ Pour utiliser :
 3. Exécutez : python my_translation.py
 """
 
-import os
-import sys
-from dotenv import load_dotenv
+from pathlib import Path
 from ebook_translator import Language
 from ebook_translator import LLM, BilingualFormat, EpubTranslator
 
@@ -34,8 +32,8 @@ def main() -> None:
     # ============================================================
 
     # Fichiers EPUB
-    source_epub = "mon_livre.epub"
-    output_epub = f"[FR] {source_epub}.epub"
+    source_epub = Path("books/Seirei Gensouki - Volume 21 [J-Novel Club][Premium].epub")
+    output_epub = Path(f"./books/out/[FR] {source_epub.name}")
 
     # Langue cible (voir Language dans translation/translator.py)
     target_language = Language.FRENCH
