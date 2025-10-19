@@ -10,6 +10,8 @@ Ce module gère la traduction effective des chunks, incluant :
 
 from typing import Optional, TYPE_CHECKING
 
+from tqdm import tqdm
+
 from ..htmlpage import BilingualFormat
 from .parser import parse_llm_translation_output
 
@@ -146,6 +148,7 @@ class TranslationEngine:
         chunk: "Chunk",
         user_prompt: Optional[str] = None,
         bilingual_format: BilingualFormat = BilingualFormat.DISABLE,
+        bar: Optional[tqdm] = None,
     ) -> None:
         """
         Traduit un chunk en utilisant le cache ou en faisant un appel LLM.
@@ -186,6 +189,8 @@ class TranslationEngine:
                     translated_text,
                     bilingual_format=bilingual_format,
                 )
+        if bar:
+            bar.update(1)
 
     def _save_translations(
         self,
