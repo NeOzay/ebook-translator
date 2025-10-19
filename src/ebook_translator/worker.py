@@ -17,11 +17,13 @@ class TranslationWorker:
         target_language: str,
         store: Store,
         bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
+        user_prompt: str | None = None,
     ):
         self.llm = llm
         self.target_language = target_language
         self.store = store
         self.bilingual_format = bilingual_format
+        self.user_prompt = user_prompt
         self.engine = TranslationEngine(llm, store, target_language)
 
     def run(self, segments: Segmentator, max_threads_count: int):
@@ -47,6 +49,7 @@ class TranslationWorker:
                         chunk,
                         bar=pbar,
                         bilingual_format=self.bilingual_format,
+                        user_prompt=self.user_prompt,
                     )
                     futures.append(future)
 
@@ -56,4 +59,6 @@ class TranslationWorker:
                         future.result()  # Récupère le résultat ou propage l'exception
                     except Exception as e:
                         # Logger l'erreur mais continuer avec les autres traductions
-                        pbar.write(f"❌ Erreur lors de la traduction d'un segment : {e}")
+                        pbar.write(
+                            f"❌ Erreur lors de la traduction d'un segment : {e}"
+                        )
