@@ -54,7 +54,7 @@ class EpubTranslator:
     def __init__(
         self,
         llm: "LLM",
-        epub_path: str,
+        epub_path: str | Path,
     ):
         """
         Initialise le traducteur d'EPUB.
@@ -63,14 +63,18 @@ class EpubTranslator:
             llm: Instance du LLM à utiliser pour la traduction
         """
         self.llm = llm
-        self.epub_path = epub_path
+        self.epub_path: Path = (
+            epub_path if isinstance(epub_path, Path) else Path(epub_path)
+        )
 
     def translate(
         self,
         target_language: Language | str,
-        output_epub: str,
+        output_epub: str | Path,
         max_concurrent: int = 1,
         bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
+        user_prompt: str | None = None,
+        cache_path: str | Path | None = None,
     ) -> None:
         """
         Traduit un fichier EPUB en utilisant un LLM.
@@ -97,7 +101,7 @@ class EpubTranslator:
             ValueError: Si les paramètres sont invalides
         """
         # Validation des entrées
-        if not Path(self.epub_path).exists():
+        if not self.epub_path.exists():
             raise FileNotFoundError(
                 f"Le fichier EPUB source n'existe pas : {self.epub_path}"
             )
@@ -106,6 +110,10 @@ class EpubTranslator:
             target_language
             if isinstance(target_language, str)
             else target_language.value
+        )
+
+        output_epub = (
+            output_epub if isinstance(output_epub, Path) else Path(output_epub)
         )
 
         print(f"📖 Chargement de l'EPUB : {self.epub_path}")
@@ -118,13 +126,22 @@ class EpubTranslator:
         # Copier les métadonnées
         print("📝 Copie des métadonnées...")
         copy_epub_metadata(source_book, target_book, str(target_language))
-
         # Initialiser le système de stockage
-        store = Store()
+        match cache_path:
+            case None:
+                cache_path = Path(
+                    self.epub_path.parent / f".{self.epub_path.stem}_cache"
+                )
+            case str():
+                cache_path = Path(cache_path)
+
+        store = Store(cache_path)
 
         # Initialiser le worker de traduction
         print(f"🤖 Initialisation du traducteur (langue cible: {target_language})")
-        worker = TranslationWorker(self.llm, target_language, store, bilingual_format)
+        worker = TranslationWorker(
+            self.llm, target_language, store, bilingual_format, user_prompt=user_prompt
+        )
 
         # Segmenter et traduire
         print(
@@ -142,5 +159,10 @@ class EpubTranslator:
 
         # Sauvegarder l'EPUB traduit
         print(f"💾 Sauvegarde de l'EPUB traduit...")
+        if not output_epub.parent.exists():
+            print(
+                "📂 Attention : le dossier de sortie n'existe pas, création en cours..."
+            )
+            output_epub.parent.mkdir(parents=True, exist_ok=True)
         epub.write_epub(output_epub, target_book)
         print(f"✅ EPUB traduit enregistré sous : {output_epub}")
