@@ -22,6 +22,8 @@ class TagKey:
     Attributes:
         tag: Le tag BeautifulSoup encapsulé
         _id: L'identité unique de l'objet tag (résultat de id())
+        index: L'index du fragment (stocké comme string pour compatibilité JSON)
+        page: La page HTML contenant ce tag
     """
 
     __slots__ = ("tag", "_id", "index", "page")
@@ -31,11 +33,17 @@ class TagKey:
         Initialise un TagKey.
 
         Args:
+            index: L'index du fragment (sera converti en string)
             tag: Le tag BeautifulSoup à encapsuler
+            page: La page HTML contenant ce tag
+
+        Note:
+            L'index est toujours stocké comme string pour compatibilité
+            avec la sérialisation JSON du Store.
         """
         self.tag = tag
         self._id = id(tag)
-        self.index = str(index)
+        self.index = str(index)  # Toujours string pour cohérence avec Store
         self.page = page
 
     def __hash__(self) -> int:

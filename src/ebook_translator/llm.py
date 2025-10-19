@@ -4,8 +4,12 @@ import sys
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import Optional, Callable, Awaitable
-from openai import OpenAI
+from openai import OpenAI, OpenAIError, APITimeoutError, RateLimitError, APIError
 from openai.types.chat import ChatCompletionMessageParam
+
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_api_key() -> str:
@@ -113,7 +117,19 @@ class LLM:
         system_prompt: str,
         content: str,
     ) -> str:
-        """Envoie une requête asynchrone et appelle le callback à la fin."""
+        """
+        Envoie une requête au LLM avec gestion d'erreurs spécifiques.
+
+        Args:
+            system_prompt: Le prompt système définissant le comportement du LLM
+            content: Le contenu à traiter
+
+        Returns:
+            La réponse du LLM ou un message d'erreur entre crochets
+
+        Note:
+            Les erreurs sont loggées et un fichier de log est créé pour chaque requête.
+        """
         log_path = self._create_log(system_prompt, content)
 
         try:
@@ -125,12 +141,31 @@ class LLM:
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature,
-                # max_tokens=4000,
+                max_tokens=self.max_tokens,
             )
             result = resp.choices[0].message.content
             response_text = result.strip() if result is not None else "Result Empty"
+            logger.info(f"Requête LLM réussie ({len(content)} chars)")
+
+        except APITimeoutError as e:
+            logger.error(f"Timeout API: {e}")
+            response_text = "[ERREUR: Timeout - Le serveur n'a pas répondu à temps]"
+
+        except RateLimitError as e:
+            logger.error(f"Limite de débit atteinte: {e}")
+            response_text = "[ERREUR: Rate limit - Trop de requêtes, veuillez patienter]"
+
+        except APIError as e:
+            logger.error(f"Erreur API: {e}")
+            response_text = f"[ERREUR API: {e}]"
+
+        except OpenAIError as e:
+            logger.error(f"Erreur OpenAI générique: {e}")
+            response_text = f"[ERREUR OPENAI: {e}]"
+
         except Exception as e:
-            response_text = f"[ERREUR DE REQUÊTE] {e}"
+            logger.exception(f"Erreur inattendue lors de la requête LLM: {e}")
+            response_text = f"[ERREUR INCONNUE: {e}]"
 
         self._append_response(log_path, response_text)
 

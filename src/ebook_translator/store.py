@@ -86,14 +86,28 @@ class Store:
 
         Returns:
             Dictionnaire {clé: texte_traduit} où clé peut être int ou str
-            Retourne un dictionnaire vide si le fichier n'existe pas
+            Retourne un dictionnaire vide si le fichier n'existe pas ou en cas d'erreur
         """
         if not cache_file.exists():
             return {}
 
-        with open(cache_file, "r", encoding="utf-8") as f:
-            data: dict[str, str] = json.load(f)
-            return data
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data: dict[str, str] = json.load(f)
+                return data
+        except (IOError, OSError) as e:
+            print(f"⚠️  Erreur lecture cache {cache_file.name}: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Cache corrompu {cache_file.name}: {e}")
+            # Tenter de sauvegarder une backup avant de retourner un cache vide
+            backup_file = cache_file.with_suffix(".json.backup")
+            try:
+                cache_file.rename(backup_file)
+                print(f"📦 Backup sauvegardée: {backup_file.name}")
+            except Exception:
+                pass
+            return {}
 
     def _save_cache(
         self, cache_file: Path, translations_by_index: dict[str, str]
@@ -107,6 +121,9 @@ class Store:
         Args:
             cache_file: Chemin du fichier de cache
             translations_by_index: Dictionnaire {index: texte_traduit}
+
+        Raises:
+            IOError: Si l'écriture du fichier échoue (erreur critique)
         """
         data = dict(
             sorted(
@@ -114,8 +131,23 @@ class Store:
                 key=lambda item: int(item[0]) if item[0].isdigit() else item[0],
             )
         )
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        try:
+            # Écrire dans un fichier temporaire puis renommer (atomique)
+            temp_file = cache_file.with_suffix(".json.tmp")
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+            # Renommer de manière atomique
+            temp_file.replace(cache_file)
+        except (IOError, OSError) as e:
+            print(f"❌ Erreur sauvegarde cache {cache_file.name}: {e}")
+            # Nettoyer le fichier temporaire si nécessaire
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except Exception:
+                    pass
+            raise  # Re-lever car c'est critique
 
     def save(
         self,

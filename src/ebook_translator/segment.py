@@ -200,11 +200,17 @@ class Segmentator:
             token_count = self.count_tokens(text)
 
             # Gérer le tail du chunk précédent
-            if previous_chunk:
+            if previous_chunk is not None:
                 if overlap_token_budget > 0:
                     # Ajouter au tail tant qu'il reste du budget
                     previous_chunk.tail.append(text)
                     overlap_token_budget -= token_count
+
+                    # Si le budget est épuisé ou négatif, yield le chunk précédent
+                    if overlap_token_budget <= 0:
+                        yield previous_chunk
+                        previous_chunk = None
+                        overlap_token_budget = 0  # Reset pour le prochain chunk
                 else:
                     # Budget épuisé : yield le chunk précédent
                     yield previous_chunk

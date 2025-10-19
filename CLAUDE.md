@@ -129,6 +129,80 @@ L'extraction de texte utilise un pattern de séparateur spécial :
 ### Limitations actuelles
 
 - `transtator.py` a une implémentation incomplète (lignes 87-88 référencent `text_stream` et `on_response` non définis)
-- `worker.py` crée actuellement des futures factices qui n'appellent pas réellement le traducteur
 - Les templates de prompts Jinja2 sont référencés mais ne sont pas présents dans le dépôt
-- Aucune couverture de tests dans le répertoire `tests/`
+
+## Historique des corrections
+
+### Version 0.2.0 - Stabilisation (2025-10-19)
+
+#### Bugs critiques corrigés
+
+1. **[worker.py](src/ebook_translator/worker.py)** - Collecte des futures manquante
+   - **Problème** : Les futures de traduction étaient soumises mais jamais collectées ni attendues
+   - **Solution** : Ajout de la collecte explicite des futures avec `as_completed()` et gestion des exceptions
+   - **Impact** : Les traductions s'exécutent maintenant correctement et les erreurs sont capturées
+
+2. **[tag_key.py](src/ebook_translator/htmlpage/tag_key.py)** - Incohérence de type `index`
+   - **Problème** : `TagKey.index` stocké comme string mais parfois utilisé comme int
+   - **Solution** : Documentation explicite que `index` est toujours string pour compatibilité JSON
+   - **Impact** : Cohérence garantie pour l'accès au cache
+
+3. **[store.py](src/ebook_translator/store.py)** - Gestion d'erreurs I/O manquante
+   - **Problème** : Aucune gestion des erreurs de lecture/écriture (fichiers corrompus, permissions, etc.)
+   - **Solution** :
+     - Ajout de try/except pour `IOError`, `OSError`, `JSONDecodeError`
+     - Création automatique de backups pour les caches corrompus
+     - Écriture atomique via fichier temporaire + rename
+   - **Impact** : Robustesse accrue, récupération gracieuse des erreurs
+
+4. **[segment.py](src/ebook_translator/segment.py)** - Budget de tokens overlap incorrect
+   - **Problème** : Le budget overlap était décrémenté mais pas vérifié correctement
+   - **Solution** : Ajout de vérification `if overlap_token_budget <= 0` après décrémentation
+   - **Impact** : Chevauchement entre chunks maintenant correct
+
+#### Améliorations
+
+1. **Nouveau module [logger.py](src/ebook_translator/logger.py)**
+   - Système de logging centralisé avec sortie console et fichier
+   - Fonctions `setup_logger()` et `get_logger()` pour configuration cohérente
+   - Logs horodatés avec niveaux INFO/DEBUG/ERROR
+
+2. **[llm.py](src/ebook_translator/llm.py)** - Exceptions spécifiques
+   - Remplacement de `except Exception` par des exceptions spécifiques :
+     - `APITimeoutError` : Timeout serveur
+     - `RateLimitError` : Limite de débit atteinte
+     - `APIError` : Erreur API générique
+     - `OpenAIError` : Erreur client OpenAI
+   - Messages d'erreur plus informatifs
+   - Utilisation de `max_tokens` (précédemment commenté)
+
+3. **Tests unitaires**
+   - **[tests/test_store.py](tests/test_store.py)** : 10 tests pour Store (save, get, clear, persistence, corruption)
+   - **[tests/test_tag_key.py](tests/test_tag_key.py)** : 8 tests pour TagKey (type index, égalité, hashabilité)
+   - **[tests/test_segment.py](tests/test_segment.py)** : 11 tests pour Chunk et Segmentator
+   - **[tests/conftest.py](tests/conftest.py)** : Fixtures communes
+
+4. **[pyproject.toml](pyproject.toml)** - Configuration dev
+   - Ajout de dépendances optionnelles `[dev]` : pytest, pytest-cov, pyright
+   - Configuration pytest (`[tool.pytest.ini_options]`)
+   - Configuration pyright (`[tool.pyright]`)
+
+#### Commandes de test
+
+```bash
+# Installer les dépendances de dev
+pip install -e ".[dev]"
+
+# Lancer les tests
+pytest
+
+# Tests avec couverture
+pytest --cov=src/ebook_translator --cov-report=html
+
+# Vérification des types
+pyright src/ebook_translator
+```
+
+#### Notes de migration
+
+Aucune modification breaking dans cette version. Toutes les corrections sont rétrocompatibles.

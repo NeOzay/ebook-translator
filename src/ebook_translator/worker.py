@@ -1,4 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import sleep
+
+from tqdm import tqdm
 
 from .store import Store
 from .llm import LLM
@@ -19,26 +22,38 @@ class TranslationWorker:
         self.target_language = target_language
         self.store = store
         self.bilingual_format = bilingual_format
-        self.results = []
         self.engine = TranslationEngine(llm, store, target_language)
 
-    def run(self, segments: Segmentator, max_threads_count):
+    def run(self, segments: Segmentator, max_threads_count: int):
         """Soumet toutes les traductions et attend les résultats."""
-        futures = []
+        # Convertir les segments en liste pour connaître le nombre total
+        all_segments = list(segments.get_all_segments())
+        total_segments = len(all_segments)
 
-        with ThreadPoolExecutor(max_workers=max_threads_count) as executor:
-            futures = [
-                executor.submit(
-                    lambda chunk=chunk: (
+        # Attendre toutes les futures avec barre de progression
+        with tqdm(
+            total=total_segments,
+            desc="Traduction des segments",
+            unit="segment",
+            ncols=100,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+        ) as pbar:
+            with ThreadPoolExecutor(max_workers=max_threads_count) as executor:
+                # Soumettre toutes les tâches et collecter les futures
+                futures = []
+                for chunk in all_segments:
+                    future = executor.submit(
+                        self.engine.translate_chunk,
                         chunk,
-                        self.engine.translate_chunk(
-                            chunk, bilingual_format=self.bilingual_format
-                        ),
+                        bar=pbar,
+                        bilingual_format=self.bilingual_format,
                     )
-                )
-                for chunk in segments.get_all_segments()
-            ]
+                    futures.append(future)
 
-        # Attendre toutes les futures
-        for f in as_completed(futures):
-            result = f.result()
+                # Attendre que toutes les traductions soient terminées
+                for future in as_completed(futures):
+                    try:
+                        future.result()  # Récupère le résultat ou propage l'exception
+                    except Exception as e:
+                        # Logger l'erreur mais continuer avec les autres traductions
+                        pbar.write(f"❌ Erreur lors de la traduction d'un segment : {e}")
