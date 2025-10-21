@@ -273,16 +273,46 @@ class HtmlPage:
         """
         Formate les fragments en une chaîne avec le séparateur '</>' .
 
+        IMPORTANT: Préserve les espaces de début/fin de chaque fragment pour
+        maintenir l'espacement correct autour des balises imbriquées.
+
         Args:
             fragments: Le ou les fragments à formater
 
         Returns:
-            Chaîne formatée avec séparateurs
+            Chaîne formatée avec séparateurs et espaces préservés
         """
         if isinstance(fragments, list):
-            return FRAGMENT_SEPARATOR.join(fragment.strip() for fragment in fragments)
+            # Préserver les espaces de bordure
+            formatted = []
+            for fragment in fragments:
+                text = str(fragment)
+                # Détecter les espaces de bordure
+                leading = len(text) - len(text.lstrip())
+                trailing = len(text) - len(text.rstrip())
+
+                # Normaliser uniquement le texte interne (sans les bordures)
+                core = text.strip()
+                core = " ".join(core.split())  # Normaliser espaces multiples/newlines
+
+                # Reconstituer avec les espaces de bordure (max 1 espace de chaque côté)
+                prefix = " " if leading > 0 else ""
+                suffix = " " if trailing > 0 else ""
+                formatted.append(prefix + core + suffix)
+
+            return FRAGMENT_SEPARATOR.join(formatted)
         else:
-            return fragments.strip()
+            # Fragment unique
+            text = str(fragments)
+            leading = len(text) - len(text.lstrip())
+            trailing = len(text) - len(text.rstrip())
+
+            core = text.strip()
+            core = " ".join(core.split())
+
+            prefix = " " if leading > 0 else ""
+            suffix = " " if trailing > 0 else ""
+            return prefix + core + suffix
 
     def _save_content(self) -> None:
         """Sauvegarde le contenu HTML modifié dans l'EpubHtml."""

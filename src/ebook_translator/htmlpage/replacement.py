@@ -15,6 +15,40 @@ if TYPE_CHECKING:
     TextFragment = Union[NavigableString, list[NavigableString]]
 
 
+def preserve_whitespace(original: str, translated: str) -> str:
+    """
+    Préserve les espaces de début/fin du texte original dans la traduction.
+
+    Cette fonction détecte si le texte original commence ou termine par un espace,
+    et ajoute ces espaces à la traduction si elle ne les a pas déjà.
+
+    Args:
+        original: Texte original (peut avoir des espaces de bordure)
+        translated: Texte traduit (sans espaces de bordure normalement)
+
+    Returns:
+        Texte traduit avec les espaces de bordure préservés
+
+    Example:
+        >>> preserve_whitespace(" can be used ", "peut être utilisé")
+        " peut être utilisé "
+        >>> preserve_whitespace("text", "texte")
+        "texte"
+    """
+    # Détecter les espaces de bordure dans l'original
+    has_leading = len(original) > 0 and original[0].isspace()
+    has_trailing = len(original) > 0 and original[-1].isspace()
+
+    # Ajouter les espaces manquants dans la traduction
+    result = translated
+    if has_leading and not (len(result) > 0 and result[0].isspace()):
+        result = " " + result
+    if has_trailing and not (len(result) > 0 and result[-1].isspace()):
+        result = result + " "
+
+    return result
+
+
 class TextReplacer:
     """
     Classe utilitaire pour remplacer le texte dans les pages HTML.
@@ -86,7 +120,9 @@ class TextReplacer:
                 from .exceptions import FragmentMismatchError
 
                 # Extraire les textes des fragments
-                original_fragments = [frag.strip() for frag in fragments if frag.strip()]
+                original_fragments = [
+                    frag.strip() for frag in fragments if frag.strip()
+                ]
                 translated_segments = [seg.strip() for seg in segments]
 
                 raise FragmentMismatchError(
@@ -98,7 +134,9 @@ class TextReplacer:
                 )
             except ImportError:
                 # Fallback : lever ValueError classique avec message détaillé
-                original_texts = [f'"{frag.strip()}"' for frag in fragments if frag.strip()]
+                original_texts = [
+                    f'"{frag.strip()}"' for frag in fragments if frag.strip()
+                ]
                 segment_texts = [f'"{seg.strip()}"' for seg in segments if seg.strip()]
 
                 error_msg = (
@@ -239,10 +277,10 @@ class TextReplacer:
             original_tag: La balise originale (pour la structure)
             translated_text: Le texte traduit (peut contenir des '</>``)
         """
-        if FRAGMENT_SEPARATOR not in translated_text:
-            # Pas de fragments multiples : juste insérer le texte
-            new_tag.string = translated_text
-            return
+        # if FRAGMENT_SEPARATOR not in translated_text:
+        #    # Pas de fragments multiples : juste insérer le texte
+        #    new_tag.string = translated_text
+        #    return
 
         # Diviser le texte traduit en segments
         segments = translated_text.split(FRAGMENT_SEPARATOR)
@@ -258,7 +296,11 @@ class TextReplacer:
                 if isinstance(child, NavigableString):
                     # C'est un fragment de texte : utiliser le segment traduit
                     if child.strip() and segment_index < len(segments):
-                        target.append(segments[segment_index])
+                        # Préserver les espaces de bordure du fragment original
+                        original_text = str(child)
+                        translated_segment = segments[segment_index]
+                        preserved_text = preserve_whitespace(original_text, translated_segment)
+                        target.append(preserved_text)
                         segment_index += 1
                 elif isinstance(child, Tag):
                     # C'est une balise : la cloner et continuer récursivement
