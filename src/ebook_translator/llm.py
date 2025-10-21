@@ -1,6 +1,7 @@
 import os
 import datetime
 import sys
+import time
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import Optional, Callable, Awaitable
@@ -56,13 +57,16 @@ class LLM:
         prompt_dir: str = "template",
         log_dir: str = "logs",
         temperature: float = 0.85,
-        max_tokens: int = 1500,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
     ):
         self.model_name = model_name
         self.api_key = api_key or get_api_key()
         self.client = OpenAI(api_key=self.api_key, base_url=url)
         self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.max_tokens = 4000
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
         # Config Jinja2
         self.env = Environment(
@@ -118,7 +122,7 @@ class LLM:
         content: str,
     ) -> str:
         """
-        Envoie une requête au LLM avec gestion d'erreurs spécifiques.
+        Envoie une requête au LLM avec gestion d'erreurs spécifiques et retry automatique.
 
         Args:
             system_prompt: Le prompt système définissant le comportement du LLM
@@ -129,44 +133,94 @@ class LLM:
 
         Note:
             Les erreurs sont loggées et un fichier de log est créé pour chaque requête.
+            Les erreurs Timeout et RateLimitError déclenchent un retry automatique
+            avec backoff exponentiel.
         """
         log_path = self._create_log(system_prompt, content)
+        last_error: Optional[Exception] = None
 
-        try:
-            messages: list[ChatCompletionMessageParam] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content},
-            ]
-            resp = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+        for attempt in range(self.max_retries):
+            try:
+                messages: list[ChatCompletionMessageParam] = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": content},
+                ]
+                resp = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+                result = resp.choices[0].message.content
+                response_text = result.strip() if result is not None else "Result Empty"
+
+                if attempt > 0:
+                    logger.info(
+                        f"✅ Requête LLM réussie après {attempt + 1} tentative(s) "
+                        f"({len(content)} chars)"
+                    )
+                else:
+                    logger.info(f"✅ Requête LLM réussie ({len(content)} chars)")
+
+                self._append_response(log_path, response_text)
+                return response_text
+
+            except APITimeoutError as e:
+                last_error = e
+                logger.warning(
+                    f"⏱️ Timeout API (tentative {attempt + 1}/{self.max_retries}): {e}"
+                )
+                if attempt < self.max_retries - 1:
+                    delay = self.retry_delay * (2 ** attempt)
+                    logger.info(f"⏳ Attente de {delay:.1f}s avant nouvelle tentative...")
+                    time.sleep(delay)
+                    continue
+
+            except RateLimitError as e:
+                last_error = e
+                logger.warning(
+                    f"🚦 Limite de débit atteinte (tentative {attempt + 1}/{self.max_retries}): {e}"
+                )
+                if attempt < self.max_retries - 1:
+                    # Pour rate limit, attendre plus longtemps
+                    delay = self.retry_delay * (3 ** attempt)
+                    logger.info(f"⏳ Attente de {delay:.1f}s avant nouvelle tentative...")
+                    time.sleep(delay)
+                    continue
+
+            except APIError as e:
+                # Les erreurs API ne sont généralement pas récupérables par retry
+                logger.error(f"❌ Erreur API: {e}")
+                response_text = f"[ERREUR API: {e}]"
+                self._append_response(log_path, response_text)
+                return response_text
+
+            except OpenAIError as e:
+                logger.error(f"❌ Erreur OpenAI générique: {e}")
+                response_text = f"[ERREUR OPENAI: {e}]"
+                self._append_response(log_path, response_text)
+                return response_text
+
+            except Exception as e:
+                logger.exception(f"❌ Erreur inattendue lors de la requête LLM: {e}")
+                response_text = f"[ERREUR INCONNUE: {e}]"
+                self._append_response(log_path, response_text)
+                return response_text
+
+        # Si on arrive ici, tous les retries ont échoué
+        if isinstance(last_error, APITimeoutError):
+            response_text = (
+                f"[ERREUR: Timeout après {self.max_retries} tentatives - "
+                f"Le serveur n'a pas répondu à temps]"
             )
-            result = resp.choices[0].message.content
-            response_text = result.strip() if result is not None else "Result Empty"
-            logger.info(f"Requête LLM réussie ({len(content)} chars)")
+        elif isinstance(last_error, RateLimitError):
+            response_text = (
+                f"[ERREUR: Rate limit après {self.max_retries} tentatives - "
+                f"Trop de requêtes, veuillez patienter]"
+            )
+        else:
+            response_text = f"[ERREUR: Échec après {self.max_retries} tentatives]"
 
-        except APITimeoutError as e:
-            logger.error(f"Timeout API: {e}")
-            response_text = "[ERREUR: Timeout - Le serveur n'a pas répondu à temps]"
-
-        except RateLimitError as e:
-            logger.error(f"Limite de débit atteinte: {e}")
-            response_text = "[ERREUR: Rate limit - Trop de requêtes, veuillez patienter]"
-
-        except APIError as e:
-            logger.error(f"Erreur API: {e}")
-            response_text = f"[ERREUR API: {e}]"
-
-        except OpenAIError as e:
-            logger.error(f"Erreur OpenAI générique: {e}")
-            response_text = f"[ERREUR OPENAI: {e}]"
-
-        except Exception as e:
-            logger.exception(f"Erreur inattendue lors de la requête LLM: {e}")
-            response_text = f"[ERREUR INCONNUE: {e}]"
-
+        logger.error(f"❌ Échec définitif après {self.max_retries} tentatives")
         self._append_response(log_path, response_text)
-
         return response_text

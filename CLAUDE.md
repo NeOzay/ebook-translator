@@ -206,3 +206,142 @@ pyright src/ebook_translator
 #### Notes de migration
 
 Aucune modification breaking dans cette version. Toutes les corrections sont rétrocompatibles.
+
+---
+
+### Version 0.3.0 - Gestion d'erreurs robuste (2025-10-20)
+
+#### Objectif
+
+Améliorer la résilience du système face aux échecs de traduction LLM, notamment les erreurs de type "Mismatch in fragment count", timeout, et rate limit.
+
+#### Nouvelles fonctionnalités
+
+1. **[llm.py](src/ebook_translator/llm.py)** - Système de retry avec backoff exponentiel
+   - Ajout de paramètres `max_retries` (défaut: 3) et `retry_delay` (défaut: 1.0s)
+   - Retry automatique pour `APITimeoutError` et `RateLimitError`
+   - Backoff exponentiel : ×2 pour timeout (1s, 2s, 4s), ×3 pour rate limit (1s, 3s, 9s)
+   - Logs détaillés des tentatives avec émojis pour meilleure lisibilité
+   - Messages d'erreur finaux indiquant le nombre de tentatives échouées
+
+2. **[parser.py](src/ebook_translator/translation/parser.py)** - Messages d'erreur contextuels
+   - Détection des erreurs LLM (messages commençant par `[ERREUR`)
+   - Validation du marqueur `[=[END]=]` avec aperçu de la sortie
+   - Validation du format numéroté avec exemple du format attendu
+   - Chaque erreur inclut :
+     - 📝 Aperçu des données problématiques
+     - 💡 Causes possibles
+     - 🔧 Solutions recommandées
+
+3. **[replacement.py](src/ebook_translator/htmlpage/replacement.py)** - Validation détaillée des fragments
+   - Message d'erreur enrichi pour "Mismatch in fragment count"
+   - Affichage des fragments originaux et traduits (limité à 5 pour lisibilité)
+   - Comptage explicite : "Expected X, Got Y"
+   - Suggestions de causes (fusion/division, séparateurs, contenu original)
+   - Solutions actionnables
+
+4. **[engine.py](src/ebook_translator/translation/engine.py)** - Gestion d'erreurs contextualisée
+   - Try/catch autour de `page.replace_text()`
+   - Logs détaillés avec contexte :
+     - Nom du fichier source
+     - TagKey concerné
+     - Aperçu du texte original et traduit
+   - Re-propagation de l'erreur pour traitement par le worker
+
+5. **[worker.py](src/ebook_translator/worker.py)** - Affichage amélioré des erreurs
+   - Distinction entre `ValueError` (validation) et autres exceptions
+   - Compteur d'erreurs affiché en temps réel
+   - Formatage visuel avec bordures (`===`) pour séparer les erreurs
+   - Résumé final avec nombre total d'erreurs
+   - Troncature intelligente des messages longs (>500 chars)
+
+6. **Tests** - [tests/test_error_handling.py](tests/test_error_handling.py)
+   - 7 tests couvrant tous les cas d'erreur
+   - Tests de parsing : marqueur manquant, format invalide, erreur LLM
+   - Tests de fragments : mismatch, format du message d'erreur
+   - Tests de cas valides : format standard, multilignes, avec séparateurs
+
+7. **Documentation** - [docs/error_handling.md](docs/error_handling.md)
+   - Guide complet de gestion d'erreurs
+   - Tableau récapitulatif des types d'erreurs (avec/sans retry)
+   - Exemples de messages d'erreur
+   - Guide de dépannage par symptôme
+   - Configuration recommandée
+   - Section "Logs et debugging"
+
+#### Améliorations par rapport à v0.2.0
+
+| Aspect | v0.2.0 | v0.3.0 |
+|--------|--------|--------|
+| Retry automatique | ❌ Aucun | ✅ Backoff exponentiel |
+| Messages d'erreur | ⚠️ Basiques | ✅ Contextuels avec solutions |
+| Validation pré-application | ⚠️ Basique | ✅ Détaillée avec aperçu |
+| Logs d'erreur | ⚠️ Peu exploitables | ✅ Avec contexte complet |
+| Comportement sur erreur | ⚠️ Incohérent | ✅ Uniforme et prévisible |
+| Documentation | ❌ Absente | ✅ Guide complet |
+| Tests | ❌ Aucun | ✅ 7 tests unitaires |
+
+#### Exemple d'utilisation
+
+```python
+from ebook_translator import LLM, EpubTranslator, Language
+
+# Configuration avec retry
+llm = LLM(
+    model_name="deepseek-chat",
+    url="https://api.deepseek.com",
+    max_retries=3,      # Nombre de tentatives (nouveau)
+    retry_delay=1.0,    # Délai initial en secondes (nouveau)
+)
+
+translator = EpubTranslator(llm, epub_path="book.epub")
+translator.translate(
+    target_language=Language.FRENCH,
+    output_epub="book_fr.epub",
+    max_concurrent=2,   # Réduire si rate limit
+)
+```
+
+#### Logs exemple
+
+```
+⏱️ Timeout API (tentative 1/3): Request timed out
+⏳ Attente de 1.0s avant nouvelle tentative...
+⏱️ Timeout API (tentative 2/3): Request timed out
+⏳ Attente de 2.0s avant nouvelle tentative...
+✅ Requête LLM réussie après 3 tentative(s) (1234 chars)
+```
+
+#### Tests
+
+```bash
+# Exécuter les nouveaux tests
+poetry run pytest tests/test_error_handling.py -v
+
+# Tous les tests avec couverture
+poetry run pytest --cov=src/ebook_translator --cov-report=html
+```
+
+#### Breaking changes
+
+Aucun. Les nouveaux paramètres ont des valeurs par défaut et sont rétrocompatibles.
+
+#### Migration depuis v0.2.0
+
+Aucune action requise. Le système de retry est activé automatiquement avec les valeurs par défaut (`max_retries=3`, `retry_delay=1.0`).
+
+Pour personnaliser :
+```python
+# Augmenter le nombre de tentatives
+llm = LLM(..., max_retries=5, retry_delay=2.0)
+
+# Désactiver le retry (déconseillé)
+llm = LLM(..., max_retries=1)
+```
+
+#### Roadmap (Phase 2 - non implémentée)
+
+- [ ] Stratégie de fallback configurable (garder l'original, marquer visuellement)
+- [ ] Mode de reprise `--resume` pour relancer les chunks échoués
+- [ ] Statistiques détaillées en fin de traduction
+- [ ] Rapport HTML des zones problématiques

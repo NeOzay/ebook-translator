@@ -1,0 +1,54 @@
+⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de fragments.
+
+Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté le nombre de fragments requis.
+
+---
+
+## 📊 ANALYSE DE L'ERREUR : DÉCOUPAGE PRÉCÉDENT
+
+**Fragments originaux ({{ expected_count }})** :
+{% for fragment in original_fragments %}
+  [{{ loop.index0 }}] {{ fragment }}
+{% endfor %}
+
+**Ta traduction INCORRECTE ({{ actual_count }} segments)** :
+{% for segment in incorrect_segments %}
+  [{{ loop.index0 }}] {{ segment }}
+{% endfor %}
+
+❌ **ERREUR DÉTECTÉE** : {{ analysis }}
+
+---
+
+## ✅ RÈGLE STRICTE À RESPECTER :
+
+Tu DOIS produire **EXACTEMENT {{ expected_count }} segments** séparés par le marqueur `</>`.
+
+- `</>` : Balise de **formatage**.  
+  Tu dois la **conserver exactement** aux mêmes positions dans la traduction.  
+  Ces balises peuvent apparaître isolées ou entourer du texte.  
+  Ne les supprime pas, ne les déplaces pas, et n’en ajoutes pas.
+
+**Exemple de format CORRECT** :
+```
+<0/>Texte traduit avec </>balises</> conservées...
+[=[END]=]
+```
+
+⚠️ **IMPORTANT** :
+- NE FUSIONNE PAS les fragments ensemble
+- NE DIVISE PAS un fragment en plusieurs
+- Chaque fragment original = EXACTEMENT UN segment traduit
+- Utilise `</>` pour séparer les segments
+- Termine TOUJOURS par `[=[END]=]`
+
+---
+
+## 🔄 RE-TRADUCTION DEMANDÉE :
+
+Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT le nombre de fragments.
+
+**Nombre de segments attendus** : {{ expected_count }}
+**Séparateurs requis** : {{ expected_count - 1 }} fois `</>`
+
+Produis ta traduction corrigée maintenant :

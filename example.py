@@ -32,10 +32,12 @@ def main() -> None:
     # ============================================================
 
     # Fichiers EPUB
-    source_epub = Path("books/Seirei Gensouki - Volume 21 [J-Novel Club][Premium].epub")
-    output_epub = Path(f"./books/out/[FR] {source_epub.name}")
+    source_epub = Path(
+        "books/Chillin' in Another World With Level 2 Super Cheat Powers - Volume 01 [J-Novel Club][Premium].epub"
+    )
+    output_epub = Path(f"books/out/[FR] {source_epub.name}")
 
-    # Langue cible (voir Language dans translation/translator.py)
+    # Langue cible
     target_language = Language.FRENCH
 
     # Format de sortie
@@ -61,7 +63,7 @@ def main() -> None:
         log_dir="logs",
         url=api_url,
         api_key=api_key,
-        max_tokens=max_tokens,
+        temperature=1.3,
     )
 
     # ============================================================
@@ -79,6 +81,9 @@ def main() -> None:
         output_epub=output_epub,
         max_concurrent=max_concurrent,
         bilingual_format=bilingual_format,
+        user_prompt=None,
+        max_correction_retries=1,
+        max_tokens=max_tokens,
     )
 
 

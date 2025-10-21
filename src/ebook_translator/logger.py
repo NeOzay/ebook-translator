@@ -7,16 +7,48 @@ cette fonction pour obtenir un logger configuré de manière cohérente.
 """
 
 import logging
+import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+
+try:
+    from tqdm import tqdm
+
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+
+
+class TqdmLoggingHandler(logging.Handler):
+    """
+    Handler de logging compatible avec tqdm.
+
+    Utilise tqdm.write() pour afficher les logs sans perturber
+    les barres de progression.
+    """
+
+    def __init__(self, level=logging.NOTSET):
+        super().__init__(level)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            if TQDM_AVAILABLE:
+                tqdm.write(msg, file=sys.stderr)
+            else:
+                # Fallback si tqdm non disponible
+                sys.stderr.write(msg + "\n")
+                sys.stderr.flush()
+        except Exception:
+            self.handleError(record)
 
 
 def setup_logger(
     name: str,
     log_dir: str = "logs",
     level: int = logging.INFO,
-    console_level: int = logging.INFO,
+    console_level: int = logging.ERROR,
     file_level: int = logging.DEBUG,
 ) -> logging.Logger:
     """
@@ -50,8 +82,8 @@ def setup_logger(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Handler console (affichage dans le terminal)
-    console_handler = logging.StreamHandler()
+    # Handler console compatible avec tqdm (affichage dans le terminal)
+    console_handler = TqdmLoggingHandler()
     console_handler.setLevel(console_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)

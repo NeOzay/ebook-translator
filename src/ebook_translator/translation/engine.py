@@ -13,12 +13,18 @@ from typing import Optional, TYPE_CHECKING
 from tqdm import tqdm
 
 from ..htmlpage import BilingualFormat
+from ..logger import get_logger
 from .parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ..llm import LLM
     from ..segment import Chunk
     from ..store import Store
+    from ..correction.retry_engine import RetryEngine
+    from ..htmlpage.page import HtmlPage
+    from ..htmlpage.tag_key import TagKey
+
+logger = get_logger(__name__)
 
 
 def build_translation_map(
@@ -90,7 +96,13 @@ class TranslationEngine:
     le cache, et applique les traductions aux pages HTML.
     """
 
-    def __init__(self, llm: "LLM", store: "Store", target_language: str):
+    def __init__(
+        self,
+        llm: "LLM",
+        store: "Store",
+        target_language: str,
+        retry_engine: Optional["RetryEngine"] = None,
+    ):
         """
         Initialise le moteur de traduction.
 
@@ -98,10 +110,13 @@ class TranslationEngine:
             llm: Instance du LLM pour la traduction
             store: Instance du Store pour la gestion du cache
             target_language: Code de la langue cible (ex: "fr", "en")
+            retry_engine: Moteur de retry automatique (optionnel)
         """
         self.llm = llm
         self.store = store
         self.target_language = target_language
+        self.retry_engine = retry_engine
+        self.corrected_count = 0  # Statistique : nombre de corrections réussies
 
     def _request_translation(
         self,
@@ -143,6 +158,117 @@ class TranslationEngine:
         # Retourner un dictionnaire plat pour utilisation directe
         return self.store.get_from_chunk(chunk)
 
+    def _apply_translation_with_retry(
+        self,
+        page: "HtmlPage",
+        tag_key: "TagKey",
+        original_text: str,
+        translated_text: str,
+        bilingual_format: BilingualFormat,
+    ) -> bool:
+        """
+        Applique une traduction avec validation précoce et retry automatique.
+
+        Cette méthode vérifie le nombre de segments AVANT d'appeler replace_text()
+        pour éviter de modifier le DOM si une correction est nécessaire.
+
+        Args:
+            page: Page HTML à modifier
+            tag_key: Clé identifiant le texte à remplacer
+            original_text: Texte original complet
+            translated_text: Texte traduit
+            bilingual_format: Format d'affichage bilingue
+
+        Returns:
+            True si la traduction a été appliquée (avec ou sans retry)
+
+        Raises:
+            KeyError: Si tag_key n'existe pas
+            FragmentMismatchError: Si validation échoue et retry désactivé/échoué
+        """
+        # 1. Récupérer fragments SANS les supprimer (utiliser .get au lieu de .pop)
+        text_fragments = page.to_translate.get(tag_key)
+        if not text_fragments:
+            raise KeyError(
+                f"No text fragments found for {tag_key}. "
+                f"Either it was already replaced or never extracted."
+            )
+
+        # 2. VALIDATION PRÉCOCE pour fragments multiples
+        if isinstance(text_fragments, list) and self.retry_engine:
+            from ..htmlpage.constants import FRAGMENT_SEPARATOR
+
+            segments = translated_text.split(FRAGMENT_SEPARATOR)
+            expected_count = len(text_fragments)
+            actual_count = len(segments)
+
+            # Si mismatch détecté → retry AVANT d'appeler replace_text()
+            if expected_count != actual_count:
+                logger.debug(
+                    f"Mismatch détecté en amont : attendu {expected_count}, reçu {actual_count}"
+                )
+
+                # Préparer données pour retry
+                original_fragments = [
+                    frag.strip() for frag in text_fragments if frag.strip()
+                ]
+                translated_segments = [seg.strip() for seg in segments]
+
+                # Tentative de correction
+                result = self.retry_engine.attempt_correction(
+                    original_fragments=original_fragments,
+                    incorrect_segments=translated_segments,
+                    target_language=self.target_language,
+                    original_text=original_text,
+                )
+
+                if result.success and result.corrected_text:
+                    # Utiliser le texte corrigé à la place
+                    translated_text = result.corrected_text
+                    self.corrected_count += 1
+                    self.store.save(
+                        page.epub_html.file_name, tag_key.index, translated_text
+                    )
+                    logger.debug(
+                        f"✅ Correction réussie après {result.attempts} tentative(s)"
+                    )
+                else:
+                    # Échec de correction → lever erreur
+                    from ..htmlpage.exceptions import FragmentMismatchError
+
+                    logger.error(
+                        f"❌ Échec de correction après {result.attempts} tentatives"
+                    )
+                    raise FragmentMismatchError(
+                        original_fragments=original_fragments,
+                        translated_segments=translated_segments,
+                        original_text=original_text,
+                        expected_count=expected_count,
+                        actual_count=actual_count,
+                    )
+
+        # 3. Appliquer UNE SEULE FOIS (avec texte corrigé ou original)
+        try:
+            page.replace_text(
+                tag_key,
+                translated_text,
+                bilingual_format=bilingual_format,
+                original_text=original_text,
+            )
+            return True
+
+        except Exception as e:
+            # Logger les erreurs non-FragmentMismatchError
+            logger.error(
+                f"❌ Erreur lors de l'application de la traduction:\n{e}\n"
+                f"\n📍 Contexte:\n"
+                f"  • Page: {page.epub_html.file_name}\n"
+                f"  • Tag: {tag_key}\n"
+                f"  • Original: {original_text[:100]}...\n"
+                f"  • Translation: {translated_text[:100]}..."
+            )
+            raise
+
     def translate_chunk(
         self,
         chunk: "Chunk",
@@ -177,18 +303,19 @@ class TranslationEngine:
                 )
 
         # Appliquer les traductions aux pages HTML
-        for (page, tag_key, _), translated_text in zip(
+        for (page, tag_key, original_text), translated_text in zip(
             chunk.fetch(), cached_translations
         ):
-            # Utiliser l'index du TagKey pour récupérer la traduction
-            # line_index = tag_key.index
-            # translated_text = cached_translations.get(index)
             if translated_text:
-                page.replace_text(
-                    tag_key,
-                    translated_text,
+                # Utiliser _apply_translation_with_retry qui gère le retry automatique
+                self._apply_translation_with_retry(
+                    page=page,
+                    tag_key=tag_key,
+                    original_text=original_text,
+                    translated_text=translated_text,
                     bilingual_format=bilingual_format,
                 )
+
         if bar:
             bar.update(1)
 

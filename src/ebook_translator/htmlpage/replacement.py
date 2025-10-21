@@ -63,6 +63,7 @@ class TextReplacer:
         fragments: list[NavigableString],
         translated_text: str,
         bilingual_format: BilingualFormat,
+        original_text: str = "",
     ) -> None:
         """
         Remplace plusieurs fragments avec un texte traduit segmenté.
@@ -71,18 +72,64 @@ class TextReplacer:
             fragments: Liste des fragments originaux
             translated_text: Texte traduit avec séparateurs '</>
             bilingual_format: Format d'affichage bilingue (None pour remplacement simple)
+            original_text: Texte original complet (pour retry automatique)
 
         Raises:
-            ValueError: Si le nombre de segments ne correspond pas
+            FragmentMismatchError: Si le nombre de segments ne correspond pas (avec données de retry)
+            ValueError: Fallback si FragmentMismatchError non disponible
         """
         segments = translated_text.split(FRAGMENT_SEPARATOR)
 
         if len(segments) != len(fragments):
-            raise ValueError(
-                f"Mismatch in fragment count: expected {len(fragments)}, "
-                f"got {len(segments)} segments in translation. "
-                f"Original: {fragments}, Translation segments: {segments}"
-            )
+            # Tenter de lever l'exception structurée pour permettre le retry
+            try:
+                from .exceptions import FragmentMismatchError
+
+                # Extraire les textes des fragments
+                original_fragments = [frag.strip() for frag in fragments if frag.strip()]
+                translated_segments = [seg.strip() for seg in segments]
+
+                raise FragmentMismatchError(
+                    original_fragments=original_fragments,
+                    translated_segments=translated_segments,
+                    original_text=original_text,
+                    expected_count=len(fragments),
+                    actual_count=len(segments),
+                )
+            except ImportError:
+                # Fallback : lever ValueError classique avec message détaillé
+                original_texts = [f'"{frag.strip()}"' for frag in fragments if frag.strip()]
+                segment_texts = [f'"{seg.strip()}"' for seg in segments if seg.strip()]
+
+                error_msg = (
+                    f"❌ Mismatch in fragment count:\n"
+                    f"  • Expected: {len(fragments)} fragments\n"
+                    f"  • Got: {len(segments)} segments in translation\n"
+                    f"\n📝 Original fragments ({len(original_texts)}):\n"
+                    f"  {', '.join(original_texts[:5])}"
+                )
+                if len(original_texts) > 5:
+                    error_msg += f"... (+{len(original_texts) - 5} more)"
+
+                error_msg += (
+                    f"\n\n🔄 Translation segments ({len(segment_texts)}):\n"
+                    f"  {', '.join(segment_texts[:5])}"
+                )
+                if len(segment_texts) > 5:
+                    error_msg += f"... (+{len(segment_texts) - 5} more)"
+
+                error_msg += (
+                    f"\n\n💡 Causes possibles:\n"
+                    f"  • Le LLM a fusionné ou divisé des fragments\n"
+                    f"  • Des séparateurs '</>' manquants ou en trop\n"
+                    f"  • Le contenu contient des '</>' dans le texte original\n"
+                    f"\n🔧 Solutions:\n"
+                    f"  • Vérifiez les logs LLM pour voir la réponse brute\n"
+                    f"  • Relancez la traduction (retry automatique activé)\n"
+                    f"  • Ajustez le prompt pour mieux expliquer les séparateurs"
+                )
+
+                raise ValueError(error_msg)
 
         # Pour SEPARATE_TAG, créer une seule balise de traduction avec le texte complet
         if bilingual_format == BilingualFormat.SEPARATE_TAG:

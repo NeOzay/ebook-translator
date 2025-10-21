@@ -130,6 +130,7 @@ class HtmlPage:
         tag_key: TagKey,
         translated_text: str,
         bilingual_format: BilingualFormat = BilingualFormat.DISABLE,
+        original_text: str = "",
     ) -> None:
         """
         Remplace les fragments de texte originaux par leur traduction.
@@ -144,10 +145,12 @@ class HtmlPage:
             bilingual_format: Format d'affichage bilingue. Si None, remplace
                 complètement le texte original. Si fourni, conserve l'original
                 avec la traduction dans le format spécifié.
+            original_text: Texte original complet (pour retry automatique en cas d'erreur)
 
         Raises:
             KeyError: Si le tag_key n'existe pas dans to_translate
-            ValueError: Si le nombre de segments ne correspond pas
+            FragmentMismatchError: Si le nombre de segments ne correspond pas (avec données retry)
+            ValueError: Fallback si FragmentMismatchError non disponible
 
         Example:
             >>> # Remplacement simple (pas bilingue)
@@ -175,7 +178,7 @@ class HtmlPage:
 
         if isinstance(text_fragments, list):
             self._replacer.replace_multiple_fragments(
-                text_fragments, translated_text, bilingual_format
+                text_fragments, translated_text, bilingual_format, original_text
             )
         else:
             self._replacer.replace_single_fragment(

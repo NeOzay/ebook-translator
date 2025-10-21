@@ -75,6 +75,9 @@ class EpubTranslator:
         bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
         user_prompt: str | None = None,
         cache_path: str | Path | None = None,
+        max_tokens: int = 1500,
+        auto_correct_errors: bool = True,
+        max_correction_retries: int = 2,
     ) -> None:
         """
         Traduit un fichier EPUB en utilisant un LLM.
@@ -89,12 +92,18 @@ class EpubTranslator:
         Args:
             epub_path: Chemin vers le fichier EPUB source
             output_epub: Chemin de sortie pour l'EPUB traduit
-            target_language: Code de langue cible (ex: "fr", "en", "francais")
+            target_language: Code de langue cible (ex: "francais")
             max_concurrent: Nombre maximum de traductions parallèles (défaut: 1)
             bilingual_format: Format d'affichage bilingue. Options :
                 - BilingualFormat.SEPARATE_TAG : Balises séparées (défaut)
                 - BilingualFormat.INLINE : Original | Traduction
                 - None : Remplace complètement l'original
+            user_prompt: Prompt utilisateur optionnel pour personnaliser la traduction
+            cache_path: Chemin vers le dossier de cache (défaut: .{epub_name}_cache)
+            max_tokens: Taille maximale des chunks en tokens (défaut: 1500)
+            auto_correct_errors: Active la correction automatique des erreurs de segmentation
+                via retry LLM (défaut: True)
+            max_correction_retries: Nombre de tentatives de correction automatique (défaut: 2)
 
         Raises:
             FileNotFoundError: Si le fichier EPUB source n'existe pas
@@ -139,8 +148,15 @@ class EpubTranslator:
 
         # Initialiser le worker de traduction
         print(f"🤖 Initialisation du traducteur (langue cible: {target_language})")
+
         worker = TranslationWorker(
-            self.llm, target_language, store, bilingual_format, user_prompt=user_prompt
+            self.llm,
+            target_language,
+            store,
+            bilingual_format,
+            user_prompt=user_prompt,
+            auto_correct_errors=auto_correct_errors,
+            max_correction_retries=max_correction_retries,
         )
 
         # Segmenter et traduire
@@ -148,7 +164,7 @@ class EpubTranslator:
             f"🔄 Début de la traduction "
             f"(max {max_concurrent} traduction(s) parallèle(s))..."
         )
-        segmentator = Segmentator(html_items, self.llm.max_tokens)
+        segmentator = Segmentator(html_items, max_tokens)
         worker.run(segmentator, max_threads_count=max_concurrent)
 
         # Reconstruire les items traduits
