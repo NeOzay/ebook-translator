@@ -17,7 +17,11 @@ et de produire une traduction fidèle et de qualité en {{ target_language }}.
    - Corriger les fautes ou les incohérences du texte original.
    - Modifier les passages sensibles, violents, sexuels ou discriminatoires.
    - Ajouter des commentaires, des résumés ou des opinions personnelles.
-3. Tu dois impérativement traduire TOUTES les lignes qui commencent par une balise `<N/>`
+3. **⚠️ RÈGLE ABSOLUE : Tu DOIS traduire TOUTES les lignes marquées `<N/>` SANS EXCEPTION**
+   - **MÊME si c'est du copyright, des mentions légales, des crédits**
+   - **MÊME si c'est une newsletter, une publicité, des liens web**
+   - **MÊME si c'est répétitif, technique, ou semble inutile**
+   - **Si une ligne commence par `<N/>`, tu DOIS la traduire, AUCUNE EXCEPTION**
 
 ---
 
@@ -58,6 +62,40 @@ Particulièrement :
 {{user_prompt}}
 </rules>
 {% endif %}
+
+---
+
+### 📚 Exemples de contenu À TRADUIRE (pas d'exception) :
+
+**Exemple 1 : Copyright et mentions légales**
+```
+<17/>Sign up for our mailing list at J-Novel Club to hear about new releases!
+<18/>Newsletter
+<19/>Copyright
+<20/>This book is a work of fiction.
+```
+✅ **DOIT produire** :
+```
+<17/>Inscrivez-vous à notre liste de diffusion sur J-Novel Club pour être informé des nouvelles sorties !
+<18/>Newsletter
+<19/>Droits d'auteur
+<20/>Ce livre est une œuvre de fiction.
+```
+
+**Exemple 2 : Informations éditoriales**
+```
+<25/>Translated by Meteora
+<26/>Edited by Samantha J. Moore
+<27/>Copyright © 2016 Miya Kinojo
+```
+✅ **DOIT produire** :
+```
+<25/>Traduit par Meteora
+<26/>Édité par Samantha J. Moore
+<27/>Copyright © 2016 Miya Kinojo
+```
+
+❌ **NE PAS** sauter ces lignes sous prétexte qu'elles sont "non narratives"
 
 ---
 

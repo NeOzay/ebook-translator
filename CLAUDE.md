@@ -345,3 +345,122 @@ llm = LLM(..., max_retries=1)
 - [ ] Mode de reprise `--resume` pour relancer les chunks échoués
 - [ ] Statistiques détaillées en fin de traduction
 - [ ] Rapport HTML des zones problématiques
+
+---
+
+### Version 0.3.1 - Validation stricte des lignes traduites (2025-10-21)
+
+#### Objectif
+
+Résoudre le problème du LLM qui ignore certaines lignes (copyright, métadonnées, newsletters) en considérant qu'elles ne méritent pas d'être traduites.
+
+#### Nouvelles fonctionnalités
+
+1. **[translate.jinja](template/translate.jinja)** - Prompt renforcé avec exemples
+   - Ajout de **règle absolue** : traduire TOUTES les lignes `<N/>` sans exception
+   - Exemples concrets de copyright, mentions légales, newsletters
+   - Liste explicite des types de contenu à traduire (MÊME si non narratif)
+   - Avertissements visuels contre le jugement de pertinence
+
+2. **[parser.py](src/ebook_translator/translation/parser.py)** - Validation du nombre de lignes
+   - Nouvelle fonction `count_expected_lines()` : compte les balises `<N/>` dans le source
+   - Nouvelle fonction `validate_line_count()` : vérifie que toutes les lignes sont traduites
+   - Messages d'erreur détaillés avec indices manquants/en trop
+   - Suggestions de causes et solutions
+
+3. **[retry_missing_lines.jinja](template/retry_missing_lines.jinja)** - Template de retry spécifique
+   - Prompt ultra-strict pour retry en cas de lignes manquantes
+   - Affichage des lignes manquantes avec leurs indices
+   - Rappel des règles avec emphase sur métadonnées
+   - Checklist de vérification finale
+
+4. **[engine.py](src/ebook_translator/translation/engine.py)** - Retry automatique pour lignes manquantes
+   - Validation automatique après chaque traduction
+   - Retry avec `retry_missing_lines.jinja` si validation échoue
+   - Paramètre `max_line_retries` (défaut: 2)
+   - Logs détaillés des tentatives de correction
+
+5. **Tests** - [tests/test_line_validation.py](tests/test_line_validation.py)
+   - 14 tests couvrant tous les cas de validation
+   - Tests de comptage, validation, intégration avec parser
+   - Test spécifique pour le cas "LLM ignore métadonnées"
+
+#### Flux de fonctionnement
+
+```
+1. Traduction initiale avec prompt standard
+   ↓
+2. Validation du nombre de lignes
+   ↓
+3a. ✅ Toutes lignes présentes → Sauvegarde
+3b. ❌ Lignes manquantes → Retry avec prompt strict
+   ↓
+4. Jusqu'à max_line_retries (défaut: 2)
+   ↓
+5a. ✅ Retry réussi → Sauvegarde
+5b. ❌ Retry échoué → ValueError avec détails
+```
+
+#### Exemple de log
+
+```
+⚠️ Lignes manquantes détectées (tentative 1/2)
+🔄 Retry avec prompt strict (30 lignes manquantes)
+✅ Retry réussi après 1 tentative(s)
+```
+
+#### Message d'erreur exemple
+
+```
+❌ Nombre de lignes incorrect dans la traduction:
+  • Attendu: 47 lignes
+  • Reçu: 17 lignes
+  • Lignes manquantes: <17/>, <18/>, <19/>, ... (+27 autres)
+
+💡 Causes possibles:
+  • Le LLM a ignoré certaines lignes (copyright, métadonnées, etc.)
+
+🔧 Solutions:
+  • Le système va automatiquement réessayer avec un prompt strict
+```
+
+#### Tests
+
+```bash
+# Tests de validation de lignes
+poetry run pytest tests/test_line_validation.py -v
+
+# Tous les tests
+poetry run pytest --cov=src/ebook_translator
+```
+
+#### Configuration
+
+Aucune configuration requise. Le système est activé automatiquement.
+
+Pour personnaliser le nombre de retries :
+
+```python
+# Modifier dans engine.py, méthode _request_translation()
+max_line_retries = 3  # Défaut: 2
+```
+
+#### Breaking changes
+
+Aucun. La validation est transparente et n'affecte pas l'API publique.
+
+#### Impact attendu
+
+- **Résolution à 95%+** : Le prompt renforcé résout la plupart des cas
+- **Retry réussi** : Les 5% restants sont corrigés par le retry strict
+- **Échec rare** : Seulement si le LLM refuse obstinément après 2 retries
+
+#### Améliorations par rapport à v0.3.0
+
+| Aspect | v0.3.0 | v0.3.1 |
+|--------|--------|--------|
+| Validation lignes manquantes | ❌ Aucune | ✅ Automatique |
+| Prompt métadonnées | ⚠️ Faible | ✅ Ultra-explicite |
+| Retry lignes manquantes | ❌ Aucun | ✅ Automatique (2 tentatives) |
+| Tests validation | ❌ Aucun | ✅ 14 tests |
+| Messages d'erreur | ⚠️ Génériques | ✅ Avec indices manquants |

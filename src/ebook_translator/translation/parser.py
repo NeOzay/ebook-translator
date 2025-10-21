@@ -3,6 +3,7 @@ Parsing des sorties de traduction des LLM.
 """
 
 import re
+from typing import Optional
 
 
 def parse_llm_translation_output(output: str) -> dict[int, str]:
@@ -100,3 +101,103 @@ def parse_llm_translation_output(output: str) -> dict[int, str]:
         )
 
     return translations
+
+
+def count_expected_lines(content: str) -> int:
+    """
+    Compte le nombre de lignes numérotées <N/> dans le contenu source.
+
+    Args:
+        content: Contenu source envoyé au LLM (avec balises <N/>)
+
+    Returns:
+        Nombre de lignes numérotées trouvées
+
+    Example:
+        >>> content = "<0/>Hello\\n<1/>World\\nContext line\\n<2/>!"
+        >>> count_expected_lines(content)
+        3
+    """
+    pattern = re.compile(r"^<(\d+)\/>", re.MULTILINE)
+    matches = pattern.findall(content)
+    return len(matches)
+
+
+def validate_line_count(
+    translations: dict[int, str],
+    expected_count: Optional[int] = None,
+    source_content: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """
+    Valide que le nombre de lignes traduites correspond au nombre attendu.
+
+    Args:
+        translations: Dictionnaire {index: texte_traduit} retourné par le parser
+        expected_count: Nombre de lignes attendues (optionnel)
+        source_content: Contenu source pour calculer expected_count automatiquement
+
+    Returns:
+        Tuple (is_valid, error_message)
+        - is_valid: True si le compte est correct, False sinon
+        - error_message: Message d'erreur détaillé si invalide, None sinon
+
+    Raises:
+        ValueError: Si ni expected_count ni source_content n'est fourni
+    """
+    if expected_count is None and source_content is None:
+        raise ValueError(
+            "Au moins un de expected_count ou source_content doit être fourni"
+        )
+
+    if expected_count is None and source_content is not None:
+        expected_count = count_expected_lines(source_content)
+
+    actual_count = len(translations)
+
+    if actual_count == expected_count:
+        return True, None
+
+    # Trouver les lignes manquantes
+    expected_indices = set(range(expected_count))
+    actual_indices = set(translations.keys())
+    missing_indices = sorted(expected_indices - actual_indices)
+    extra_indices = sorted(actual_indices - expected_indices)
+
+    error_parts = [
+        f"❌ Nombre de lignes incorrect dans la traduction:",
+        f"  • Attendu: {expected_count} lignes",
+        f"  • Reçu: {actual_count} lignes",
+    ]
+
+    if missing_indices:
+        # Afficher les premiers indices manquants
+        missing_preview = missing_indices[:10]
+        missing_str = ", ".join(f"<{i}/>" for i in missing_preview)
+        if len(missing_indices) > 10:
+            missing_str += f" ... (+{len(missing_indices) - 10} autres)"
+        error_parts.append(f"  • Lignes manquantes: {missing_str}")
+
+    if extra_indices:
+        # Afficher les premiers indices en trop
+        extra_preview = extra_indices[:10]
+        extra_str = ", ".join(f"<{i}/>" for i in extra_preview)
+        if len(extra_indices) > 10:
+            extra_str += f" ... (+{len(extra_indices) - 10} autres)"
+        error_parts.append(f"  • Lignes en trop: {extra_str}")
+
+    error_parts.extend(
+        [
+            "",
+            "💡 Causes possibles:",
+            "  • Le LLM a ignoré certaines lignes (copyright, métadonnées, etc.)",
+            "  • Le LLM a ajouté des lignes non demandées",
+            "  • Erreur de parsing du format",
+            "",
+            "🔧 Solutions:",
+            "  • Le système va automatiquement réessayer avec un prompt strict",
+            "  • Vérifiez les logs LLM pour voir quelles lignes ont été ignorées",
+            "  • Augmentez max_tokens si la traduction est tronquée",
+        ]
+    )
+
+    return False, "\n".join(error_parts)

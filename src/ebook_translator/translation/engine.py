@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from ..htmlpage import BilingualFormat
 from ..logger import get_logger
-from .parser import parse_llm_translation_output
+from .parser import parse_llm_translation_output, validate_line_count
 
 if TYPE_CHECKING:
     from ..llm import LLM
@@ -122,16 +122,18 @@ class TranslationEngine:
         self,
         chunk: "Chunk",
         user_prompt: Optional[str] = None,
+        max_line_retries: int = 2,
     ) -> tuple[list[str], bool]:
         """
         Effectue une requête de traduction via LLM et sauvegarde les résultats.
 
         Cette fonction traduit un chunk complet en utilisant le LLM, parse les résultats,
-        les mappe aux fichiers sources correspondants, et sauvegarde les traductions.
+        valide le nombre de lignes, et effectue des retries si nécessaire.
 
         Args:
             chunk: Le chunk contenant les textes à traduire
             user_prompt: Prompt utilisateur optionnel pour personnaliser la traduction
+            max_line_retries: Nombre max de retries si lignes manquantes (défaut: 2)
 
         Returns:
             Dictionnaire {line_index: texte_traduit} pour tous les textes du chunk
@@ -140,14 +142,72 @@ class TranslationEngine:
             ValueError: Si un fichier source est introuvable ou format LLM invalide
             KeyError: Si un index est manquant dans la sortie du LLM
         """
-        # Générer le prompt et obtenir la traduction du LLM
+        source_content = str(chunk)
+
+        # Première tentative avec le prompt standard
         prompt = self.llm.render_prompt(
             "translate.jinja",
             target_language=self.target_language,
             user_prompt=user_prompt,
         )
-        llm_output = self.llm.query(prompt, str(chunk))
+        llm_output = self.llm.query(prompt, source_content)
         translated_texts = parse_llm_translation_output(llm_output)
+
+        # Valider le nombre de lignes
+        is_valid, error_message = validate_line_count(
+            translations=translated_texts,
+            source_content=source_content,
+        )
+
+        # Si validation échoue, tenter des retries
+        retry_attempt = 0
+        while not is_valid and retry_attempt < max_line_retries:
+            retry_attempt += 1
+            logger.warning(
+                f"⚠️ Lignes manquantes détectées (tentative {retry_attempt}/{max_line_retries})"
+            )
+            logger.debug(f"Détails: {error_message}")
+
+            # Calculer les indices manquants pour le template
+            from .parser import count_expected_lines
+            expected_count = count_expected_lines(source_content)
+            expected_indices = set(range(expected_count))
+            actual_indices = set(translated_texts.keys())
+            missing_indices = sorted(expected_indices - actual_indices)
+
+            # Retry avec prompt strict
+            retry_prompt = self.llm.render_prompt(
+                "retry_missing_lines.jinja",
+                target_language=self.target_language,
+                error_message=error_message,
+                expected_count=expected_count,
+                missing_indices=missing_indices,
+                source_content=source_content,
+            )
+
+            logger.info(f"🔄 Retry avec prompt strict ({len(missing_indices)} lignes manquantes)")
+            llm_output = self.llm.query(retry_prompt, "")
+            translated_texts = parse_llm_translation_output(llm_output)
+
+            # Re-valider
+            is_valid, error_message = validate_line_count(
+                translations=translated_texts,
+                source_content=source_content,
+            )
+
+            if is_valid:
+                logger.info(f"✅ Retry réussi après {retry_attempt} tentative(s)")
+                break
+
+        # Si toujours invalide après tous les retries, lever une erreur
+        if not is_valid:
+            logger.error(
+                f"❌ Échec de validation après {max_line_retries} tentatives de retry"
+            )
+            raise ValueError(
+                f"Impossible d'obtenir une traduction complète après {max_line_retries} tentatives.\n"
+                f"{error_message}"
+            )
 
         # Mapper les traductions par fichier source
         translation_map = build_translation_map(chunk, translated_texts)
