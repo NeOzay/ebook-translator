@@ -7,6 +7,7 @@ class Config:
     Retry_Translation_Template: str = "retry_translation.jinja"
     Retry_Translation_Strict_Template: str = "retry_translation_strict.jinja"
     Missing_Lines_Template: str = "retry_missing_lines.jinja"
+    Refine_Template: str = "refine.jinja"  # Phase 2 affinage
     _locked: bool = False
 
     def __new__(cls, *args, **kwargs):
