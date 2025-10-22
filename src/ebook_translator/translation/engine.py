@@ -12,9 +12,15 @@ from typing import Optional, TYPE_CHECKING
 
 from tqdm import tqdm
 
+from ..config import Config
+
 from ..htmlpage import BilingualFormat
 from ..logger import get_logger
-from .parser import parse_llm_translation_output, validate_line_count
+from .parser import (
+    parse_llm_translation_output,
+    validate_line_count,
+    validate_retry_indices,
+)
 
 if TYPE_CHECKING:
     from ..llm import LLM
@@ -146,7 +152,7 @@ class TranslationEngine:
 
         # Première tentative avec le prompt standard
         prompt = self.llm.render_prompt(
-            "translate.jinja",
+            Config().First_Pass_Template,
             target_language=self.target_language,
             user_prompt=user_prompt,
         )
@@ -170,6 +176,7 @@ class TranslationEngine:
 
             # Calculer les indices manquants pour le template
             from .parser import count_expected_lines
+
             expected_count = count_expected_lines(source_content)
             expected_indices = set(range(expected_count))
             actual_indices = set(translated_texts.keys())
@@ -177,19 +184,43 @@ class TranslationEngine:
 
             # Retry avec prompt strict
             retry_prompt = self.llm.render_prompt(
-                "retry_missing_lines.jinja",
+                Config().Missing_Lines_Template,
                 target_language=self.target_language,
                 error_message=error_message,
                 expected_count=expected_count,
                 missing_indices=missing_indices,
-                source_content=source_content,
+                source_content=chunk.mark_lines_to_numbered(missing_indices),
             )
 
-            logger.info(f"🔄 Retry avec prompt strict ({len(missing_indices)} lignes manquantes)")
+            logger.info(
+                f"🔄 Retry avec prompt strict ({len(missing_indices)} lignes manquantes)"
+            )
             llm_output = self.llm.query(retry_prompt, "")
-            translated_texts = parse_llm_translation_output(llm_output)
+            missing_translated_texts = parse_llm_translation_output(llm_output)
 
-            # Re-valider
+            # Valider que le retry a fourni exactement les indices demandés
+            is_retry_valid, retry_error = validate_retry_indices(
+                missing_translated_texts, missing_indices
+            )
+
+            if not is_retry_valid:
+                logger.warning(
+                    f"⚠️ Le retry n'a pas fourni les bons indices:\n{retry_error}"
+                )
+                logger.debug(
+                    f"  • Indices demandés: {missing_indices[:20]}\n"
+                    f"  • Indices reçus: {sorted(missing_translated_texts.keys())[:20]}"
+                )
+                # Ne pas faire .update() si les indices sont incorrects
+                # → La validation globale détectera le problème et retentera
+            else:
+                # Indices valides → merger avec les traductions existantes
+                translated_texts.update(missing_translated_texts)
+                logger.debug(
+                    f"✅ Retry a fourni les {len(missing_translated_texts)} indices corrects"
+                )
+
+            # Re-valider le compte total
             is_valid, error_message = validate_line_count(
                 translations=translated_texts,
                 source_content=source_content,

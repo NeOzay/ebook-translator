@@ -106,6 +106,72 @@ class Chunk:
 
         return "\n\n".join(parts)
 
+    def mark_lines_to_numbered(self, indices_to_mark: list[int]) -> str:
+        """
+        Génère une représentation du chunk avec numérotation sélective des lignes.
+
+        Cette méthode renvoie le chunk COMPLET (head + body + tail) mais numérote
+        UNIQUEMENT les lignes dont les indices sont spécifiés. Les autres lignes
+        sont incluses comme contexte non numéroté.
+
+        Utilisé principalement pour les retries de traduction : le LLM voit tout
+        le contenu pour maintenir la cohérence, mais sait précisément quelles
+        lignes doivent être (re)traduites.
+
+        Args:
+            indices_to_mark: Liste des indices (positions dans body) à numéroter
+                avec le format <N/>. Les indices absents ne seront pas numérotés.
+
+        Returns:
+            String contenant :
+            - head (contexte non numéroté)
+            - body avec numérotation sélective : <N/>texte pour indices_to_mark
+            - tail (contexte non numéroté)
+
+        Example:
+            >>> chunk = Chunk(
+            ...     body={
+            ...         TagKey(...): "First line",
+            ...         TagKey(...): "Second line",
+            ...         TagKey(...): "Third line",
+            ...     },
+            ...     head=["Context before"],
+            ...     tail=["Context after"],
+            ... )
+            >>> print(chunk.mark_lines_to_numbered([0, 2]))
+            Context before
+
+            <0/>First line
+
+            Second line
+
+            <2/>Third line
+
+            Context after
+
+        Note:
+            Le nom "mark_lines_to_numbered" signifie "marquer (numéroter) les lignes
+            spécifiées", pas "renvoyer seulement les lignes numérotées".
+        """
+        parts = []
+
+        # Ajouter le contexte du head
+        if self.head:
+            parts.extend(self.head)
+
+        # Ajouter le body avec indices
+        for index, text in enumerate(self.body.values()):
+            if index in indices_to_mark:
+                parts.append(f"<{index}/>{text}")
+            else:
+                parts.append(text)
+
+        # Ajouter le contexte du tail
+        if self.tail:
+            parts.extend(self.tail)
+
+        return "\n\n".join(parts)
+
     def __repr__(self) -> str:
         """Représentation pour le debug."""
         return (

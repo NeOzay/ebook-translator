@@ -5,6 +5,8 @@ Parsing des sorties de traduction des LLM.
 import re
 from typing import Optional
 
+from ..config import Config
+
 
 def parse_llm_translation_output(output: str) -> dict[int, str]:
     """
@@ -95,7 +97,7 @@ def parse_llm_translation_output(output: str) -> dict[int, str]:
             f"  • Le prompt de traduction est mal configuré\n"
             f"  • Le LLM a généré du texte libre au lieu de traduire\n"
             f"\n🔧 Solutions:\n"
-            f"  • Vérifiez le template de prompt (template/translate.jinja)\n"
+            f"  • Vérifiez le template de prompt ({Config().First_Pass_Template})\n"
             f"  • Consultez les logs LLM pour voir la réponse complète\n"
             f"  • Essayez avec un autre modèle LLM"
         )
@@ -121,6 +123,84 @@ def count_expected_lines(content: str) -> int:
     pattern = re.compile(r"^<(\d+)\/>", re.MULTILINE)
     matches = pattern.findall(content)
     return len(matches)
+
+
+def validate_retry_indices(
+    retry_translations: dict[int, str],
+    expected_indices: list[int],
+) -> tuple[bool, Optional[str]]:
+    """
+    Valide que le retry a fourni exactement les indices demandés.
+
+    Vérifie que :
+    - Tous les indices attendus sont présents dans retry_translations
+    - Aucun indice supplémentaire/invalide n'est présent
+
+    Args:
+        retry_translations: Dictionnaire {index: texte_traduit} retourné par le retry
+        expected_indices: Liste des indices qui devaient être traduits
+
+    Returns:
+        Tuple (is_valid, error_message)
+        - is_valid: True si les indices correspondent exactement, False sinon
+        - error_message: Message d'erreur détaillé si invalide, None sinon
+
+    Example:
+        >>> retry_trans = {5: "Hello", 10: "World"}
+        >>> expected = [5, 10]
+        >>> validate_retry_indices(retry_trans, expected)
+        (True, None)
+
+        >>> retry_trans = {5: "Hello", 99: "Invalid"}
+        >>> expected = [5, 10]
+        >>> validate_retry_indices(retry_trans, expected)
+        (False, "❌ Le retry n'a pas fourni les indices corrects...")
+    """
+    expected_set = set(expected_indices)
+    received_set = set(retry_translations.keys())
+
+    missing = expected_set - received_set
+    extra = received_set - expected_set
+
+    if not missing and not extra:
+        return True, None
+
+    # Construire le message d'erreur
+    error_parts = [
+        "❌ Le retry n'a pas fourni les indices corrects:",
+        f"  • Indices demandés: {sorted(expected_set)[:20]}{'...' if len(expected_set) > 20 else ''}",
+        f"  • Indices reçus: {sorted(received_set)[:20]}{'...' if len(received_set) > 20 else ''}",
+    ]
+
+    if missing:
+        missing_preview = sorted(missing)[:10]
+        missing_str = ", ".join(f"<{i}/>" for i in missing_preview)
+        if len(missing) > 10:
+            missing_str += f" ... (+{len(missing) - 10} autres)"
+        error_parts.append(f"  • Toujours manquants: {missing_str}")
+
+    if extra:
+        extra_preview = sorted(extra)[:10]
+        extra_str = ", ".join(f"<{i}/>" for i in extra_preview)
+        if len(extra) > 10:
+            extra_str += f" ... (+{len(extra) - 10} autres)"
+        error_parts.append(f"  • Indices invalides (non demandés): {extra_str}")
+
+    error_parts.extend(
+        [
+            "",
+            "💡 Causes possibles:",
+            "  • Le LLM n'a pas respecté la liste des lignes à traduire",
+            "  • Le LLM a traduit des lignes déjà présentes (contexte)",
+            "  • Erreur de numérotation dans la réponse du LLM",
+            "",
+            "🔧 Solutions:",
+            "  • Le système va réessayer avec un prompt encore plus strict",
+            "  • Vérifiez les logs LLM pour voir la réponse complète",
+        ]
+    )
+
+    return False, "\n".join(error_parts)
 
 
 def validate_line_count(
@@ -151,6 +231,9 @@ def validate_line_count(
 
     if expected_count is None and source_content is not None:
         expected_count = count_expected_lines(source_content)
+
+    if expected_count is None:
+        raise ValueError("expected_count n'a pas pu être déterminé")
 
     actual_count = len(translations)
 
