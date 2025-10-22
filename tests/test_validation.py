@@ -15,7 +15,7 @@ import tempfile
 from ebook_translator.validation import (
     UntranslatedDetector,
     TerminologyChecker,
-    AutoGlossary,
+    Glossary,
     TranslationValidator,
 )
 
@@ -127,12 +127,12 @@ class TestTerminologyChecker:
         assert glossary["Matrix"] == "Matrice"
 
 
-class TestAutoGlossary:
+class TestGlossary:
     """Tests pour le glossaire automatique."""
 
     def test_learn_and_retrieve(self):
         """Vérifie l'apprentissage et la récupération."""
-        glossary = AutoGlossary()
+        glossary = Glossary()
 
         # Apprendre une traduction
         glossary.learn("Matrix", "Matrice")
@@ -145,7 +145,7 @@ class TestAutoGlossary:
 
     def test_most_frequent_wins(self):
         """Vérifie que la traduction la plus fréquente est préférée."""
-        glossary = AutoGlossary()
+        glossary = Glossary()
 
         # "Matrice" 3 fois, "Système" 1 fois
         glossary.learn("Matrix", "Matrice")
@@ -159,7 +159,7 @@ class TestAutoGlossary:
 
     def test_detect_conflicts(self):
         """Vérifie la détection de conflits."""
-        glossary = AutoGlossary()
+        glossary = Glossary()
 
         # Deux traductions équilibrées
         glossary.learn("Matrix", "Matrice")
@@ -174,7 +174,7 @@ class TestAutoGlossary:
 
     def test_validated_translation_priority(self):
         """Vérifie que les traductions validées ont priorité."""
-        glossary = AutoGlossary()
+        glossary = Glossary()
 
         # Apprendre "Système" plusieurs fois
         glossary.learn("Matrix", "Système")
@@ -194,13 +194,13 @@ class TestAutoGlossary:
             path = Path(tmpdir) / "glossary.json"
 
             # Créer et sauvegarder
-            glossary1 = AutoGlossary(cache_path=path)
+            glossary1 = Glossary(cache_path=path)
             glossary1.learn("Matrix", "Matrice")
             glossary1.validate_translation("Sakamoto", "Sakamoto")
             glossary1.save()
 
             # Charger dans une nouvelle instance
-            glossary2 = AutoGlossary(cache_path=path)
+            glossary2 = Glossary(cache_path=path)
 
             assert glossary2.get_translation("Matrix") == "Matrice"
             assert glossary2.get_translation("Sakamoto") == "Sakamoto"

@@ -11,7 +11,7 @@ from pathlib import Path
 from ..logger import get_logger
 from .untranslated_detector import UntranslatedDetector
 from .terminology_checker import TerminologyChecker
-from .glossary import AutoGlossary
+from ..glossary import Glossary
 
 logger = get_logger(__name__)
 
@@ -64,9 +64,9 @@ class TranslationValidator:
         if enable_terminology_check:
             self.terminology_checker = TerminologyChecker()
 
-        self.glossary: Optional[AutoGlossary] = None
+        self.glossary: Optional[Glossary] = None
         if enable_glossary:
-            self.glossary = AutoGlossary(cache_path=glossary_path)
+            self.glossary = Glossary(cache_path=glossary_path)
 
         # Compteurs de problèmes
         self.untranslated_count = 0
@@ -173,7 +173,7 @@ class TranslationValidator:
         lines.append(f"  • Problèmes de cohérence terminologique: {self.terminology_issues_count}")
 
         if self.glossary:
-            stats = self.glossary.get_stats()
+            stats = self.glossary.get_statistics()
             lines.append(f"  • Termes dans le glossaire: {stats['total_terms']}")
             lines.append(f"  • Termes validés: {stats['validated_terms']}")
             lines.append(f"  • Conflits terminologiques: {stats['conflicting_terms']}")

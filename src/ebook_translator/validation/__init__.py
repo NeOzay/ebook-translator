@@ -10,7 +10,7 @@ Ce module fournit des outils pour valider la qualité des traductions :
 
 from .untranslated_detector import UntranslatedDetector, UntranslatedSegment
 from .terminology_checker import TerminologyChecker, TerminologyIssue
-from .glossary import AutoGlossary
+from ..glossary import Glossary
 from .validator import TranslationValidator
 
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     "UntranslatedSegment",
     "TerminologyChecker",
     "TerminologyIssue",
-    "AutoGlossary",
+    "Glossary",
     "TranslationValidator",
 ]
