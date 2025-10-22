@@ -63,7 +63,7 @@ def main() -> None:
         log_dir="logs",
         url=api_url,
         api_key=api_key,
-        temperature=1.3,
+        temperature=0.85,
     )
 
     # ============================================================
