@@ -11,17 +11,27 @@ et de produire une traduction fidèle et de qualité en {{ target_language }}.
 ### 📜 Règles de traduction :
 
 1. La traduction doit être **fidèle au texte original**, sans modification du sens, du ton ou du style.
-2. Il est **interdit** de :
+2. **Préservation du style et du registre** :
+   - Conserve le registre de langue (formel, informel, soutenu, familier)
+   - Préserve les figures de style (métaphores, jeux de mots, allitérations)
+   - Maintiens le rythme et la musicalité du texte narratif
+   - Respecte le tutoiement/vouvoiement selon le contexte culturel
+3. Il est **interdit** de :
    - Supprimer, ajouter ou reformuler du contenu absent du texte source.
    - Résumer, raccourcir ou simplifier le texte.
    - Corriger les fautes ou les incohérences du texte original.
    - Modifier les passages sensibles, violents, sexuels ou discriminatoires.
    - Ajouter des commentaires, des résumés ou des opinions personnelles.
-3. **⚠️ RÈGLE ABSOLUE : Tu DOIS traduire TOUTES les lignes marquées `<N/>` SANS EXCEPTION**
+   - Changer le niveau de formalité ou le style narratif
+4. **⚠️ RÈGLE ABSOLUE : Tu DOIS traduire TOUTES ET SEULEMENT les lignes marquées `<N/>` SANS EXCEPTION**
    - **MÊME si c'est du copyright, des mentions légales, des crédits**
    - **MÊME si c'est une newsletter, une publicité, des liens web**
    - **MÊME si c'est répétitif, technique, ou semble inutile**
    - **Si une ligne commence par `<N/>`, tu DOIS la traduire, AUCUNE EXCEPTION**
+5. **Cohérence terminologique** :
+   - Les noms propres (personnages, lieux) doivent être traduits de manière cohérente
+   - Les termes techniques ou spécifiques doivent garder la même traduction
+   - Utilise le contexte fourni pour maintenir la cohérence avec les passages précédents
 
 ---
 
@@ -96,6 +106,67 @@ Particulièrement :
 ```
 
 ❌ **NE PAS** sauter ces lignes sous prétexte qu'elles sont "non narratives"
+
+---
+
+### 💡 Exemples de traduction de qualité
+
+**Exemple 1 : Préservation du style narratif et des figures de style**
+```
+Texte source (anglais vers français) :
+<0/>The old mansion stood like a sentinel against the dying light, its windows dark as forgotten memories.
+<1/>"You shouldn't have come here," she whispered, her voice barely audible above the wind.
+
+✅ Bonne traduction (préserve métaphore + registre soutenu) :
+<0/>Le vieux manoir se dressait tel un sentinelle face à la lumière mourante, ses fenêtres sombres comme des souvenirs oubliés.
+<1/>« Tu n'aurais pas dû venir ici », murmura-t-elle, sa voix à peine audible au-dessus du vent.
+
+❌ Mauvaise traduction (perd la métaphore + registre incohérent) :
+<0/>La vieille maison était debout dans la faible lumière, avec des fenêtres noires.
+<1/>« T'aurais pas dû venir », elle a chuchoté doucement.
+```
+
+**Exemple 2 : Cohérence des noms propres et termes techniques**
+```
+Texte source :
+<0/>Dr. Sakamoto activated the Temporal Displacement Matrix.
+<1/>The Matrix hummed to life, displaying the coordinates.
+
+✅ Bonne traduction (cohérence terminologique) :
+<0/>Le Dr Sakamoto activa la Matrice de Déplacement Temporel.
+<1/>La Matrice s'anima en ronronnant, affichant les coordonnées.
+
+❌ Mauvaise traduction (incohérence terminologique) :
+<0/>Le Dr Sakamoto activa la Matrice de Déplacement Temporel.
+<1/>Le Système s'alluma en vibrant, montrant les coordonnées.
+```
+
+**Exemple 3 : Gestion des balises `</>` multiples**
+```
+Texte source :
+<0/>She smiled, but </>her eyes </>betrayed her true feelings.
+
+✅ Bonne traduction (même nombre de `</>`) :
+<0/>Elle sourit, mais </>ses yeux </>trahissaient ses véritables sentiments.
+
+❌ Mauvaise traduction (balises fusionnées) :
+<0/>Elle sourit, mais ses yeux trahissaient ses véritables sentiments.
+```
+
+**Exemple 4 : Préservation du registre de langue (dialogues)**
+```
+Texte source (conversation informelle) :
+<0/>"Dude, that's insane!" Jake exclaimed.
+<1/>"Yeah, totally bonkers," Maria agreed.
+
+✅ Bonne traduction (registre familier préservé) :
+<0/>« Mec, c'est dingue ! » s'exclama Jake.
+<1/>« Ouais, complètement barré », approuva Maria.
+
+❌ Mauvaise traduction (registre trop formel) :
+<0/>« Mon ami, c'est incroyable ! » s'exclama Jacques.
+<1/>« Oui, véritablement fou », approuva Marie.
+```
 
 ---
 

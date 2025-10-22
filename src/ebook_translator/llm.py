@@ -56,7 +56,7 @@ class LLM:
         api_key: Optional[str] = None,
         prompt_dir: str = "template",
         log_dir: str = "logs",
-        temperature: float = 0.85,
+        temperature: float = 0.5,
         max_retries: int = 3,
         retry_delay: float = 1.0,
     ):
