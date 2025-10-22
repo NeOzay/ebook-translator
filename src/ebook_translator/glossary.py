@@ -58,7 +58,9 @@ class Glossary:
         """
         self.cache_path = cache_path
         # {terme_source: {traduction: count}}
-        self._glossary: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._glossary: dict[str, dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
         # {terme_source: traduction_validée}
         self._validated: dict[str, str] = {}
 
@@ -83,8 +85,8 @@ class Glossary:
             >>> glossary.learn("Matrix", "Système")  # Conflit détecté
         """
         # Ignorer si identiques (ex: noms propres gardés tels quels)
-        if source_term == translated_term:
-            return
+        # if source_term == translated_term:
+        #     return
 
         # Incrémenter le compteur
         self._glossary[source_term][translated_term] += 1
@@ -217,14 +219,14 @@ class Glossary:
             >>> glossary._extract_terms("Dr. Sakamoto used the DNA Matrix.")
             ['Sakamoto', 'DNA', 'Matrix']
         """
-        terms = set()
+        terms: set[str] = set()
 
         # Pattern 1: Mots avec majuscule (mais pas début de phrase)
         # Exclure les titres communs (Dr., Mr., Mrs., etc.)
         words = text.split()
         for i, word in enumerate(words):
             # Nettoyer la ponctuation
-            clean_word = re.sub(r'[^\w]', '', word)
+            clean_word = re.sub(r"[^\w]", "", word)
 
             # Skip mots vides ou trop courts
             if len(clean_word) < 2:
@@ -238,18 +240,22 @@ class Glossary:
             if clean_word and clean_word[0].isupper():
                 # Si c'est le premier mot, vérifier qu'il soit suivi d'un autre mot capitalisé
                 if i == 0:
-                    if i + 1 < len(words) and words[i + 1] and words[i + 1][0].isupper():
+                    if (
+                        i + 1 < len(words)
+                        and words[i + 1]
+                        and words[i + 1][0].isupper()
+                    ):
                         terms.add(clean_word)
                 else:
                     # Pas le premier mot → ajouter
                     terms.add(clean_word)
 
         # Pattern 2: Acronymes (2+ majuscules consécutives)
-        acronyms = re.findall(r'\b[A-Z]{2,}\b', text)
+        acronyms = re.findall(r"\b[A-Z]{2,}\b", text)
         terms.update(acronyms)
 
         # Pattern 3: Termes techniques (ex: CamelCase)
-        camel_case = re.findall(r'\b[A-Z][a-z]+[A-Z][a-zA-Z]*\b', text)
+        camel_case = re.findall(r"\b[A-Z][a-z]+[A-Z][a-zA-Z]*\b", text)
         terms.update(camel_case)
 
         return sorted(list(terms))
@@ -289,7 +295,7 @@ class Glossary:
         original_rel_pos = original_pos / len(original_text)
 
         # Scorer chaque candidat
-        scores = []
+        scores: list[tuple[str, float]] = []
         for candidate in candidate_terms:
             score = 0.0
 
@@ -301,7 +307,7 @@ class Glossary:
                 score += (1.0 - pos_diff) * 2.0  # Poids 2x
 
             # Score 2: Longueur similaire
-            len_ratio = min(len(original_term), len(candidate)) / max(
+            len_ratio: float = min(len(original_term), len(candidate)) / max(
                 len(original_term), len(candidate)
             )
             score += len_ratio
@@ -320,7 +326,9 @@ class Glossary:
     # Export et validation
     # =========================================================================
 
-    def export_for_prompt(self, max_terms: int = 50, min_confidence: float = 0.5) -> str:
+    def export_for_prompt(
+        self, max_terms: int = 50, min_confidence: float = 0.5
+    ) -> str:
         """
         Exporte le glossaire au format texte pour injection dans un prompt.
 
@@ -337,7 +345,7 @@ class Glossary:
             >>> print(glossary.export_for_prompt())
             'Matrix → Matrice, Dr. Sakamoto → Dr Sakamoto, DNA → ADN'
         """
-        terms = []
+        terms: list[str] = []
 
         # Trier par fréquence (termes les plus utilisés en premier)
         for source_term in sorted(
@@ -345,7 +353,9 @@ class Glossary:
             key=lambda t: sum(self._glossary[t].values()),
             reverse=True,
         ):
-            translation = self.get_translation(source_term, min_confidence=min_confidence)
+            translation = self.get_translation(
+                source_term, min_confidence=min_confidence
+            )
             if translation:
                 terms.append(f"{source_term} → {translation}")
 
@@ -410,7 +420,9 @@ class Glossary:
         """
         result = {}
         for source_term in self._glossary:
-            translation = self.get_translation(source_term, min_confidence=min_confidence)
+            translation = self.get_translation(
+                source_term, min_confidence=min_confidence
+            )
             if translation:
                 result[source_term] = translation
         return result
@@ -501,7 +513,7 @@ class Glossary:
             "validated": self._validated,
         }
 
-        with open(save_path, 'w', encoding='utf-8') as f:
+        with open(save_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def _load_from_cache(self) -> None:
@@ -510,7 +522,7 @@ class Glossary:
             return
 
         try:
-            with open(self.cache_path, 'r', encoding='utf-8') as f:
+            with open(self.cache_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             # Reconstruire les defaultdicts
