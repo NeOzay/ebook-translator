@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pyright:*)"
+      "Bash(poetry run pytest:*)",
+      "Bash(git log:*)",
+      "Bash(poetry run python:*)",
+      "Bash(iconv:*)"
     ],
     "deny": [],
     "ask": []
