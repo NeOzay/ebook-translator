@@ -115,6 +115,23 @@ class TextReplacer:
         segments = translated_text.split(FRAGMENT_SEPARATOR)
 
         if len(segments) != len(fragments):
+            # AVERTISSEMENT: Cette erreur aurait dû être détectée AVANT la reconstruction
+            # par Phase1Worker ou Phase2Worker. Si elle apparaît ici, c'est que la validation
+            # a échoué ou a été contournée (traduction manuelle, cache corrompu, etc.)
+            from ..logger import get_logger
+            logger = get_logger(__name__)
+            logger.error(
+                f"⚠️ FRAGMENT MISMATCH DÉTECTÉ PENDANT LA RECONSTRUCTION!\n"
+                f"  • Cette erreur aurait dû être détectée en Phase 1/2\n"
+                f"  • Expected: {len(fragments)} fragments, Got: {len(segments)}\n"
+                f"  • Original text preview: {original_text[:100]}...\n"
+                f"  • Translated text preview: {translated_text[:100]}...\n"
+                f"\n💡 Cela indique probablement:\n"
+                f"  • Un cache corrompu (traduction sans validation)\n"
+                f"  • Une traduction manuelle insérée dans le store\n"
+                f"  • Un bug dans la validation Phase 1/2"
+            )
+
             # Tenter de lever l'exception structurée pour permettre le retry
             try:
                 from .exceptions import FragmentMismatchError

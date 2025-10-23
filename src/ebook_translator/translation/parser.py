@@ -282,3 +282,98 @@ def validate_line_count(
     )
 
     return False, "\n".join(error_parts)
+
+
+def validate_fragment_count(
+    original_text: str,
+    translated_text: str,
+) -> tuple[bool, Optional[str]]:
+    """
+    Valide que le nombre de fragments traduits correspond au nombre attendu.
+
+    Cette fonction vérifie que la traduction contient exactement le même nombre
+    de séparateurs `</>` que le texte original, ce qui garantit que la reconstruction
+    HTML pourra aligner correctement les fragments.
+
+    Args:
+        original_text: Texte original extrait (peut contenir des séparateurs `</>`)
+        translated_text: Texte traduit (doit avoir le même nombre de `</>`)
+
+    Returns:
+        Tuple (is_valid, error_message)
+        - is_valid: True si les comptages correspondent, False sinon
+        - error_message: Message d'erreur détaillé si invalide, None sinon
+
+    Example:
+        >>> original = "Hello</>world"
+        >>> translated = "Bonjour</>monde"
+        >>> validate_fragment_count(original, translated)
+        (True, None)
+
+        >>> original = "Hello</>world"
+        >>> translated = "Bonjour monde"  # Séparateur manquant
+        >>> is_valid, msg = validate_fragment_count(original, translated)
+        >>> is_valid
+        False
+    """
+    FRAGMENT_SEPARATOR = "</>"
+
+    # Compter les séparateurs
+    expected_count = original_text.count(FRAGMENT_SEPARATOR) + 1
+    actual_count = translated_text.count(FRAGMENT_SEPARATOR) + 1
+
+    if expected_count == actual_count:
+        return True, None
+
+    # Construire le message d'erreur
+    # Aperçu des fragments originaux
+    original_fragments = original_text.split(FRAGMENT_SEPARATOR)
+    translated_fragments = translated_text.split(FRAGMENT_SEPARATOR)
+
+    # Limiter l'affichage à 5 fragments pour lisibilité
+    max_display = 5
+    original_preview = original_fragments[:max_display]
+    translated_preview = translated_fragments[:max_display]
+
+    error_parts = [
+        f"❌ Nombre de fragments incorrect dans la traduction:",
+        f"  • Attendu: {expected_count} fragment(s)",
+        f"  • Reçu: {actual_count} fragment(s)",
+        "",
+        "📝 Aperçu des fragments originaux:",
+    ]
+
+    for i, fragment in enumerate(original_preview):
+        preview_text = fragment[:50] + "..." if len(fragment) > 50 else fragment
+        error_parts.append(f"  [{i}] {preview_text}")
+
+    if len(original_fragments) > max_display:
+        error_parts.append(f"  ... et {len(original_fragments) - max_display} autre(s)")
+
+    error_parts.append("")
+    error_parts.append("📝 Aperçu des fragments traduits:")
+
+    for i, fragment in enumerate(translated_preview):
+        preview_text = fragment[:50] + "..." if len(fragment) > 50 else fragment
+        error_parts.append(f"  [{i}] {preview_text}")
+
+    if len(translated_fragments) > max_display:
+        error_parts.append(f"  ... et {len(translated_fragments) - max_display} autre(s)")
+
+    error_parts.extend(
+        [
+            "",
+            "💡 Causes possibles:",
+            "  • Le LLM a fusionné plusieurs fragments en un seul",
+            "  • Le LLM a divisé un fragment en plusieurs",
+            "  • Le séparateur '</>' a été supprimé ou modifié",
+            "  • Le contenu original contenait déjà '</>' (cas légitime)",
+            "",
+            "🔧 Solutions:",
+            "  • Le système va automatiquement réessayer avec un prompt strict",
+            "  • Vérifiez les logs LLM pour voir la réponse complète",
+            "  • Assurez-vous que le prompt insiste sur la préservation du séparateur",
+        ]
+    )
+
+    return False, "\n".join(error_parts)

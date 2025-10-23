@@ -12,7 +12,11 @@ from tqdm import tqdm
 
 from ..logger import get_logger
 from ..translation.engine import TranslationEngine, build_translation_map
-from ..translation.parser import parse_llm_translation_output, validate_line_count
+from ..translation.parser import (
+    parse_llm_translation_output,
+    validate_line_count,
+    validate_fragment_count,
+)
 from ..config import TemplateNames
 from ..correction.error_queue import ErrorItem
 
@@ -118,7 +122,7 @@ class Phase1Worker:
             llm_output = self.llm.query(prompt, source_content, context=context)
             translated_texts = parse_llm_translation_output(llm_output)
 
-            # 3. Validation structurelle
+            # 3. Validation structurelle (nombre de lignes)
             is_valid, error_message = validate_line_count(
                 translations=translated_texts,
                 source_content=source_content,
@@ -130,6 +134,26 @@ class Phase1Worker:
                     chunk, translated_texts, error_message or ""
                 )
                 return False
+
+            # 3b. Validation structurelle (nombre de fragments)
+            # Valider chaque paire (original, traduit) pour détecter fragment_mismatch
+            for line_idx, translated_text in translated_texts.items():
+                # Récupérer le texte original correspondant
+                original_items = list(chunk.fetch())
+                if line_idx < len(original_items):
+                    _, _, original_text = original_items[line_idx]
+
+                    # Valider que les fragments correspondent
+                    is_valid_fragments, fragment_error = validate_fragment_count(
+                        original_text, translated_text
+                    )
+
+                    if not is_valid_fragments:
+                        # Soumettre erreur de fragment mismatch à la queue
+                        self._submit_fragment_mismatch_error(
+                            chunk, line_idx, original_text, translated_text, fragment_error or ""
+                        )
+                        return False
 
             # 4. Sauvegarder traductions
             translation_map = build_translation_map(chunk, translated_texts)
@@ -201,6 +225,44 @@ class Phase1Worker:
         self.errors_submitted += 1
         logger.warning(
             f"⚠️ Chunk {chunk.index}: {len(missing_indices)} lignes manquantes → ErrorQueue"
+        )
+
+    def _submit_fragment_mismatch_error(
+        self,
+        chunk: "Chunk",
+        line_idx: int,
+        original_text: str,
+        translated_text: str,
+        error_message: str,
+    ) -> None:
+        """
+        Soumet une erreur de fragment mismatch à la queue.
+
+        Args:
+            chunk: Chunk avec erreur
+            line_idx: Index de la ligne avec mismatch
+            original_text: Texte original de la ligne
+            translated_text: Texte traduit avec mauvais nombre de fragments
+            error_message: Message d'erreur de validation
+        """
+        error_item = ErrorItem(
+            chunk=chunk,
+            error_type="fragment_mismatch",
+            error_data={
+                "error_message": error_message,
+                "line_idx": line_idx,
+                "original_text": original_text,
+                "translated_text": translated_text,
+                "expected_fragments": original_text.count("</>") + 1,
+                "actual_fragments": translated_text.count("</>") + 1,
+            },
+            phase="initial",
+        )
+
+        self.error_queue.put(error_item)
+        self.errors_submitted += 1
+        logger.warning(
+            f"⚠️ Chunk {chunk.index} ligne {line_idx}: Fragment mismatch → ErrorQueue"
         )
 
     def _learn_glossary_from_chunk(

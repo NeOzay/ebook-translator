@@ -249,8 +249,139 @@ class CorrectionWorker:
         """
         Corrige une erreur de fragment mismatch.
 
+        Cette méthode gère deux formats d'erreur:
+        1. Format Phase1/Phase2: Erreur détectée AVANT reconstruction
+           - error_data contient: line_idx, original_text, translated_text
+           - Retraduit la ligne avec le bon nombre de fragments
+        2. Format reconstruction (legacy): Erreur détectée PENDANT reconstruction
+           - error_data contient: page, tag_key, original_fragments, translated_segments
+           - Utilise RetryEngine pour correction
+
         Args:
             item: ErrorItem avec error_type="fragment_mismatch"
+
+        Returns:
+            True si correction réussie, False sinon
+        """
+        try:
+            error_data = item.error_data
+            chunk = item.chunk
+
+            # Détecter le format d'erreur
+            if "line_idx" in error_data:
+                # Format Phase1/Phase2 (nouveau)
+                return self._correct_fragment_mismatch_phase(item)
+            elif "original_fragments" in error_data:
+                # Format reconstruction (legacy)
+                return self._correct_fragment_mismatch_reconstruction(item)
+            else:
+                logger.error(f"Format d'erreur fragment_mismatch inconnu: {error_data.keys()}")
+                return False
+
+        except Exception as e:
+            logger.exception(f"Erreur lors de la correction de fragment mismatch: {e}")
+            return False
+
+    def _correct_fragment_mismatch_phase(self, item: ErrorItem) -> bool:
+        """
+        Corrige un fragment mismatch détecté en Phase 1/2.
+
+        Retraduit la ligne problématique avec un prompt strict sur les fragments.
+
+        Args:
+            item: ErrorItem avec format Phase1/Phase2
+
+        Returns:
+            True si correction réussie, False sinon
+        """
+        try:
+            from ..translation.parser import (
+                parse_llm_translation_output,
+                validate_fragment_count,
+            )
+            from ..translation.engine import build_translation_map
+
+            chunk = item.chunk
+            error_data = item.error_data
+            line_idx = error_data["line_idx"]
+            original_text = error_data["original_text"]
+            expected_fragments = error_data["expected_fragments"]
+
+            # Construire prompt strict pour fragments
+            # TODO: Créer un template spécifique retry_fragment_mismatch.jinja
+            # Pour l'instant, on réutilise le template de traduction standard
+            retry_prompt = self.llm.render_prompt(
+                TemplateNames.First_Pass_Template,
+                target_language=self.target_language,
+            )
+
+            # Formatter la ligne à retranslater avec insistance sur les séparateurs
+            source_with_warning = (
+                f"⚠️ ATTENTION: Ce texte contient {expected_fragments} fragment(s) "
+                f"séparés par '</>'. Tu DOIS préserver EXACTEMENT {expected_fragments} fragment(s) "
+                f"dans ta traduction.\n\n"
+                f"<0/>{original_text}"
+            )
+
+            logger.debug(
+                f"[Worker-{self.worker_id}] Retry fragment mismatch: ligne {line_idx}, "
+                f"chunk {chunk.index}, attendu {expected_fragments} fragments"
+            )
+
+            # Appel LLM
+            context = f"correction_fragment_chunk_{chunk.index:03d}_line_{line_idx}"
+            llm_output = self.llm.query(retry_prompt, source_with_warning, context=context)
+            retry_translated = parse_llm_translation_output(llm_output)
+
+            if 0 not in retry_translated:
+                logger.warning(f"[Worker-{self.worker_id}] Retry n'a pas retourné la ligne 0")
+                return False
+
+            corrected_text = retry_translated[0]
+
+            # Valider que les fragments correspondent maintenant
+            is_valid, error_message = validate_fragment_count(original_text, corrected_text)
+
+            if not is_valid:
+                logger.warning(
+                    f"[Worker-{self.worker_id}] Validation fragments échouée après retry: {error_message}"
+                )
+                return False
+
+            # Sauvegarder la correction
+            # Récupérer les traductions existantes et mettre à jour la ligne corrigée
+            all_translations, has_missing = self.store.get_from_chunk(chunk)
+
+            if has_missing or line_idx >= len(all_translations):
+                logger.warning(
+                    f"[Worker-{self.worker_id}] Impossible de retrouver traductions chunk {chunk.index}"
+                )
+                return False
+
+            # Créer dict avec toutes les traductions incluant la ligne corrigée
+            translated_texts = {i: text for i, text in enumerate(all_translations)}
+            translated_texts[line_idx] = corrected_text
+
+            # Sauvegarder
+            translation_map = build_translation_map(chunk, translated_texts)
+            for source_file, translations in translation_map.items():
+                self.store.save_all(source_file, translations)
+
+            logger.debug(
+                f"[Worker-{self.worker_id}] Fragment mismatch corrigé pour chunk {chunk.index} ligne {line_idx}"
+            )
+            return True
+
+        except Exception as e:
+            logger.exception(f"[Worker-{self.worker_id}] Erreur correction fragment (phase): {e}")
+            return False
+
+    def _correct_fragment_mismatch_reconstruction(self, item: ErrorItem) -> bool:
+        """
+        Corrige un fragment mismatch détecté pendant la reconstruction (legacy).
+
+        Args:
+            item: ErrorItem avec format reconstruction
 
         Returns:
             True si correction réussie, False sinon
@@ -283,14 +414,18 @@ class CorrectionWorker:
                         tag_key.index,
                         result.corrected_text,
                     )
-                    logger.debug(f"Fragment mismatch corrigé pour {tag_key}")
+                    logger.debug(
+                        f"[Worker-{self.worker_id}] Fragment mismatch corrigé pour {tag_key}"
+                    )
                     return True
 
-            logger.warning("Correction de fragment mismatch échouée")
+            logger.warning(f"[Worker-{self.worker_id}] Correction fragment (reconstruction) échouée")
             return False
 
         except Exception as e:
-            logger.exception(f"Erreur lors de la correction de fragment mismatch: {e}")
+            logger.exception(
+                f"[Worker-{self.worker_id}] Erreur correction fragment (reconstruction): {e}"
+            )
             return False
 
     def stop(self, timeout: float = 10.0) -> bool:

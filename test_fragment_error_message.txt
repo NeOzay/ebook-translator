@@ -1,0 +1,23 @@
+Exemple de message d'erreur:
+❌ Nombre de fragments incorrect dans la traduction:
+  • Attendu: 3 fragment(s)
+  • Reçu: 1 fragment(s)
+
+📝 Aperçu des fragments originaux:
+  [0] Fragment 1
+  [1] Fragment 2
+  [2] Fragment 3
+
+📝 Aperçu des fragments traduits:
+  [0] Frag 1 Frag 2
+
+💡 Causes possibles:
+  • Le LLM a fusionné plusieurs fragments en un seul
+  • Le LLM a divisé un fragment en plusieurs
+  • Le séparateur '</>' a été supprimé ou modifié
+  • Le contenu original contenait déjà '</>' (cas légitime)
+
+🔧 Solutions:
+  • Le système va automatiquement réessayer avec un prompt strict
+  • Vérifiez les logs LLM pour voir la réponse complète
+  • Assurez-vous que le prompt insiste sur la préservation du séparateur

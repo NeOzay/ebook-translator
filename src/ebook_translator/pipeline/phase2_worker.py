@@ -11,7 +11,11 @@ from tqdm import tqdm
 
 from ..logger import get_logger
 from ..translation.engine import build_translation_map
-from ..translation.parser import parse_llm_translation_output, validate_line_count
+from ..translation.parser import (
+    parse_llm_translation_output,
+    validate_line_count,
+    validate_fragment_count,
+)
 from ..config import TemplateNames
 from ..correction.error_queue import ErrorItem
 
@@ -160,7 +164,7 @@ class Phase2Worker:
             )  # Pas de source_content, tout dans prompt
             refined_texts = parse_llm_translation_output(llm_output)
 
-            # 8. Validation structurelle
+            # 8. Validation structurelle (nombre de lignes)
             is_valid, error_message = validate_line_count(
                 translations=refined_texts,
                 source_content=source_content,
@@ -172,6 +176,26 @@ class Phase2Worker:
                     chunk, refined_texts, error_message or ""
                 )
                 return False
+
+            # 8b. Validation structurelle (nombre de fragments)
+            # Valider chaque paire (original, traduit) pour détecter fragment_mismatch
+            for line_idx, refined_text in refined_texts.items():
+                # Récupérer le texte original correspondant
+                original_items = list(chunk.fetch())
+                if line_idx < len(original_items):
+                    _, _, original_text = original_items[line_idx]
+
+                    # Valider que les fragments correspondent
+                    is_valid_fragments, fragment_error = validate_fragment_count(
+                        original_text, refined_text
+                    )
+
+                    if not is_valid_fragments:
+                        # Soumettre erreur de fragment mismatch à la queue
+                        self._submit_fragment_mismatch_error(
+                            chunk, line_idx, original_text, refined_text, fragment_error or ""
+                        )
+                        return False
 
             # 9. Sauvegarder traductions affinées
             translation_map = build_translation_map(chunk, refined_texts)
@@ -275,6 +299,44 @@ class Phase2Worker:
         self.errors_submitted += 1
         logger.warning(
             f"⚠️ Chunk {chunk.index} (Phase 2): {len(missing_indices)} lignes manquantes → ErrorQueue"
+        )
+
+    def _submit_fragment_mismatch_error(
+        self,
+        chunk: "Chunk",
+        line_idx: int,
+        original_text: str,
+        refined_text: str,
+        error_message: str,
+    ) -> None:
+        """
+        Soumet une erreur de fragment mismatch (Phase 2) à la queue.
+
+        Args:
+            chunk: Chunk avec erreur
+            line_idx: Index de la ligne avec mismatch
+            original_text: Texte original de la ligne
+            refined_text: Texte affiné avec mauvais nombre de fragments
+            error_message: Message d'erreur de validation
+        """
+        error_item = ErrorItem(
+            chunk=chunk,
+            error_type="fragment_mismatch",
+            error_data={
+                "error_message": error_message,
+                "line_idx": line_idx,
+                "original_text": original_text,
+                "translated_text": refined_text,
+                "expected_fragments": original_text.count("</>") + 1,
+                "actual_fragments": refined_text.count("</>") + 1,
+            },
+            phase="refined",
+        )
+
+        self.error_queue.put(error_item)
+        self.errors_submitted += 1
+        logger.warning(
+            f"⚠️ Chunk {chunk.index} ligne {line_idx} (Phase 2): Fragment mismatch → ErrorQueue"
         )
 
     def _submit_missing_initial_error(self, chunk: "Chunk") -> None:
