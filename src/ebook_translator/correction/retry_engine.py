@@ -8,8 +8,7 @@ de type FragmentMismatchError en re-soumettant avec un prompt renforcé.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from ..config import Config
-
+from ..config import TemplateNames
 from ..logger import get_logger
 from ..htmlpage.constants import FRAGMENT_SEPARATOR
 
@@ -171,7 +170,7 @@ class RetryEngine:
 
         # Construire le prompt renforcé
         prompt = self.llm.render_prompt(
-            Config().Retry_Translation_Template,
+            TemplateNames.Retry_Translation_Template,
             target_language=target_language,
             original_fragments=original_fragments,
             incorrect_segments=incorrect_segments,
@@ -210,7 +209,7 @@ class RetryEngine:
             Texte corrigé ou None
         """
         prompt = self.llm.render_prompt(
-            Config().Retry_Translation_Strict_Template,
+            TemplateNames.Retry_Translation_Strict_Template,
             target_language=target_language,
             original_fragments=original_fragments,
         )

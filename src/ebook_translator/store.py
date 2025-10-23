@@ -250,7 +250,6 @@ class Store:
 
         Utilise la méthode chunk.fetch() pour parcourir efficacement les fichiers
         et leurs textes associés, en utilisant l'index du TagKey comme clé.
-        Fallback sur le texte original pour la rétrocompatibilité v1.
 
         Args:
             chunk: Le chunk contenant les textes à traduire

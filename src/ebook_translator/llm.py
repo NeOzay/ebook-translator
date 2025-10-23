@@ -1,5 +1,6 @@
 import os
 import datetime
+from pathlib import Path
 import sys
 import time
 from dotenv import load_dotenv
@@ -89,7 +90,7 @@ class LLM:
     # -----------------------------------
     def _create_log(
         self, prompt: str, content: str, context: Optional[str] = None
-    ) -> str:
+    ) -> Path:
         """
         Prépare les données du log et retourne le chemin du fichier.
 
@@ -103,20 +104,19 @@ class LLM:
         Returns:
             Chemin du fichier de log (non encore créé)
         """
+
+        timestamp = datetime.datetime.now().isoformat().replace(":", "-")
+
         # Générer un nom de fichier contextuel
         self._log_counter += 1
         if context:
             # Format : llm_<context>_<counter>.log
-            filename = f"llm_{context}_{self._log_counter:04d}.log"
+            filename = f"llm_{context}_{self._log_counter:04d}_{timestamp}.log"
         else:
             # Format par défaut : llm_<counter>.log
-            filename = f"llm_{self._log_counter:04d}.log"
+            filename = f"llm_{self._log_counter:04d}_{timestamp}.log"
 
         log_path = get_session_log_path(filename)
-
-        # Stocker les données pour écriture lazy
-        timestamp = datetime.datetime.now().isoformat().replace(":", "-")
-        log_path = os.path.join(log_path, f"{timestamp}.txt")
 
         header = (
             f"=== LLM REQUEST LOG ===\n"
@@ -132,7 +132,7 @@ class LLM:
             f.write(header)
         return log_path
 
-    def _append_response(self, log_path: str, response: str):
+    def _append_response(self, log_path: Path, response: str):
         """Ajoute la réponse à la fin du log existant."""
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(response.strip() + "\n")

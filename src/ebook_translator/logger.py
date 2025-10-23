@@ -268,7 +268,7 @@ def get_session_log_path(filename: str) -> Path:
         filename: Nom du fichier de log (ex: "llm_chunk_042.log")
 
     Returns:
-        Chemin complet : logs/run_YYYYMMDD_HHMMSS/filename
+        Chemin complet: logs/run_YYYYMMDD_HHMMSS/filename
 
     Example:
         >>> path = get_session_log_path("llm_chunk_001.log")

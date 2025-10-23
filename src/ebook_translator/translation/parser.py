@@ -5,8 +5,6 @@ Parsing des sorties de traduction des LLM.
 import re
 from typing import Optional
 
-from ..config import Config
-
 
 def parse_llm_translation_output(output: str) -> dict[int, str]:
     """
@@ -97,7 +95,7 @@ def parse_llm_translation_output(output: str) -> dict[int, str]:
             f"  • Le prompt de traduction est mal configuré\n"
             f"  • Le LLM a généré du texte libre au lieu de traduire\n"
             f"\n🔧 Solutions:\n"
-            f"  • Vérifiez le template de prompt ({Config().First_Pass_Template})\n"
+            f"  • Vérifiez le template de prompt \n"
             f"  • Consultez les logs LLM pour voir la réponse complète\n"
             f"  • Essayez avec un autre modèle LLM"
         )

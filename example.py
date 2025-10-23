@@ -60,7 +60,6 @@ def main() -> None:
     # ============================================================
     llm = LLM(
         model_name=model_name,
-        log_dir="logs",
         url=api_url,
         api_key=api_key,
         temperature=0.85,
