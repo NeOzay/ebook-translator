@@ -51,6 +51,7 @@ class CorrectionWorker:
         llm: "LLM",
         store: "Store",
         target_language: str,
+        worker_id: int = 0,
     ):
         """
         Initialise le worker de correction.
@@ -60,11 +61,13 @@ class CorrectionWorker:
             llm: Instance du LLM pour les retries
             store: Store pour sauvegarder les corrections
             target_language: Code de la langue cible (ex: "fr", "en")
+            worker_id: Identifiant unique du worker (pour logs et debug)
         """
         self.error_queue = error_queue
         self.llm = llm
         self.store = store
         self.target_language = target_language
+        self.worker_id = worker_id
 
         # Thread management
         self._stop_event = threading.Event()
@@ -83,13 +86,13 @@ class CorrectionWorker:
         quand le programme principal se termine.
         """
         if self._thread is not None and self._thread.is_alive():
-            logger.warning("CorrectionWorker déjà démarré")
+            logger.warning(f"[Worker-{self.worker_id}] CorrectionWorker déjà démarré")
             return
 
-        logger.info("🔧 Démarrage du thread de correction")
+        logger.info(f"🔧 [Worker-{self.worker_id}] Démarrage du thread de correction")
         self._stop_event.clear()
         self._thread = threading.Thread(
-            target=self._run, daemon=True, name="CorrectionWorker"
+            target=self._run, daemon=True, name=f"CorrectionWorker-{self.worker_id}"
         )
         self._thread.start()
 
@@ -100,7 +103,7 @@ class CorrectionWorker:
         Consomme la queue d'erreurs et tente de corriger chaque erreur.
         Continue jusqu'à réception du signal stop.
         """
-        logger.debug("Thread de correction actif")
+        logger.debug(f"[Worker-{self.worker_id}] Thread de correction actif")
 
         while not self._stop_event.is_set():
             try:
@@ -110,16 +113,16 @@ class CorrectionWorker:
                 if item is None:
                     continue
 
-                logger.debug(f"Traitement de {item}")
+                logger.debug(f"[Worker-{self.worker_id}] Traitement de {item}")
                 self._correct_error(item)
 
             except Exception as e:
                 # Timeout ou erreur inattendue
                 if "Empty" not in str(type(e).__name__):
-                    logger.exception(f"Erreur inattendue dans CorrectionWorker: {e}")
+                    logger.exception(f"[Worker-{self.worker_id}] Erreur inattendue dans CorrectionWorker: {e}")
                 continue
 
-        logger.debug("Thread de correction arrêté")
+        logger.debug(f"[Worker-{self.worker_id}] Thread de correction arrêté")
 
     def _correct_error(self, item: ErrorItem) -> None:
         """
@@ -141,13 +144,13 @@ class CorrectionWorker:
                 with self._lock:
                     self.corrected_count += 1
                 self.error_queue.mark_corrected(item)
-                logger.info(f"✅ Correction réussie: {item}")
+                logger.info(f"✅ [Worker-{self.worker_id}] Correction réussie: {item}")
             else:
                 # Retry si pas encore atteint max_retries
                 if item.retry_count < item.max_retries:
                     item.retry_count += 1
                     logger.warning(
-                        f"⚠️ Correction échouée, retry {item.retry_count}/{item.max_retries}: {item}"
+                        f"⚠️ [Worker-{self.worker_id}] Correction échouée, retry {item.retry_count}/{item.max_retries}: {item}"
                     )
                     self.error_queue.put(item)  # Re-queue
                 else:
@@ -155,7 +158,7 @@ class CorrectionWorker:
                         self.failed_count += 1
                     self.error_queue.mark_failed(item)
                     logger.error(
-                        f"❌ Correction échouée après {item.max_retries} tentatives: {item}"
+                        f"❌ [Worker-{self.worker_id}] Correction échouée après {item.max_retries} tentatives: {item}"
                     )
 
         except Exception as e:
@@ -187,12 +190,11 @@ class CorrectionWorker:
             missing_indices = error_data["missing_indices"]
             translated_texts = error_data["translated_texts"]
 
-            # Construire le prompt de retry
+            # Construire le prompt de retry (CIBLÉ - seulement lignes manquantes)
             retry_prompt = self.llm.render_prompt(
-                TemplateNames.Missing_Lines_Template,
+                TemplateNames.Missing_Lines_Targeted_Template,
                 target_language=self.target_language,
                 error_message=error_data.get("error_message", ""),
-                expected_count=error_data.get("expected_count", len(missing_indices)),
                 missing_indices=missing_indices,
                 source_content=chunk.mark_lines_to_numbered(missing_indices),
             )
@@ -309,10 +311,10 @@ class CorrectionWorker:
             True
         """
         if self._thread is None or not self._thread.is_alive():
-            logger.warning("CorrectionWorker déjà arrêté")
+            logger.warning(f"[Worker-{self.worker_id}] CorrectionWorker déjà arrêté")
             return True
 
-        logger.info("🛑 Arrêt du thread de correction...")
+        logger.info(f"🛑 [Worker-{self.worker_id}] Arrêt du thread de correction...")
         self._stop_event.set()
 
         # Attendre que le thread se termine
@@ -320,11 +322,11 @@ class CorrectionWorker:
 
         if self._thread.is_alive():
             logger.error(
-                f"⚠️ Thread de correction n'a pas pu s'arrêter dans le délai ({timeout}s)"
+                f"⚠️ [Worker-{self.worker_id}] Thread de correction n'a pas pu s'arrêter dans le délai ({timeout}s)"
             )
             return False
 
-        logger.info("✅ Thread de correction arrêté")
+        logger.info(f"✅ [Worker-{self.worker_id}] Thread de correction arrêté")
         return True
 
     def switch_store(self, new_store: "Store") -> None:
@@ -338,7 +340,7 @@ class CorrectionWorker:
             >>> # Passer de Phase 1 à Phase 2
             >>> worker.switch_store(multi_store.refined_store)
         """
-        logger.info(f"Changement de store: {id(self.store)} → {id(new_store)}")
+        logger.info(f"[Worker-{self.worker_id}] Changement de store: {id(self.store)} → {id(new_store)}")
         self.store = new_store
 
     def get_statistics(self) -> dict:

@@ -17,7 +17,7 @@ from ..logger import get_logger
 from ..stores.multi_store import MultiStore
 from ..glossary import Glossary
 from ..correction.error_queue import ErrorQueue
-from ..correction.correction_worker import CorrectionWorker
+from ..correction.correction_worker_pool import CorrectionWorkerPool
 from ..segment import Segmentator
 from ..translation.epub_handler import (
     copy_epub_metadata,
@@ -26,6 +26,7 @@ from ..translation.epub_handler import (
 )
 from .phase1_worker import Phase1Worker
 from .phase2_worker import Phase2Worker
+from .glossary_validator import GlossaryValidator
 
 if TYPE_CHECKING:
     from ..llm import LLM
@@ -84,7 +85,7 @@ class TwoPhasePipeline:
         self,
         llm: "LLM",
         epub_path: str | Path,
-        cache_dir: str | Path,
+        cache_dir: str | Path | None = None,
     ):
         """
         Initialise le pipeline en 2 phases.
@@ -96,7 +97,14 @@ class TwoPhasePipeline:
         """
         self.llm = llm
         self.epub_path = epub_path if isinstance(epub_path, Path) else Path(epub_path)
-        self.cache_dir = cache_dir if isinstance(cache_dir, Path) else Path(cache_dir)
+        match cache_dir:
+            case None:
+                cache_dir = Path(
+                    self.epub_path.parent / f".{self.epub_path.stem}_cache"
+                )
+            case str():
+                cache_dir = Path(cache_dir)
+        self.cache_dir = cache_dir
 
         # Valider que l'EPUB existe
         if not self.epub_path.exists():
@@ -109,7 +117,7 @@ class TwoPhasePipeline:
         self.multi_store = MultiStore(self.cache_dir)
         self.glossary = Glossary(cache_path=self.cache_dir / "glossary.json")
         self.error_queue = ErrorQueue(maxsize=100)
-        self.correction_worker: CorrectionWorker | None = None
+        self.correction_worker_pool: CorrectionWorkerPool | None = None
 
         # Statistiques globales
         self.phase1_stats: dict = {}
@@ -123,7 +131,9 @@ class TwoPhasePipeline:
         phase1_workers: int = 4,
         phase1_max_tokens: int = 1500,
         phase2_max_tokens: int = 300,
+        correction_workers: int = 2,
         correction_timeout: float = 30.0,
+        auto_validate_glossary: bool = False,
     ) -> dict:
         """
         Exécute le pipeline complet de traduction en 2 phases.
@@ -134,7 +144,10 @@ class TwoPhasePipeline:
             phase1_workers: Nombre de threads parallèles Phase 1 (défaut: 4)
             phase1_max_tokens: Taille max chunks Phase 1 (défaut: 1500)
             phase2_max_tokens: Taille max chunks Phase 2 (défaut: 300)
-            correction_timeout: Timeout pour arrêt CorrectionWorker (défaut: 30s)
+            correction_workers: Nombre de threads parallèles pour corrections (défaut: 2)
+            correction_timeout: Timeout pour arrêt CorrectionWorkerPool (défaut: 30s)
+            auto_validate_glossary: Si True, résout automatiquement les conflits
+                                   sans demander validation utilisateur (défaut: False)
 
         Returns:
             Statistiques complètes :
@@ -166,12 +179,19 @@ class TwoPhasePipeline:
             else target_language
         )
 
-        output_epub = output_epub if isinstance(output_epub, Path) else Path(output_epub)
+        output_epub = (
+            output_epub if isinstance(output_epub, Path) else Path(output_epub)
+        )
 
-        logger.info(f"🚀 Démarrage pipeline 2 phases : {self.epub_path} → {output_epub}")
+        logger.info(
+            f"🚀 Démarrage pipeline 2 phases : {self.epub_path} → {output_epub}"
+        )
         logger.info(f"  • Langue cible: {target_language_str}")
-        logger.info(f"  • Phase 1: {phase1_max_tokens} tokens, {phase1_workers} workers")
+        logger.info(
+            f"  • Phase 1: {phase1_max_tokens} tokens, {phase1_workers} workers"
+        )
         logger.info(f"  • Phase 2: {phase2_max_tokens} tokens, séquentiel")
+        logger.info(f"  • Corrections: {correction_workers} workers parallèles")
 
         # =====================================================================
         # CHARGEMENT EPUB
@@ -183,16 +203,17 @@ class TwoPhasePipeline:
         logger.info(f"  • {len(html_items)} chapitres extraits")
 
         # =====================================================================
-        # DÉMARRAGE CORRECTION WORKER
+        # DÉMARRAGE CORRECTION WORKER POOL
         # =====================================================================
-        logger.info("🔧 Démarrage du thread de correction...")
-        self.correction_worker = CorrectionWorker(
+        logger.info("🔧 Démarrage du pool de correction...")
+        self.correction_worker_pool = CorrectionWorkerPool(
             error_queue=self.error_queue,
             llm=self.llm,
             store=self.multi_store.initial_store,  # Commence avec initial
             target_language=target_language_str,
+            num_workers=correction_workers,
         )
-        self.correction_worker.start()
+        self.correction_worker_pool.start()
 
         try:
             # =================================================================
@@ -205,7 +226,9 @@ class TwoPhasePipeline:
             # Segmentation Phase 1 (gros blocs)
             segmentator_phase1 = Segmentator(html_items, max_tokens=phase1_max_tokens)
             chunks_phase1 = list(segmentator_phase1.get_all_segments())
-            logger.info(f"  • {len(chunks_phase1)} chunks créés ({phase1_max_tokens} tokens)")
+            logger.info(
+                f"  • {len(chunks_phase1)} chunks créés ({phase1_max_tokens} tokens)"
+            )
 
             # Worker Phase 1
             phase1_worker = Phase1Worker(
@@ -233,13 +256,70 @@ class TwoPhasePipeline:
             logger.info("🔄 TRANSITION PHASE 1 → PHASE 2")
             logger.info("=" * 60)
 
+            # 1. Vérifier que la queue d'erreurs est vide
+            error_stats = self.error_queue.get_statistics()
+            if error_stats.pending > 0:
+                logger.warning(
+                    f"⚠️  {error_stats.pending} erreur(s) en attente de correction"
+                )
+                logger.info("⏳ Attente de fin des corrections avant Phase 2...")
+
+                # Attendre que le CorrectionWorker finisse
+                import time
+
+                timeout = 60.0  # 60 secondes max
+                start_wait = time.time()
+
+                while error_stats.pending > 0 and (time.time() - start_wait) < timeout:
+                    time.sleep(2.0)
+                    error_stats = self.error_queue.get_statistics()
+                    logger.info(f"  • Corrections restantes: {error_stats.pending}")
+
+                # Vérifier à nouveau après attente
+                error_stats = self.error_queue.get_statistics()
+                if error_stats.pending > 0:
+                    raise RuntimeError(
+                        f"❌ Impossible de passer à la Phase 2: {error_stats.pending} erreur(s) non corrigée(s)\n"
+                        f"  • Corrigées: {error_stats.corrected}\n"
+                        f"  • Échouées: {error_stats.failed}\n"
+                        f"  • En attente: {error_stats.pending}\n"
+                        "Veuillez vérifier les logs pour plus de détails."
+                    )
+
+            logger.info(
+                "✅ Queue d'erreurs vide, toutes les corrections sont terminées"
+            )
+
+            # 2. Validation du glossaire
+            logger.info("\n📚 Validation du glossaire avant Phase 2...")
+            validator = GlossaryValidator(self.glossary)
+
+            glossary_validated = validator.validate_interactive(
+                auto_resolve=auto_validate_glossary
+            )
+
+            if not glossary_validated:
+                raise RuntimeError(
+                    "❌ Validation du glossaire annulée par l'utilisateur.\n"
+                    "La Phase 2 ne peut pas démarrer sans un glossaire validé."
+                )
+
+            logger.info(
+                "✅ Glossaire validé"
+                + (
+                    " automatiquement"
+                    if auto_validate_glossary
+                    else " par l'utilisateur"
+                )
+            )
+
             # Switch store pour refined
             self.multi_store.switch_to_refined()
             logger.info("  • MultiStore basculé vers refined_store")
 
-            # Switch CorrectionWorker vers refined_store
-            self.correction_worker.switch_store(self.multi_store.refined_store)
-            logger.info("  • CorrectionWorker basculé vers refined_store")
+            # Switch CorrectionWorkerPool vers refined_store
+            self.correction_worker_pool.switch_all_stores(self.multi_store.refined_store)
+            logger.info("  • CorrectionWorkerPool basculé vers refined_store")
 
             # Sauvegarder glossaire
             self.glossary.save()
@@ -255,7 +335,9 @@ class TwoPhasePipeline:
             # Segmentation Phase 2 (petits blocs)
             segmentator_phase2 = Segmentator(html_items, max_tokens=phase2_max_tokens)
             chunks_phase2 = list(segmentator_phase2.get_all_segments())
-            logger.info(f"  • {len(chunks_phase2)} chunks créés ({phase2_max_tokens} tokens)")
+            logger.info(
+                f"  • {len(chunks_phase2)} chunks créés ({phase2_max_tokens} tokens)"
+            )
 
             # Worker Phase 2
             phase2_worker = Phase2Worker(
@@ -276,18 +358,20 @@ class TwoPhasePipeline:
             logger.info("🛑 FINALISATION DES CORRECTIONS")
             logger.info("=" * 60)
 
-            # Arrêter CorrectionWorker proprement
-            logger.info(f"  • Attente de fin des corrections (timeout: {correction_timeout}s)...")
-            stopped = self.correction_worker.stop(timeout=correction_timeout)
+            # Arrêter CorrectionWorkerPool proprement
+            logger.info(
+                f"  • Attente de fin des corrections (timeout: {correction_timeout}s)..."
+            )
+            stopped = self.correction_worker_pool.stop(timeout=correction_timeout)
 
             if not stopped:
                 logger.warning(
-                    f"⚠️ CorrectionWorker n'a pas pu s'arrêter dans le délai ({correction_timeout}s)"
+                    f"⚠️ CorrectionWorkerPool n'a pas pu s'arrêter dans le délai ({correction_timeout}s)"
                 )
 
-            # Statistiques corrections
+            # Statistiques corrections (agrégées de tous les workers)
             self.correction_stats = {
-                **self.correction_worker.get_statistics(),
+                **self.correction_worker_pool.get_aggregated_statistics(),
                 **self.error_queue.get_statistics().__dict__,
             }
 
@@ -346,14 +430,14 @@ class TwoPhasePipeline:
 
         except KeyboardInterrupt:
             logger.error("❌ Pipeline interrompu par l'utilisateur")
-            if self.correction_worker:
-                self.correction_worker.stop(timeout=5.0)
+            if self.correction_worker_pool:
+                self.correction_worker_pool.stop(timeout=5.0)
             raise
 
         except Exception as e:
             logger.exception(f"❌ Erreur fatale dans le pipeline: {e}")
-            if self.correction_worker:
-                self.correction_worker.stop(timeout=5.0)
+            if self.correction_worker_pool:
+                self.correction_worker_pool.stop(timeout=5.0)
             raise
 
     def get_failed_errors(self) -> list:

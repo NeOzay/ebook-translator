@@ -1,0 +1,81 @@
+⚠️ ATTENTION : Ta traduction précédente était INCOMPLÈTE
+
+Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as PAS traduit TOUTES les lignes.
+
+---
+
+## ❌ ERREUR DÉTECTÉE
+
+{{ error_message }}
+
+---
+
+## 📋 RÈGLE STRICTE
+
+**Tu DOIS traduire UNIQUEMENT les lignes manquantes listées ci-dessous.**
+
+Cela inclut **OBLIGATOIREMENT** tous les types de contenu :
+- ✅ Les lignes de copyright et mentions légales
+- ✅ Les newsletters et liens de subscription
+- ✅ Les crédits d'auteur, traducteur, éditeur
+- ✅ Les informations éditoriales (ISBN, publication, etc.)
+- ✅ Les titres de chapitres, sections, side stories
+- ✅ Les métadonnées techniques
+- ✅ TOUT ce qui commence par `<N/>`, même si cela semble "non narratif"
+
+❌ **IL EST INTERDIT** de :
+- Sauter des lignes sous prétexte qu'elles sont "inutiles"
+- Juger qu'une ligne ne mérite pas d'être traduite
+- Ignorer les lignes répétitives ou techniques
+- Omettre les métadonnées
+
+---
+
+## 🎯 TRADUCTION CIBLÉE - LIGNES MANQUANTES UNIQUEMENT
+
+**Nombre de lignes à traduire** : {{ missing_indices|length }}
+
+Voici les lignes que tu as OUBLIÉES dans ta réponse précédente :
+
+```
+{{ source_content }}
+```
+
+---
+
+## 🧾 FORMAT DE SORTIE OBLIGATOIRE
+
+Tu DOIS produire **EXACTEMENT {{ missing_indices|length }} lignes traduites** en {{ target_language }}, en **conservant leurs indices originaux** :
+
+{% if missing_indices|length == 1 %}
+```
+<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
+[=[END]=]
+```
+{% elif missing_indices|length == 2 %}
+```
+<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
+<{{ missing_indices[1] }}/>Texte traduit de la ligne {{ missing_indices[1] }}
+[=[END]=]
+```
+{% else %}
+```
+<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
+<{{ missing_indices[1] }}/>Texte traduit de la ligne {{ missing_indices[1] }}
+...
+<{{ missing_indices[-1] }}/>Texte traduit de la ligne {{ missing_indices[-1] }}
+[=[END]=]
+```
+{% endif %}
+
+⚠️ **VÉRIFICATION FINALE AVANT D'ENVOYER** :
+1. Compte tes lignes : as-tu bien {{ missing_indices|length }} ligne(s) ?
+2. As-tu conservé les bons indices ({% for idx in missing_indices %}<{{ idx }}/>{% if not loop.last %}, {% endif %}{% endfor %}) ?
+3. As-tu bien traduit les métadonnées/copyright si présents ?
+4. As-tu bien ajouté `[=[END]=]` à la fin ?
+
+Si tu ne respectes pas ces règles, ta réponse sera rejetée.
+
+---
+
+Produis maintenant la traduction de UNIQUEMENT ces {{ missing_indices|length }} ligne(s) manquante(s) :
