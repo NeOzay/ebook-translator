@@ -12,7 +12,10 @@ from typing import Iterator
 import tiktoken
 
 from .htmlpage import TagKey, get_files, HtmlPage
+from .logger import get_logger
 from ebooklib import epub
+
+logger = get_logger(__name__)
 
 # Ratio par défaut du chevauchement entre chunks (15%)
 DEFAULT_OVERLAP_RATIO = 0.15
@@ -30,7 +33,6 @@ class Chunk:
     - Un body : le contenu principal à traduire (mapping TagKey -> texte)
     - Un head : contexte provenant du chunk précédent (pour continuité)
     - Un tail : contexte pour le chunk suivant (pour continuité)
-    - Un file_range : mapping des pages sources et leur nombre de lignes dans ce chunk
 
     Le format d'un chunk lors de la conversion en string :
         <head context>
@@ -172,6 +174,10 @@ class Chunk:
 
         return "\n\n".join(parts)
 
+    def __hash__(self) -> int:
+        """Retourne le hash basé sur l'identité de l'objet."""
+        return id(self)
+
     def __repr__(self) -> str:
         """Représentation pour le debug."""
         return (
@@ -221,13 +227,29 @@ class Segmentator:
         Args:
             epub_htmls: Liste des pages HTML à segmenter
             max_tokens: Nombre maximum de tokens par chunk
-            overlap_ratio: Ratio de chevauchement (0.15 = 15%)
+            overlap_ratio: Ratio de chevauchement
+                - Si < 1.0 : pourcentage de max_tokens (ex: 0.15 = 15%)
+                - Si >= 1.0 : multiple de max_tokens (ex: 2.0 = 200% = 2× max_tokens)
             encoding: Nom de l'encodage tiktoken à utiliser
+
+        Note:
+            Un overlap_ratio >= 1.0 créera un contexte étendu qui peut englober
+            plusieurs chunks précédents. Cela augmente la cohérence mais aussi
+            la consommation de tokens et le coût des requêtes LLM.
         """
         self.epub_htmls = epub_htmls
         self._encoding = tiktoken.get_encoding(encoding)
         self.max_tokens = max_tokens
         self.overlap_ratio = overlap_ratio
+
+        # Warning si overlap_ratio >= 1.0 (contexte très étendu)
+        if overlap_ratio >= 1.0:
+            overlap_tokens = int(max_tokens * overlap_ratio)
+            logger.warning(
+                f"⚠️ Overlap ratio très élevé : {overlap_ratio:.1f} "
+                f"({overlap_tokens} tokens d'overlap pour {max_tokens} tokens de body). "
+                f"Cela augmentera significativement la consommation de tokens et le coût des traductions."
+            )
 
     def count_tokens(self, text: str) -> int:
         """
@@ -249,60 +271,77 @@ class Segmentator:
         et les regroupe en chunks respectant la limite de tokens. Elle gère
         automatiquement le chevauchement entre chunks pour préserver le contexte.
 
+        Le système de chevauchement (overlap) fonctionne ainsi :
+        - overlap_ratio < 1.0 : Pourcentage de max_tokens (ex: 0.15 = 15%)
+        - overlap_ratio >= 1.0 : Multiple de max_tokens (ex: 1.5 = 150% du body)
+
+        Avec overlap_ratio > 1.0, le contexte peut s'étendre sur plusieurs chunks
+        précédents. Par exemple, avec overlap_ratio=2.0 et max_tokens=2000 :
+        - Chunk 0 : body=2000 tokens, head=[], tail=4000 tokens
+        - Chunk 1 : body=2000 tokens, head=4000 tokens (depuis chunk 0), tail=4000 tokens
+        - Le head de chunk 1 peut inclure tout le body de chunk 0 + du contexte antérieur
+
         Yields:
             Les chunks successifs avec leur contexte (head/tail)
 
         Example:
+            >>> # Overlap standard (15%)
+            >>> segmentator = Segmentator(epub_htmls, max_tokens=2000, overlap_ratio=0.15)
             >>> for chunk in segmentator.get_all_segments():
             ...     print(f"Chunk {chunk.index} with {len(chunk.body)} items")
+
+            >>> # Overlap étendu (200% du body)
+            >>> segmentator = Segmentator(epub_htmls, max_tokens=2000, overlap_ratio=2.0)
+            >>> for chunk in segmentator.get_all_segments():
+            ...     # Le head contient ~4000 tokens de contexte des chunks précédents
+            ...     print(f"Chunk {chunk.index}: head={len(chunk.head)}, body={len(chunk.body)}, tail={len(chunk.tail)}")
         """
-        previous_chunk: Chunk | None = None
+        chunk_queue: dict[Chunk, int] = {}
+        # previous_chunk: Chunk | None = None
         current_chunk = self._create_new_chunk(index=0)
         current_token_count = 0
-        overlap_token_budget = self._calculate_overlap_tokens()
+        # overlap_token_budget = self._calculate_overlap_tokens()
         chunk_index = 0
 
         for page, tag_key, text in get_files(self.epub_htmls):
             token_count = self.count_tokens(text)
 
-            # Gérer le tail du chunk précédent
-            if previous_chunk is not None:
-                if overlap_token_budget > 0:
+            # Gérer le tail des chunks précédents
+            if chunk_queue:
+                for chunk in list(chunk_queue.keys()):
                     # Ajouter au tail tant qu'il reste du budget
-                    previous_chunk.tail.append(text)
-                    overlap_token_budget -= token_count
+                    if chunk_queue[chunk] > 0:
+                        chunk.tail.append(text)
+                        chunk_queue[chunk] -= token_count
 
-                    # Si le budget est épuisé ou négatif, yield le chunk précédent
-                    if overlap_token_budget <= 0:
-                        yield previous_chunk
-                        previous_chunk = None
-                        overlap_token_budget = 0  # Reset pour le prochain chunk
-                else:
-                    # Budget épuisé : yield le chunk précédent
-                    yield previous_chunk
-                    previous_chunk = None
+                    # Si le budget est épuisé ou négatif, yield le chunk
+                    if chunk_queue[chunk] <= 0:
+                        chunk_queue.pop(chunk)
+                        yield chunk
 
             # Vérifier si on dépasse la limite de tokens
             if current_token_count + token_count > self.max_tokens:
                 # Chunk plein : préparer le suivant
-                previous_chunk = current_chunk
+                chunk_queue[current_chunk] = self._calculate_overlap_tokens()
 
                 chunk_index += 1
                 current_chunk = self._create_new_chunk(index=chunk_index)
                 self._add_fragment_to_chunk(current_chunk, page, tag_key, text)
-                self._fill_head_from_previous(previous_chunk, current_chunk)
+                self._fill_head_from_previous(chunk_queue, current_chunk)
 
                 current_token_count = token_count
-                overlap_token_budget = self._calculate_overlap_tokens()
             else:
                 # Ajouter au chunk actuel
                 self._add_fragment_to_chunk(current_chunk, page, tag_key, text)
                 current_token_count += token_count
 
-        # Yield les chunks restants
-        if previous_chunk:
+        # Yield les chunks restants dans la queue
+        for previous_chunk in chunk_queue.keys():
             yield previous_chunk
-        yield current_chunk
+
+        # Yield le chunk actuel seulement s'il n'a pas déjà été yielded via la queue
+        if current_chunk not in chunk_queue:
+            yield current_chunk
 
     def _create_new_chunk(self, index: int) -> Chunk:
         """
@@ -343,38 +382,60 @@ class Segmentator:
         chunk.body[tag_key] = text
 
     def _fill_head_from_previous(
-        self, previous_chunk: Chunk, current_chunk: Chunk
+        self, previous_chunks: dict[Chunk, int], current_chunk: Chunk
     ) -> None:
         """
-        Remplit le head du chunk actuel avec du contexte du chunk précédent.
+        Remplit le head du chunk actuel avec du contexte des chunks précédents.
 
-        Prend les derniers éléments du body du chunk précédent (en ordre inverse)
-        jusqu'à atteindre le budget de tokens de chevauchement.
+        Parcourt les chunks précédents en ordre inverse (du plus récent au plus ancien)
+        et prend leurs éléments de body (également en ordre inverse) jusqu'à épuiser
+        le budget de tokens de chevauchement.
+
+        Avec overlap_ratio >= 1.0, cette méthode peut remonter sur plusieurs chunks
+        précédents pour construire un contexte étendu.
 
         Args:
-            previous_chunk: Le chunk précédent (source du contexte)
+            previous_chunks: Dictionnaire des chunks précédents (Chunk -> budget restant)
             current_chunk: Le chunk actuel (destination du contexte)
+
+        Example:
+            Avec overlap_ratio=2.0 et max_tokens=2000 (budget=4000 tokens) :
+            - Chunk 0 : body=["A", "B", "C"] (2000 tokens total)
+            - Chunk 1 : body=["D", "E"] (1500 tokens)
+            - Chunk 2 : head sera rempli avec ["E", "D", "C", "B"] (~3500 tokens)
+                        Le budget de 4000 tokens permet d'inclure tout chunk 1 + une partie de chunk 0
         """
         overlap_budget = self._calculate_overlap_tokens()
-        body_texts = list(previous_chunk.body.values())
 
-        # Parcourir le body en ordre inverse
-        for text in reversed(body_texts):
-            token_count = self.count_tokens(text)
-            overlap_budget -= token_count
+        for chunk in reversed(previous_chunks.keys()):
+            body_texts = list(chunk.body.values())
+            # Parcourir le body en ordre inverse
+            for text in reversed(body_texts):
+                token_count = self.count_tokens(text)
+                overlap_budget -= token_count
 
-            if overlap_budget > 0:
-                # Ajouter au début du head
-                current_chunk.head.insert(0, text)
-            else:
-                # Budget épuisé
+                if overlap_budget > 0:
+                    # Ajouter au début du head
+                    current_chunk.head.insert(0, text)
+                else:
+                    # Budget épuisé
+                    break
+            if overlap_budget <= 0:
                 break
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
+        overlap_tokens = self._calculate_overlap_tokens()
+
+        # Affichage différent selon si overlap < ou >= max_tokens
+        if self.overlap_ratio < 1.0:
+            overlap_str = f"{self.overlap_ratio*100:.0f}% ({overlap_tokens} tokens)"
+        else:
+            overlap_str = f"{self.overlap_ratio:.1f}× max_tokens ({overlap_tokens} tokens)"
+
         return (
             f"Segmentator("
             f"pages={len(self.epub_htmls)}, "
             f"max_tokens={self.max_tokens}, "
-            f"overlap={self.overlap_ratio*100:.0f}%)"
+            f"overlap={overlap_str})"
         )
