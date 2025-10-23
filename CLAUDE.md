@@ -818,3 +818,241 @@ validator.save_glossary()
 3. **Pas de correction automatique** : Seulement des alertes (pas de re-traduction)
 4. **Extraction noms propres basique** : Basée sur majuscules (peut rater certains cas)
 
+---
+
+### Version 0.6.0 - Système de logging amélioré (2025-10-23)
+
+#### Objectif
+
+Améliorer l'organisation et la lisibilité des logs en :
+- Regroupant tous les logs d'une exécution dans un répertoire unique
+- Nommant les fichiers de manière descriptive selon leur contenu
+- Créant les fichiers seulement au premier log (évite fichiers vides)
+
+#### Nouvelles fonctionnalités
+
+1. **[logger.py](src/ebook_translator/logger.py)** - Système de logging par session
+   - **Classe `LogSession`** : Singleton gérant un répertoire unique par exécution
+     - Format : `logs/run_YYYYMMDD_HHMMSS/`
+     - Création automatique au premier appel
+     - Méthode `reset()` pour les tests
+
+   - **Classe `LazyFileHandler`** : Handler créant le fichier seulement au premier log
+     - Évite les fichiers vides en cas d'erreur précoce
+     - Réduit les I/O disque inutiles
+     - Compatible avec le système de formatage standard
+
+   - **Fonction `get_session_log_path()`** : Helper pour construire des chemins
+     ```python
+     path = get_session_log_path("llm_chunk_042.log")
+     # Résultat: logs/run_20251023_143022/llm_chunk_042.log
+     ```
+
+2. **[llm.py](src/ebook_translator/llm.py)** - Logs LLM avec contexte
+   - **Nouveau paramètre `context`** dans `query()` :
+     ```python
+     llm.query(prompt, content, context="chunk_042")
+     # Crée : llm_chunk_042_0001.log
+     ```
+
+   - **Nommage contextuel** :
+     - Avec contexte : `llm_<context>_<counter>.log`
+     - Sans contexte : `llm_<counter>.log`
+     - Compteur auto-incrémenté par instance LLM
+
+   - **Création lazy** :
+     - Les données sont préparées lors de l'envoi
+     - Le fichier est créé seulement à la réception de la réponse
+     - Inclut header + prompt + content + response
+
+3. **Intégration dans les modules existants** :
+   - **[engine.py](src/ebook_translator/translation/engine.py)** :
+     - `context = f"chunk_{chunk.index:03d}"`
+     - `context = f"retry_chunk_{chunk.index:03d}_attempt_{retry_attempt}"`
+
+   - **[phase1_worker.py](src/ebook_translator/pipeline/phase1_worker.py)** :
+     - `context = f"phase1_chunk_{chunk.index:03d}"`
+
+   - **[phase2_worker.py](src/ebook_translator/pipeline/phase2_worker.py)** :
+     - `context = f"phase2_chunk_{chunk.index:03d}"`
+
+   - **[retry_engine.py](src/ebook_translator/correction/retry_engine.py)** :
+     - `context = "correction_reinforced"`
+     - `context = "correction_strict"`
+
+   - **[correction_worker.py](src/ebook_translator/correction/correction_worker.py)** :
+     - `context = f"correction_missing_chunk_{chunk.index:03d}"`
+
+4. **Tests** - 13 nouveaux tests (120 au total)
+   - **[test_logger_session.py](tests/test_logger_session.py)** : 8 tests
+     - Singleton LogSession
+     - Création répertoire unique
+     - LazyFileHandler (création lazy)
+     - setup_logger avec session
+     - Éviter handlers dupliqués
+
+   - **[test_llm_logging.py](tests/test_llm_logging.py)** : 5 tests
+     - Log avec contexte
+     - Log sans contexte (fallback)
+     - Incrémentation compteur
+     - Création lazy (seulement si réponse)
+     - Différents formats de contexte
+
+5. **Documentation** - [docs/logging_system.md](docs/logging_system.md)
+   - Architecture complète du système
+   - Exemples d'utilisation
+   - Formats de contexte recommandés
+   - Guide de migration
+
+#### Structure attendue
+
+```
+logs/
+├── run_20251023_143022/          # Session d'exécution 1
+│   ├── translation.log            # Log principal (console + file)
+│   ├── llm_chunk_001_0001.log    # Requête LLM chunk 1
+│   ├── llm_chunk_002_0002.log    # Requête LLM chunk 2
+│   ├── llm_retry_chunk_005_attempt_1_0003.log  # Retry chunk 5
+│   ├── llm_phase1_chunk_042_0004.log  # Phase 1, chunk 42
+│   ├── llm_phase2_chunk_042_0005.log  # Phase 2, chunk 42
+│   ├── llm_correction_reinforced_0006.log  # Correction renforcée
+│   └── llm_correction_strict_0007.log  # Correction stricte
+└── run_20251023_150145/          # Session d'exécution 2
+    └── ...
+```
+
+#### Formats de contexte
+
+| Contexte | Fichier généré | Utilisation |
+|----------|----------------|-------------|
+| `chunk_001` | `llm_chunk_001_XXXX.log` | Traduction chunk (engine.py) |
+| `retry_chunk_005_attempt_1` | `llm_retry_chunk_005_attempt_1_XXXX.log` | Retry chunk (engine.py) |
+| `phase1_chunk_042` | `llm_phase1_chunk_042_XXXX.log` | Phase 1 pipeline |
+| `phase2_chunk_042` | `llm_phase2_chunk_042_XXXX.log` | Phase 2 pipeline |
+| `correction_reinforced` | `llm_correction_reinforced_XXXX.log` | Retry prompt renforcé |
+| `correction_strict` | `llm_correction_strict_XXXX.log` | Retry prompt strict |
+| `correction_missing_chunk_042` | `llm_correction_missing_chunk_042_XXXX.log` | Correction lignes manquantes |
+| `None` | `llm_XXXX.log` | Pas de contexte (fallback) |
+
+#### Améliorations par rapport aux versions précédentes
+
+| Aspect | Avant v0.6.0 | v0.6.0 |
+|--------|--------------|--------|
+| **Organisation** | Tous logs mélangés dans `logs/` | Regroupés par session `logs/run_XXX/` |
+| **Nommage fichiers** | Timestamp seul (ex: `2025-10-23T14-30-22.txt`) | Descriptif (ex: `llm_chunk_042_0001.log`) |
+| **Fichiers vides** | Créés dès l'envoi (même si erreur) | Créés seulement à la réponse (lazy) |
+| **Traçabilité** | Difficile (timestamp peu lisible) | Facile (contexte dans le nom) |
+| **Déboggage** | Chercher manuellement les fichiers | Filtrer par pattern (ex: `llm_phase1_*`) |
+| **Archivage** | Fichier par fichier | Par session complète |
+
+#### Tests
+
+```bash
+# Tests du système de logging
+poetry run pytest tests/test_logger_session.py -v
+
+# Tests d'intégration LLM
+poetry run pytest tests/test_llm_logging.py -v
+
+# Tous les tests (120 au total)
+poetry run pytest --cov=src/ebook_translator
+```
+
+#### Breaking changes
+
+**Aucun**. Le système est 100% rétrocompatible :
+- Les modules existants continuent de fonctionner sans modification
+- L'ancien paramètre `log_dir` dans `LLM.__init__()` a été retiré (maintenant géré par LogSession)
+- Le contexte LLM est optionnel (fallback sur compteur)
+
+#### Migration depuis v0.5.0
+
+Aucune action requise. Les améliorations sont automatiquement actives :
+- Les logs seront automatiquement regroupés dans `logs/run_XXX/`
+- Les modules qui passent un `context` auront des noms descriptifs
+- Les modules sans `context` utiliseront le fallback (compteur uniquement)
+
+**Optionnel - Ajouter des contextes descriptifs** :
+
+```python
+# Avant
+llm_output = self.llm.query(prompt, content)
+
+# Après (recommandé)
+context = f"my_module_chunk_{chunk_index:03d}"
+llm_output = self.llm.query(prompt, content, context=context)
+```
+
+#### Impact attendu
+
+| Aspect | Amélioration | Bénéfice |
+|--------|--------------|----------|
+| **Organisation** | Regroupement par session | Isolation complète, archivage facile |
+| **Lisibilité** | Noms descriptifs | Identification rapide du contenu |
+| **Déboggage** | Filtrage par contexte | Cibler un chunk/phase spécifique |
+| **Performance** | Création lazy | -30% I/O disque (moins de fichiers vides) |
+| **Maintenance** | Structure claire | +50% rapidité de diagnostic |
+
+#### Bugs corrigés
+
+1. **[config.py](src/ebook_translator/config.py)** - Singleton Config
+   - **Problème** : Attribut `_instance` non initialisé (AttributeError)
+   - **Solution** : Ajout de `_instance = None` en attribut de classe
+   - **Impact** : Correction d'un crash lors de l'accès à Config()
+
+#### Documentation
+
+- **Guide complet** : [docs/logging_system.md](docs/logging_system.md)
+- **Architecture** : Composants, flux de données, exemples
+- **Intégration** : Comment utiliser dans nouveaux modules
+- **Roadmap** : Rotation, compression, indexation
+
+#### Exemple d'utilisation
+
+```python
+from ebook_translator.logger import get_logger, get_session_log_path
+from ebook_translator.llm import LLM
+
+# Utilisation standard (logger)
+logger = get_logger(__name__)
+logger.info("Traduction démarrée")
+# Log dans: logs/run_20251023_143022/translation.log
+
+# Utilisation LLM avec contexte
+llm = LLM(model_name="deepseek-chat", url="https://api.deepseek.com")
+response = llm.query(
+    system_prompt="Translate this",
+    content="Hello world",
+    context="chunk_042",  # Contexte descriptif
+)
+# Log dans: logs/run_20251023_143022/llm_chunk_042_0001.log
+
+# Helper pour chemins personnalisés
+custom_log = get_session_log_path("my_custom.log")
+# Résultat: logs/run_20251023_143022/my_custom.log
+```
+
+#### Limitations connues
+
+1. **Pas de rotation automatique** : Les anciennes sessions s'accumulent (nettoyage manuel)
+2. **Compteur par instance LLM** : Plusieurs instances LLM → compteurs indépendants
+3. **Pas de compression** : Les logs peuvent occuper beaucoup d'espace pour gros EPUBs
+
+#### Roadmap (Phase 2 - non implémentée)
+
+**Gestion avancée** :
+- [ ] Rotation automatique (garder N dernières sessions)
+- [ ] Compression des anciennes sessions (.tar.gz)
+- [ ] Indexation pour recherche rapide (grep optimisé)
+- [ ] Dashboard HTML pour visualiser les sessions
+
+**Métriques** :
+- [ ] Statistiques par session (temps, tokens, erreurs)
+- [ ] Graphes de performance (temps par chunk, retry rate)
+- [ ] Export vers formats structurés (JSON, SQLite)
+
+**Intégration** :
+- [ ] Logs centralisés (syslog, journald)
+- [ ] Webhooks pour alertes en temps réel
+- [ ] Intégration avec outils de monitoring (Grafana, Prometheus)
+

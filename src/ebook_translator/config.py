@@ -1,13 +1,9 @@
-from dataclasses import dataclass
+import logging
 
 
-@dataclass
-class Config:
-    First_Pass_Template: str = "translation.jinja"
-    Retry_Translation_Template: str = "retry_translation.jinja"
-    Retry_Translation_Strict_Template: str = "retry_translation_strict.jinja"
-    Missing_Lines_Template: str = "retry_missing_lines.jinja"
-    Refine_Template: str = "refine.jinja"  # Phase 2 affinage
+class ConfigBase:
+    # Attribut de classe pour le singleton
+    _instance = None
     _locked: bool = False
 
     def __new__(cls, *args, **kwargs):
@@ -22,3 +18,23 @@ class Config:
         if getattr(self, "_locked", False):
             raise AttributeError("Configuration is locked")
         super().__setattr__(name, value)
+
+
+class TemplateNames(ConfigBase):
+    First_Pass_Template: str = "translation.jinja"
+    Retry_Translation_Template: str = "retry_translation.jinja"
+    Retry_Translation_Strict_Template: str = "retry_translation_strict.jinja"
+    Missing_Lines_Template: str = "retry_missing_lines.jinja"
+    Refine_Template: str = "refine.jinja"  # Phase 2 affinage
+
+
+class Logger_Level(ConfigBase):
+    level: int = logging.INFO
+    console_level: int = logging.ERROR
+    file_level: int = logging.DEBUG
+
+
+def lock_config():
+    """Verrouille la configuration pour empêcher les modifications ultérieures."""
+    Logger_Level().lock()
+    TemplateNames().lock()

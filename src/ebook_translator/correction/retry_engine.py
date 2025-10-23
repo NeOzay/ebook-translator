@@ -181,7 +181,8 @@ class RetryEngine:
         )
 
         # Re-soumettre au LLM
-        response = self.llm.query(prompt, "<0/>" + original_text)
+        context = "correction_reinforced"
+        response = self.llm.query(prompt, "<0/>" + original_text, context=context)
 
         # Parser la réponse
         from ..translation.parser import parse_llm_translation_output
@@ -215,7 +216,8 @@ class RetryEngine:
         )
 
         # Re-soumettre au LLM
-        response = self.llm.query(prompt, original_text)
+        context = "correction_strict"
+        response = self.llm.query(prompt, original_text, context=context)
 
         # Parser la réponse
         from ..translation.parser import parse_llm_translation_output

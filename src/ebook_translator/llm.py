@@ -8,7 +8,7 @@ from typing import Optional, Callable, Awaitable
 from openai import OpenAI, OpenAIError, APITimeoutError, RateLimitError, APIError
 from openai.types.chat import ChatCompletionMessageParam
 
-from .logger import get_logger
+from .logger import get_logger, get_session_log_path
 
 logger = get_logger(__name__)
 
@@ -55,7 +55,6 @@ class LLM:
         url: str,
         api_key: Optional[str] = None,
         prompt_dir: str = "template",
-        log_dir: str = "logs",
         temperature: float = 0.5,
         max_retries: int = 3,
         retry_delay: float = 1.0,
@@ -74,9 +73,8 @@ class LLM:
             autoescape=select_autoescape(["html", "xml"]),
         )
 
-        # Dossier des logs
-        self.log_dir = log_dir
-        os.makedirs(self.log_dir, exist_ok=True)
+        # Compteur pour nommage unique des logs
+        self._log_counter = 0
 
     # -----------------------------------
     # 🔹 Rendu du template
@@ -89,10 +87,36 @@ class LLM:
     # -----------------------------------
     # 🔹 Gestion du log
     # -----------------------------------
-    def _create_log(self, prompt: str, content: str) -> str:
-        """Crée un log dès l’envoi et retourne le chemin du fichier."""
+    def _create_log(
+        self, prompt: str, content: str, context: Optional[str] = None
+    ) -> str:
+        """
+        Prépare les données du log et retourne le chemin du fichier.
+
+        Le fichier ne sera créé qu'au moment de l'ajout de la réponse (lazy).
+
+        Args:
+            prompt: Le prompt système envoyé au LLM
+            content: Le contenu à traiter
+            context: Contexte optionnel pour nommer le fichier (ex: "chunk_042", "retry_phase1")
+
+        Returns:
+            Chemin du fichier de log (non encore créé)
+        """
+        # Générer un nom de fichier contextuel
+        self._log_counter += 1
+        if context:
+            # Format : llm_<context>_<counter>.log
+            filename = f"llm_{context}_{self._log_counter:04d}.log"
+        else:
+            # Format par défaut : llm_<counter>.log
+            filename = f"llm_{self._log_counter:04d}.log"
+
+        log_path = get_session_log_path(filename)
+
+        # Stocker les données pour écriture lazy
         timestamp = datetime.datetime.now().isoformat().replace(":", "-")
-        log_path = os.path.join(self.log_dir, f"{timestamp}.txt")
+        log_path = os.path.join(log_path, f"{timestamp}.txt")
 
         header = (
             f"=== LLM REQUEST LOG ===\n"
@@ -120,6 +144,7 @@ class LLM:
         self,
         system_prompt: str,
         content: str,
+        context: Optional[str] = None,
     ) -> str:
         """
         Envoie une requête au LLM avec gestion d'erreurs spécifiques et retry automatique.
@@ -127,6 +152,8 @@ class LLM:
         Args:
             system_prompt: Le prompt système définissant le comportement du LLM
             content: Le contenu à traiter
+            context: Contexte optionnel pour nommer le fichier de log
+                    (ex: "chunk_042", "retry_phase1", "validation")
 
         Returns:
             La réponse du LLM ou un message d'erreur entre crochets
@@ -135,8 +162,9 @@ class LLM:
             Les erreurs sont loggées et un fichier de log est créé pour chaque requête.
             Les erreurs Timeout et RateLimitError déclenchent un retry automatique
             avec backoff exponentiel.
+            Le fichier de log n'est créé qu'au moment où la réponse est disponible.
         """
-        log_path = self._create_log(system_prompt, content)
+        log_path = self._create_log(system_prompt, content, context)
         last_error: Optional[Exception] = None
 
         for attempt in range(self.max_retries):
@@ -171,8 +199,10 @@ class LLM:
                     f"⏱️ Timeout API (tentative {attempt + 1}/{self.max_retries}): {e}"
                 )
                 if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (2 ** attempt)
-                    logger.info(f"⏳ Attente de {delay:.1f}s avant nouvelle tentative...")
+                    delay = self.retry_delay * (2**attempt)
+                    logger.info(
+                        f"⏳ Attente de {delay:.1f}s avant nouvelle tentative..."
+                    )
                     time.sleep(delay)
                     continue
 
@@ -183,8 +213,10 @@ class LLM:
                 )
                 if attempt < self.max_retries - 1:
                     # Pour rate limit, attendre plus longtemps
-                    delay = self.retry_delay * (3 ** attempt)
-                    logger.info(f"⏳ Attente de {delay:.1f}s avant nouvelle tentative...")
+                    delay = self.retry_delay * (3**attempt)
+                    logger.info(
+                        f"⏳ Attente de {delay:.1f}s avant nouvelle tentative..."
+                    )
                     time.sleep(delay)
                     continue
 

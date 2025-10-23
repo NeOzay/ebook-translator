@@ -12,7 +12,7 @@ from typing import Optional, TYPE_CHECKING
 
 from tqdm import tqdm
 
-from ..config import Config
+from ..config import TemplateNames
 
 from ..htmlpage import BilingualFormat
 from ..logger import get_logger
@@ -152,11 +152,13 @@ class TranslationEngine:
 
         # Première tentative avec le prompt standard
         prompt = self.llm.render_prompt(
-            Config().First_Pass_Template,
+            TemplateNames.First_Pass_Template,
             target_language=self.target_language,
             user_prompt=user_prompt,
         )
-        llm_output = self.llm.query(prompt, source_content)
+        # Contexte pour le log : chunk_<index>
+        context = f"chunk_{chunk.index:03d}"
+        llm_output = self.llm.query(prompt, source_content, context=context)
         translated_texts = parse_llm_translation_output(llm_output)
 
         # Valider le nombre de lignes
@@ -184,7 +186,7 @@ class TranslationEngine:
 
             # Retry avec prompt strict
             retry_prompt = self.llm.render_prompt(
-                Config().Missing_Lines_Template,
+                TemplateNames.Missing_Lines_Template,
                 target_language=self.target_language,
                 error_message=error_message,
                 expected_count=expected_count,
@@ -195,7 +197,9 @@ class TranslationEngine:
             logger.info(
                 f"🔄 Retry avec prompt strict ({len(missing_indices)} lignes manquantes)"
             )
-            llm_output = self.llm.query(retry_prompt, "")
+            # Contexte pour le retry : retry_chunk_<index>_attempt_<n>
+            retry_context = f"retry_chunk_{chunk.index:03d}_attempt_{retry_attempt}"
+            llm_output = self.llm.query(retry_prompt, "", context=retry_context)
             missing_translated_texts = parse_llm_translation_output(llm_output)
 
             # Valider que le retry a fourni exactement les indices demandés

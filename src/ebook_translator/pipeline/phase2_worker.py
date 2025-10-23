@@ -12,7 +12,7 @@ from tqdm import tqdm
 from ..logger import get_logger
 from ..translation.engine import build_translation_map
 from ..translation.parser import parse_llm_translation_output, validate_line_count
-from ..config import Config
+from ..config import TemplateNames
 from ..correction.error_queue import ErrorItem
 
 if TYPE_CHECKING:
@@ -103,14 +103,18 @@ class Phase2Worker:
         """
         try:
             # 1. Vérifier cache refined
-            cached_refined, has_missing = self.multi_store.refined_store.get_from_chunk(chunk)
+            cached_refined, has_missing = self.multi_store.refined_store.get_from_chunk(
+                chunk
+            )
 
             if not has_missing:
                 logger.debug(f"Chunk {chunk.index} déjà affiné (Phase 2)")
                 return True
 
             # 2. Récupérer traduction initiale (Phase 1)
-            initial_translations, initial_missing = self.multi_store.initial_store.get_from_chunk(chunk)
+            initial_translations, initial_missing = (
+                self.multi_store.initial_store.get_from_chunk(chunk)
+            )
 
             if initial_missing:
                 logger.warning(
@@ -138,15 +142,22 @@ class Phase2Worker:
 
             # 6. Construire prompt enrichi
             prompt = self.llm.render_prompt(
-                Config().Refine_Template,
+                TemplateNames.Refine_Template,
                 target_language=self.target_language,
                 initial_translation=initial_translation,
-                glossaire=glossary_export if glossary_export else "Aucun terme dans le glossaire.",
+                glossaire=(
+                    glossary_export
+                    if glossary_export
+                    else "Aucun terme dans le glossaire."
+                ),
                 expected_count=expected_count,
             )
 
             # 7. Appeler LLM
-            llm_output = self.llm.query(prompt, "")  # Pas de source_content, tout dans prompt
+            context = f"phase2_chunk_{chunk.index:03d}"
+            llm_output = self.llm.query(
+                prompt, "", context=context
+            )  # Pas de source_content, tout dans prompt
             refined_texts = parse_llm_translation_output(llm_output)
 
             # 8. Validation structurelle
@@ -157,7 +168,9 @@ class Phase2Worker:
 
             if not is_valid:
                 # Soumettre erreur à la queue
-                self._submit_missing_lines_error(chunk, refined_texts, error_message)
+                self._submit_missing_lines_error(
+                    chunk, refined_texts, error_message or ""
+                )
                 return False
 
             # 9. Sauvegarder traductions affinées
@@ -170,7 +183,9 @@ class Phase2Worker:
             return True
 
         except Exception as e:
-            logger.exception(f"Erreur inattendue lors de l'affinage du chunk {chunk.index}: {e}")
+            logger.exception(
+                f"Erreur inattendue lors de l'affinage du chunk {chunk.index}: {e}"
+            )
             self.error_queue.put(
                 ErrorItem(
                     chunk=chunk,
@@ -212,7 +227,9 @@ class Phase2Worker:
                 lines.append(f"<{i}/>{translated_text}")
             else:
                 # Si traduction manquante, utiliser texte original
-                original_text = list(chunk.body.values())[i] if i < len(chunk.body) else ""
+                original_text = (
+                    list(chunk.body.values())[i] if i < len(chunk.body) else ""
+                )
                 lines.append(f"<{i}/>{original_text}")
                 logger.warning(
                     f"⚠️ Chunk {chunk.index}, ligne {i}: Traduction initiale manquante, utilisation de l'original"
@@ -309,7 +326,9 @@ class Phase2Worker:
             >>> print(f"Phase 2: {stats['refined']}/{stats['total_chunks']} chunks")
         """
         total_chunks = len(chunks)
-        logger.info(f"🎨 Phase 2: Démarrage affinage de {total_chunks} chunks (séquentiel)")
+        logger.info(
+            f"🎨 Phase 2: Démarrage affinage de {total_chunks} chunks (séquentiel)"
+        )
 
         with tqdm(
             total=total_chunks,

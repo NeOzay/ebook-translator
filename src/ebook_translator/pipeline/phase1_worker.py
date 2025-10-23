@@ -13,7 +13,7 @@ from tqdm import tqdm
 from ..logger import get_logger
 from ..translation.engine import TranslationEngine, build_translation_map
 from ..translation.parser import parse_llm_translation_output, validate_line_count
-from ..config import Config
+from ..config import TemplateNames
 from ..correction.error_queue import ErrorItem
 
 if TYPE_CHECKING:
@@ -110,11 +110,12 @@ class Phase1Worker:
             # 2. Requête LLM
             source_content = str(chunk)
             prompt = self.llm.render_prompt(
-                Config().First_Pass_Template,
+                TemplateNames.First_Pass_Template,
                 target_language=self.target_language,
                 user_prompt=None,  # Phase 1 sans user_prompt
             )
-            llm_output = self.llm.query(prompt, source_content)
+            context = f"phase1_chunk_{chunk.index:03d}"
+            llm_output = self.llm.query(prompt, source_content, context=context)
             translated_texts = parse_llm_translation_output(llm_output)
 
             # 3. Validation structurelle
@@ -126,7 +127,7 @@ class Phase1Worker:
             if not is_valid:
                 # Soumettre erreur à la queue (non-bloquant)
                 self._submit_missing_lines_error(
-                    chunk, translated_texts, error_message
+                    chunk, translated_texts, error_message or ""
                 )
                 return False
 
@@ -143,7 +144,9 @@ class Phase1Worker:
             return True
 
         except Exception as e:
-            logger.exception(f"Erreur inattendue lors de la traduction du chunk {chunk.index}: {e}")
+            logger.exception(
+                f"Erreur inattendue lors de la traduction du chunk {chunk.index}: {e}"
+            )
             # Soumettre erreur générique à la queue
             self.error_queue.put(
                 ErrorItem(
@@ -262,7 +265,9 @@ class Phase1Worker:
             >>> print(f"Phase 1: {stats['translated']}/{stats['total_chunks']} chunks")
         """
         total_chunks = len(chunks)
-        logger.info(f"🚀 Phase 1: Démarrage traduction de {total_chunks} chunks ({max_workers} workers)")
+        logger.info(
+            f"🚀 Phase 1: Démarrage traduction de {total_chunks} chunks ({max_workers} workers)"
+        )
 
         with tqdm(
             total=total_chunks,
@@ -291,7 +296,9 @@ class Phase1Worker:
                         pbar.write("\n❌ Phase 1 interrompue par l'utilisateur")
                         raise
                     except Exception as e:
-                        logger.exception(f"Erreur inattendue pour chunk {chunk.index}: {e}")
+                        logger.exception(
+                            f"Erreur inattendue pour chunk {chunk.index}: {e}"
+                        )
                         pbar.write(f"❌ Chunk {chunk.index}: Erreur inattendue")
 
                     pbar.update(1)

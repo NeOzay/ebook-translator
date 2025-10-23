@@ -10,7 +10,7 @@ import threading
 import time
 from typing import Optional, TYPE_CHECKING
 
-from ..config import Config
+from ..config import TemplateNames
 from ..logger import get_logger
 from .error_queue import ErrorQueue, ErrorItem
 
@@ -88,7 +88,9 @@ class CorrectionWorker:
 
         logger.info("🔧 Démarrage du thread de correction")
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True, name="CorrectionWorker")
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="CorrectionWorker"
+        )
         self._thread.start()
 
     def _run(self) -> None:
@@ -187,7 +189,7 @@ class CorrectionWorker:
 
             # Construire le prompt de retry
             retry_prompt = self.llm.render_prompt(
-                Config().Missing_Lines_Template,
+                TemplateNames.Missing_Lines_Template,
                 target_language=self.target_language,
                 error_message=error_data.get("error_message", ""),
                 expected_count=error_data.get("expected_count", len(missing_indices)),
@@ -200,7 +202,8 @@ class CorrectionWorker:
             )
 
             # Appel LLM
-            llm_output = self.llm.query(retry_prompt, "")
+            context = f"correction_missing_chunk_{chunk.index:03d}"
+            llm_output = self.llm.query(retry_prompt, "", context=context)
             missing_translated_texts = parse_llm_translation_output(llm_output)
 
             # Valider que le retry a fourni les bons indices
