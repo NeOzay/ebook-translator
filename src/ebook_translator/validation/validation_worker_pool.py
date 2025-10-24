@@ -155,14 +155,18 @@ class ValidationWorkerPool:
 
         # 2. Démarrer ValidationWorkers
         self.threads = [
-            threading.Thread(target=worker.run, daemon=True, name=f"ValidationWorker-{i}")
+            threading.Thread(
+                target=worker.run, daemon=True, name=f"ValidationWorker-{i}"
+            )
             for i, worker in enumerate(self.workers)
         ]
 
         for thread in self.threads:
             thread.start()
 
-        logger.debug(f"ValidationWorkerPool démarré ({len(self.threads)} validation threads)")
+        logger.debug(
+            f"ValidationWorkerPool démarré ({len(self.threads)} validation threads)"
+        )
 
     def submit(self, chunk: "Chunk", translated_texts: dict[int, str]):
         """
@@ -194,9 +198,9 @@ class ValidationWorkerPool:
         """
         logger.info("Attente de la fin de la validation...")
 
-        # 1. Attendre que validation_queue soit idle (vide + aucun en cours)
-        while not self.validation_queue.is_idle():
-            time.sleep(0.1)
+        # 1. Attendre que validation_queue et save_queue soient idle (vide + aucun en cours)
+        while not self.validation_queue.is_idle() or not self.save_queue.is_idle():
+            time.sleep(3)
 
         logger.debug("Queue de validation idle, signal d'arrêt à TOUS les workers")
 
@@ -211,11 +215,9 @@ class ValidationWorkerPool:
 
         logger.debug("ValidationWorkers terminés, attente de fin des sauvegardes...")
 
-        # 4. Attendre que save_queue soit idle (vide + aucun en cours) - CRITIQUE!
-        while not self.save_queue.is_idle():
-            time.sleep(0.1)
-
-        logger.debug("Queue de sauvegarde idle, SaveWorker va s'arrêter automatiquement")
+        logger.debug(
+            "Queue de sauvegarde idle, SaveWorker va s'arrêter automatiquement"
+        )
 
         # 5. Attendre fin du SaveWorker (stop_event déjà set)
         if self.save_thread:

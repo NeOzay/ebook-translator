@@ -15,12 +15,16 @@ from .base import (
     FragmentErrorDetail,
 )
 from .pipeline import ValidationPipeline
+from .line_count_check import LineCountCheck
+from .fragment_count_check import FragmentCountCheck
 
 __all__ = [
     "Check",
     "CheckResult",
     "ValidationContext",
     "ValidationPipeline",
+    "LineCountCheck",
+    "FragmentCountCheck",
     # TypedDicts pour error_data
     "ErrorData",
     "LineCountErrorData",

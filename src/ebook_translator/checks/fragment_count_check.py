@@ -90,16 +90,18 @@ class FragmentCountCheck:
                 continue
 
             original_text = context.original_texts[line_idx]
-            expected_count = original_text.count(FRAGMENT_SEPARATOR) + 1
-            actual_count = translated_text.count(FRAGMENT_SEPARATOR) + 1
+            # Compter les séparateurs (pas les segments)
+            expected_separators = original_text.count(FRAGMENT_SEPARATOR)
+            actual_separators = translated_text.count(FRAGMENT_SEPARATOR)
 
-            if expected_count != actual_count:
+            if expected_separators != actual_separators:
+                # expected_fragments = nombre de segments (séparateurs + 1)
                 error_detail: FragmentErrorDetail = {
                     "line_idx": line_idx,
                     "original_text": original_text,
                     "translated_text": translated_text,
-                    "expected_fragments": expected_count,
-                    "actual_fragments": actual_count,
+                    "expected_fragments": expected_separators + 1,
+                    "actual_fragments": actual_separators + 1,
                 }
                 errors.append(error_detail)
 
@@ -108,11 +110,16 @@ class FragmentCountCheck:
 
         # Construire message d'erreur
         first_error = errors[0]
+        expected_sep = first_error['expected_fragments'] - 1
+        actual_sep = first_error['actual_fragments'] - 1
+        text_type = 'Texte continu' if expected_sep == 0 else 'Texte fragmenté'
+
         error_message = (
-            f"Fragment mismatch détecté sur {len(errors)} ligne(s)\n"
-            f"  • Première erreur: ligne {first_error['line_idx']} "
-            f"(attendu {first_error['expected_fragments']} fragments, "
-            f"reçu {first_error['actual_fragments']} fragments)"
+            f"Nombre de séparateurs </> incorrect sur {len(errors)} ligne(s)\n"
+            f"  • Première erreur: ligne {first_error['line_idx']}\n"
+            f"    - Séparateurs attendus: {expected_sep}\n"
+            f"    - Séparateurs reçus: {actual_sep}\n"
+            f"    - Type: {text_type}"
         )
 
         error_data: FragmentCountErrorData = {"errors": errors}
@@ -169,73 +176,109 @@ class FragmentCountCheck:
         errors = typed_error_data["errors"]
         result = dict(context.translated_texts)
 
-        logger.debug(
+        logger.info(
             f"[FragmentCountCheck] Correction de {len(errors)} ligne(s) "
-            f"pour chunk {context.chunk.index}"
+            f"pour chunk {context.chunk.index} (max {context.max_retries} tentatives)"
         )
 
-        # Retranslater chaque ligne problématique individuellement
+        # Retranslater chaque ligne problématique avec retry progressif
         for error in errors:
             line_idx = error["line_idx"]
             original_text = error["original_text"]
             expected_fragments = error["expected_fragments"]
             actual_fragments = error["actual_fragments"]
 
-            # Préparer les fragments pour le template de retry
-            original_fragments = original_text.split(FRAGMENT_SEPARATOR)
+            # Calculer nombre de séparateurs (pas de segments)
+            expected_separators = expected_fragments - 1
+            actual_separators = actual_fragments - 1
 
             # Récupérer la traduction incorrecte actuelle
             incorrect_translation = context.translated_texts.get(line_idx, "")
-            incorrect_segments = (
-                incorrect_translation.split(FRAGMENT_SEPARATOR)
-                if incorrect_translation
-                else []
-            )
 
-            # Utiliser le template de retry spécialisé pour fragments
-            prompt = context.llm.render_prompt(
-                TemplateNames.Retry_Translation_Template,
-                target_language=context.target_language,
-                expected_count=expected_fragments,
-                actual_count=actual_fragments,
-                original_fragments=original_fragments,
-                incorrect_segments=incorrect_segments,
-                analysis=f"Attendu {expected_fragments} fragments, reçu {actual_fragments}",
-            )
+            # Boucle de retry avec prompts progressifs
+            success = False
+            for retry_attempt in range(context.max_retries):
+                # Choisir template selon tentative
+                if retry_attempt == 0:
+                    # 1ère tentative : STRICT (positions fixes)
+                    template = TemplateNames.Retry_Translation_Template
+                    strategy = "STRICT"
+                else:
+                    # 2ème+ tentative : FLEXIBLE (positions libres)
+                    template = TemplateNames.Retry_Translation_Flexible_Template
+                    strategy = "FLEXIBLE"
 
-            logger.debug(
-                f"[FragmentCountCheck] Correction ligne {line_idx} "
-                f"(attendu {expected_fragments} fragments, reçu {actual_fragments})"
-            )
-
-            # Appel LLM (pas de source_content, tout est dans le template)
-            llm_context = (
-                f"correction_fragment_chunk_{context.chunk.index:03d}_line_{line_idx}"
-            )
-            llm_output = context.llm.query(prompt, original_text, context=llm_context)
-            corrected_line = parse_llm_translation_output(llm_output)
-
-            if 0 not in corrected_line:
-                logger.warning(
-                    f"[FragmentCountCheck] Correction ligne {line_idx} "
-                    f"n'a pas retourné la ligne 0"
-                )
-                continue  # Garder l'ancienne traduction
-
-            # Vérifier que la correction a le bon nombre de fragments
-            corrected_text = corrected_line[0]
-            corrected_count = corrected_text.count(FRAGMENT_SEPARATOR) + 1
-
-            if corrected_count == expected_fragments:
-                result[line_idx] = corrected_text
                 logger.debug(
-                    f"[FragmentCountCheck] Ligne {line_idx} corrigée avec succès"
+                    f"[FragmentCountCheck] Ligne {line_idx}, "
+                    f"tentative {retry_attempt + 1}/{context.max_retries} ({strategy})"
                 )
-            else:
-                logger.warning(
-                    f"[FragmentCountCheck] Correction ligne {line_idx} toujours invalide "
-                    f"(attendu {expected_fragments}, reçu {corrected_count})"
+
+                # Générer prompt
+                prompt = context.llm.render_prompt(
+                    template,
+                    target_language=context.target_language,
+                    original_text=original_text,
+                    incorrect_translation=incorrect_translation,
+                    expected_separators=expected_separators,
+                    actual_separators=actual_separators,
                 )
-                # La re-validation du pipeline détectera cette erreur
+
+                # Appel LLM
+                llm_context = (
+                    f"correction_fragment_chunk_{context.chunk.index:03d}_"
+                    f"line_{line_idx}_attempt_{retry_attempt + 1}_{strategy.lower()}"
+                )
+
+                try:
+                    llm_output = context.llm.query(
+                        prompt, original_text, context=llm_context
+                    )
+                    corrected_line = parse_llm_translation_output("<0/>" + llm_output)
+                except Exception as e:
+                    logger.warning(
+                        f"[FragmentCountCheck] Tentative {retry_attempt + 1} : "
+                        f"erreur LLM pour ligne {line_idx}: {e}"
+                    )
+                    continue  # Essayer prochaine tentative
+
+                if 0 not in corrected_line:
+                    logger.warning(
+                        f"[FragmentCountCheck] Tentative {retry_attempt + 1} : "
+                        f"parsing échoué pour ligne {line_idx}"
+                    )
+                    continue
+
+                # Vérifier résultat
+                corrected_text = corrected_line[0]
+                corrected_separators = corrected_text.count(FRAGMENT_SEPARATOR)
+
+                # Validation : NOMBRE EXACT requis (pour les deux stratégies)
+                if corrected_separators == expected_separators:
+                    result[line_idx] = corrected_text
+                    logger.info(
+                        f"[FragmentCountCheck] ✅ Ligne {line_idx} corrigée "
+                        f"(tentative {retry_attempt + 1} {strategy}, "
+                        f"{corrected_separators} séparateurs)"
+                    )
+                    success = True
+                    break  # Succès, passer à prochaine ligne
+                else:
+                    logger.warning(
+                        f"[FragmentCountCheck] Tentative {retry_attempt + 1} {strategy} : "
+                        f"nombre incorrect (attendu {expected_separators}, "
+                        f"reçu {corrected_separators})"
+                    )
+                    # Mettre à jour pour prochaine tentative
+                    incorrect_translation = corrected_text
+
+            if not success:
+                # Toutes tentatives épuisées
+                logger.error(
+                    f"[FragmentCountCheck] ❌ Ligne {line_idx} NON corrigée après "
+                    f"{context.max_retries} tentatives "
+                    f"(attendu {expected_separators} séparateurs)"
+                )
+                # Garder traduction originale incorrecte
+                # Le pipeline la rejettera lors de la re-validation
 
         return result

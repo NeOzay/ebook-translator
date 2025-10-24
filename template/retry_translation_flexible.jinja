@@ -1,0 +1,202 @@
+⚠️ ATTENTION : Deuxième tentative avec PLACEMENT LIBRE des séparateurs
+
+Tu es un traducteur professionnel. Ta précédente tentative a échoué car
+la position stricte des séparateurs était incompatible avec une traduction naturelle.
+
+---
+
+## 🔄 NOUVELLES RÈGLES (PLACEMENT LIBRE)
+
+### ⚠️ RÈGLE ABSOLUE : NOMBRE DE SÉPARATEURS
+
+Tu DOIS produire **EXACTEMENT {{ expected_separators }} séparateur(s) `</>`**.
+
+❌ **INTERDIT** :
+- Ajouter des séparateurs ({{ expected_separators + 1 }}+ séparateurs)
+- Supprimer des séparateurs ({{ expected_separators - 1 }}- séparateurs)
+- Fusionner ou diviser des fragments
+
+✅ **AUTORISÉ** :
+- **Déplacer les séparateurs** à des positions naturelles en {{ target_language }}
+- Placer les séparateurs là où ça a du sens linguistiquement
+- Ignorer les positions originales si nécessaire
+
+---
+
+## 📊 CONTEXTE
+
+**Texte original** :
+{{ original_text }}
+
+**Nombre de séparateurs requis** : {{ expected_separators }}
+
+{% if expected_separators > 0 %}
+**Positions originales (à titre indicatif)** :
+{{ original_text | replace('</>', ' [</>] ') }}
+{% endif %}
+
+**Ta traduction précédente (refusée)** :
+{{ incorrect_translation }}
+
+**Nombre de séparateurs dans ta traduction** : {{ actual_separators }}
+
+❌ **Problème détecté** :
+{% if actual_separators < expected_separators %}
+Il te manque {{ expected_separators - actual_separators }} séparateur(s).
+{% elif actual_separators > expected_separators %}
+Tu as ajouté {{ actual_separators - expected_separators }} séparateur(s) en trop.
+{% endif %}
+
+---
+
+{% if expected_separators == 0 %}
+## ✅ CONSIGNE : Texte CONTINU (AUCUN séparateur)
+
+Le texte original ne contient AUCUN séparateur.
+Ta traduction doit être **un bloc de texte continu**, sans `</>`.
+
+**Format attendu** :
+```
+Traduction fluide et continue sans séparateur.
+[=[END]=]
+```
+
+{% else %}
+## ✅ CONSIGNE : Placer EXACTEMENT {{ expected_separators }} séparateur(s)
+
+### 🎯 Où placer les séparateurs ?
+
+Choisis des **points de rupture naturels** dans ta traduction :
+
+1. **Entre propositions indépendantes**
+   - `Il dort</>Elle mange` ✅
+
+2. **Avant/après dialogue ou citation**
+   - `Il dit</>« Bonjour »</>puis part` ✅
+
+3. **Aux ruptures de sens logiques**
+   - `Partie descriptive</>Partie action</>Conclusion` ✅
+
+4. **Avant/après emphase ou exclamation**
+   - `C'est magnifique</>Incroyable</>Wow` ✅
+
+⚠️ **Tu N'ES PAS obligé** de :
+- Mettre les séparateurs aux mêmes endroits que l'original
+- Traduire chaque fragment isolément
+- Conserver la structure syntaxique de l'original
+
+✅ **Tu DOIS** :
+- Produire **EXACTEMENT {{ expected_separators }} séparateur(s)**
+- Placer les séparateurs à des endroits qui ont du sens en {{ target_language }}
+- Créer une traduction naturelle et fluide
+
+---
+
+### 📚 Exemples de PLACEMENT LIBRE
+
+**Exemple 1 : Déplacement pour naturalité**
+
+Original (3 séparateurs) :
+```
+"What are those layabouts </>doing</>?!</>Phufun! Tell me!"
+```
+
+❌ Tentative stricte (impossible) :
+```
+« Que font ces fainéants </>faisant</>?!</>Phufun ! Dis-moi ! »
+(bizarre : "faisant" isolé n'a pas de sens)
+```
+
+✅ Tentative flexible (3 séparateurs, placement libre) :
+```
+« Que font ces fainéants ?</> Phufun !</> Dis-moi ! »
+[=[END]=]
+```
+💡 Les 3 séparateurs sont placés différemment, mais le nombre est correct.
+
+**Autre placement acceptable** :
+```
+« Que font</> ces fainéants</> ? Phufun ! Dis-moi ! »
+[=[END]=]
+```
+
+---
+
+**Exemple 2 : Particule impossible à isoler**
+
+Original (2 séparateurs) :
+```
+"cup </>of</>tea"
+```
+
+❌ Tentative stricte (bizarre) :
+```
+« tasse </>de</>thé »
+(acceptable mais peu naturel)
+```
+
+✅ Tentative flexible (2 séparateurs, placement libre) :
+```
+« tasse de</> thé »
+OU
+« tasse</> de thé »
+[=[END]=]
+```
+💡 Les 2 séparateurs sont présents, placés plus naturellement.
+
+---
+
+**Exemple 3 : Conservation position (si naturel)**
+
+Original (2 séparateurs) :
+```
+"First part</>Second part</>Third part"
+```
+
+✅ Tentative flexible (positions conservées car naturelles) :
+```
+« Première partie</>Deuxième partie</>Troisième partie »
+[=[END]=]
+```
+💡 Si la position originale est naturelle, tu peux la conserver.
+
+{% endif %}
+
+---
+
+## 🔄 RE-TRADUCTION DEMANDÉE
+
+Traduis le texte en **{{ target_language }}** de manière **naturelle et fluide**.
+
+{% if expected_separators == 0 %}
+Ne place **AUCUN séparateur `</>`**.
+{% else %}
+Place **EXACTEMENT {{ expected_separators }} séparateur(s) `</>`** aux endroits
+qui ont du sens linguistiquement (positions libres).
+{% endif %}
+
+**Texte à traduire** :
+{{ original_text }}
+
+---
+
+## ✅ CHECKLIST FINALE (VÉRIFICATION OBLIGATOIRE)
+
+Avant de répondre, vérifie :
+
+{% if expected_separators == 0 %}
+- [ ] Ma traduction ne contient AUCUN `</>`
+- [ ] Le texte est continu et fluide
+{% else %}
+- [ ] J'ai compté mes séparateurs : exactement {{ expected_separators }}
+- [ ] Chaque séparateur est placé à un endroit naturel
+- [ ] La traduction est fluide en {{ target_language }}
+- [ ] Je n'ai NI ajouté NI supprimé de séparateurs
+{% endif %}
+- [ ] Je termine par `[=[END]=]`
+
+---
+
+⚠️ **RAPPEL CRITIQUE** : {{ expected_separators }} séparateurs requis (pas plus, pas moins)
+
+Fournis ta traduction maintenant :

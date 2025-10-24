@@ -1,61 +1,128 @@
-⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de fragments.
+⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de séparateurs `</>`.
 
-Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté le nombre de fragments requis.
-
----
-
-## 📊 ANALYSE DE L'ERREUR : DÉCOUPAGE PRÉCÉDENT
-
-**Fragments originaux ({{ expected_count }})** :
-{% for fragment in original_fragments %}
-  [{{ loop.index0 }}] {{ fragment }}
-{% endfor %}
-
-**Ta traduction INCORRECTE ({{ actual_count }} segments)** :
-{% for segment in incorrect_segments %}
-  [{{ loop.index0 }}] {{ segment }}
-{% endfor %}
-
-❌ **ERREUR DÉTECTÉE** : {{ analysis }}
+Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté la structure du texte original.
 
 ---
 
-## ✅ RÈGLE STRICTE À RESPECTER :
+## 📊 ANALYSE DE L'ERREUR
 
-Tu DOIS produire **EXACTEMENT {{ expected_count }} segments** séparés par le marqueur `</>`.
+**Texte original** :
+{{ original_text }}
 
-- `</>` : Balise de **formatage**.  
-  Tu dois la **conserver exactement** aux mêmes positions dans la traduction.  
-  Ces balises peuvent apparaître isolées ou entourer du texte.  
-  Ne les supprime pas, ne les déplaces pas, et n’en ajoutes pas.
+**Ta traduction INCORRECTE** :
+{{ incorrect_translation }}
 
-**Exemple de format CORRECT** :
+❌ **ERREUR DÉTECTÉE** :
+- Séparateurs `</>` attendus : {{ expected_separators }}
+- Séparateurs `</>` dans ta traduction : {{ actual_separators }}
 
-Translated text with </>tags</> preserved...
+{% if expected_separators == 0 %}
+💡 Le texte original est **CONTINU** (aucun séparateur). Tu as ajouté des `</>` par erreur.
+{% elif actual_separators == 0 %}
+💡 Le texte original contient **{{ expected_separators }} séparateur(s)**, mais ta traduction n'en contient aucun.
+{% elif actual_separators > expected_separators %}
+💡 Tu as ajouté **trop de séparateurs** ({{ actual_separators - expected_separators }} en trop).
+{% else %}
+💡 Il te manque **{{ expected_separators - actual_separators }} séparateur(s)**.
+{% endif %}
+
+---
+
+{% if expected_separators == 0 %}
+## ✅ RÈGLE À RESPECTER : Texte CONTINU (AUCUN séparateur)
+
+Le texte original **ne contient AUCUN séparateur `</>`**.
+
+Ta traduction doit donc être **UN SEUL BLOC de texte continu**, fluide, sans `</>`.
+
+⚠️ **INTERDIT** :
+- Ajouter des `</>` dans la traduction
+- Couper le texte en plusieurs parties
+- Séparer les mots ou les phrases avec `</>`
+
+✅ **AUTORISÉ** :
+- Traduire le texte comme une phrase complète et fluide
+- Utiliser la ponctuation normale (virgules, points, guillemets)
+
+**Exemple de format CORRECT (texte continu)** :
 
 ```txt
-Texte traduit avec </>balises</> conservées...
+Ceci est une phrase complète traduite sans aucun séparateur, avec une ponctuation normale.
 
 [=[END]=]
 ```
 
-⚠️ **IMPORTANT** :
-- NE FUSIONNE PAS les fragments ensemble
-- NE DIVISE PAS un fragment en plusieurs
-- Chaque fragment original = EXACTEMENT UN segment traduit
-- Utilise `</>` pour séparer les segments
-- Termine TOUJOURS par `[=[END]=]`
+**Exemple INCORRECT (séparateurs ajoutés par erreur)** :
+
+```txt
+Ceci est</>une phrase</>traduite incorrectement.
+[=[END]=]
+```
+
+{% else %}
+## ✅ RÈGLE À RESPECTER : Texte avec {{ expected_separators }} séparateur(s) `</>`
+
+Le texte original contient **EXACTEMENT {{ expected_separators }} séparateur(s) `</>`**.
+
+Tu dois **conserver EXACTEMENT ces séparateurs** aux mêmes positions relatives dans ta traduction.
+
+⚠️ **Position des séparateurs dans l'original** :
+
+{{ original_text | replace('</>', ' [</>] ') }}
+
+Chaque séparateur `</>` divise le texte en parties. Tu dois :
+1. Traduire chaque partie séparément
+2. Remettre les séparateurs `</>` aux mêmes endroits (entre les parties traduites)
+3. Ne pas ajouter ou supprimer de séparateurs
+
+**Exemple de format CORRECT (avec séparateurs)** :
+
+```txt
+Premier fragment</>Deuxième fragment</>Troisième fragment
+[=[END]=]
+```
+
+**Exemple INCORRECT (séparateurs déplacés/supprimés)** :
+
+```txt
+Premier fragment Deuxième fragment</>Troisième fragment
+[=[END]=]
+```
+
+{% endif %}
 
 ---
 
-## 🔄 RE-TRADUCTION DEMANDÉE :
+## 🔄 RE-TRADUCTION DEMANDÉE
 
-Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT le nombre de fragments.
+Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT la structure.
 
-**Nombre de segments attendus** : {{ expected_count }}
-**Séparateurs requis** : {{ expected_count - 1 }} fois `</>`
+{% if expected_separators == 0 %}
+**Nombre de séparateurs `</>` requis** : AUCUN (texte continu)
+{% else %}
+**Nombre de séparateurs `</>` requis** : EXACTEMENT {{ expected_separators }}
+{% endif %}
 
-Prends la précédente traduction comme référence:
-{{" ".join(incorrect_segments)}}
+**Texte à re-traduire** :
 
-La phrase à traduire:
+{{ original_text }}
+
+---
+
+## ✅ CHECKLIST AVANT DE RÉPONDRE
+
+{% if expected_separators == 0 %}
+- [ ] Ma traduction ne contient AUCUN caractère `</>`
+- [ ] C'est un texte continu, fluide, sans coupures artificielles
+- [ ] J'utilise seulement la ponctuation normale (virgules, points, etc.)
+{% else %}
+- [ ] Ma traduction contient EXACTEMENT {{ expected_separators }} séparateur(s) `</>`
+- [ ] Les séparateurs sont aux mêmes positions relatives que l'original
+- [ ] Chaque partie entre séparateurs est traduite correctement
+- [ ] Je n'ai ni ajouté ni supprimé de séparateurs
+{% endif %}
+- [ ] Je termine par `[=[END]=]`
+
+---
+
+Fournis ta re-traduction maintenant :
