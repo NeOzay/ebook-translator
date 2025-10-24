@@ -75,6 +75,9 @@ class Glossary:
         """
         Enregistre une traduction observée.
 
+        Filtre automatiquement les mots grammaticaux et mots très courts
+        pour éviter la pollution du glossaire.
+
         Args:
             source_term: Terme dans la langue source
             translated_term: Traduction observée
@@ -83,7 +86,14 @@ class Glossary:
             >>> glossary.learn("Matrix", "Matrice")
             >>> glossary.learn("Matrix", "Matrice")  # Renforce
             >>> glossary.learn("Matrix", "Système")  # Conflit détecté
+            >>> glossary.learn("the", "le")  # Ignoré (stopword)
         """
+        from .glossary_filters import should_exclude_from_glossary
+
+        # Filtrer mots grammaticaux et mots courts automatiquement
+        if should_exclude_from_glossary(source_term):
+            return  # Ignorer silencieusement
+
         # Ignorer si identiques (ex: noms propres gardés tels quels)
         # if source_term == translated_term:
         #     return
@@ -483,6 +493,121 @@ class Glossary:
             "unique_translations": sum(
                 len(translations) for translations in self._glossary.values()
             ),
+        }
+
+    # =========================================================================
+    # Nettoyage du glossaire
+    # =========================================================================
+
+    def clean_stopwords(self) -> int:
+        """
+        Retire les mots grammaticaux du glossaire existant.
+
+        Utilise should_exclude_from_glossary() pour identifier les termes
+        à supprimer (articles, pronoms, prépositions, etc.).
+
+        Returns:
+            Nombre de termes supprimés
+
+        Example:
+            >>> removed_count = glossary.clean_stopwords()
+            >>> print(f"{removed_count} stopwords supprimés")
+        """
+        from .glossary_filters import should_exclude_from_glossary
+
+        terms_to_remove = [
+            term
+            for term in self._glossary.keys()
+            if should_exclude_from_glossary(term)
+        ]
+
+        for term in terms_to_remove:
+            del self._glossary[term]
+            # Supprimer aussi des validations si présent
+            if term in self._validated:
+                del self._validated[term]
+
+        return len(terms_to_remove)
+
+    def remove_low_confidence_terms(self, min_occurrences: int = 2) -> int:
+        """
+        Retire les termes avec très peu d'occurrences (probables erreurs d'extraction).
+
+        Args:
+            min_occurrences: Nombre minimum d'occurrences total (défaut: 2)
+
+        Returns:
+            Nombre de termes supprimés
+
+        Example:
+            >>> removed_count = glossary.remove_low_confidence_terms(min_occurrences=2)
+            >>> print(f"{removed_count} termes à faible confiance supprimés")
+        """
+        terms_to_remove = []
+
+        for source_term, translations in self._glossary.items():
+            total_occurrences = sum(translations.values())
+            if total_occurrences < min_occurrences:
+                terms_to_remove.append(source_term)
+
+        for term in terms_to_remove:
+            del self._glossary[term]
+            # Supprimer aussi des validations si présent
+            if term in self._validated:
+                del self._validated[term]
+
+        return len(terms_to_remove)
+
+    def clean_all(
+        self, min_occurrences: int = 2, verbose: bool = True
+    ) -> dict[str, int]:
+        """
+        Nettoie le glossaire en appliquant tous les filtres.
+
+        Applique dans l'ordre :
+        1. Suppression des stopwords grammaticaux
+        2. Suppression des termes à faible confiance
+
+        Args:
+            min_occurrences: Seuil minimum pour remove_low_confidence_terms (défaut: 2)
+            verbose: Affiche les statistiques de nettoyage (défaut: True)
+
+        Returns:
+            Dictionnaire avec le nombre de suppressions par catégorie
+
+        Example:
+            >>> stats = glossary.clean_all()
+            >>> # {'stopwords': 123, 'low_confidence': 45, 'total': 168}
+        """
+        from .logger import get_logger
+
+        logger = get_logger(__name__)
+
+        if verbose:
+            stats_before = self.get_statistics()
+            logger.info("🧹 Nettoyage du glossaire...")
+            logger.info(f"  Avant : {stats_before['total_terms']} termes")
+
+        # Étape 1 : Stopwords
+        stopwords_removed = self.clean_stopwords()
+        if verbose:
+            logger.info(f"  Stopwords supprimés : {stopwords_removed}")
+
+        # Étape 2 : Faible confiance
+        low_conf_removed = self.remove_low_confidence_terms(min_occurrences)
+        if verbose:
+            logger.info(f"  Faible confiance supprimés : {low_conf_removed}")
+
+        if verbose:
+            stats_after = self.get_statistics()
+            total_removed = stopwords_removed + low_conf_removed
+            logger.info(f"  Après : {stats_after['total_terms']} termes")
+            logger.info(f"✅ Total supprimé : {total_removed} termes")
+
+        return {
+            "stopwords": stopwords_removed,
+            "low_confidence": low_conf_removed,
+            "total": stopwords_removed + low_conf_removed,
         }
 
     # =========================================================================

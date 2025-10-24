@@ -44,13 +44,15 @@ class GlossaryValidator:
         """
         self.glossary = glossary
 
-    def validate_interactive(self, auto_resolve: bool = False) -> bool:
+    def validate_interactive(self, auto_resolve: bool = False, auto_clean: bool = True) -> bool:
         """
         Lance la validation interactive du glossaire.
 
         Args:
             auto_resolve: Si True, résout automatiquement les conflits
                          en choisissant la traduction la plus fréquente (défaut: False)
+            auto_clean: Si True, nettoie automatiquement les stopwords et termes à faible
+                       confiance avant validation (défaut: True)
 
         Returns:
             True si le glossaire est validé (aucun conflit non résolu)
@@ -65,6 +67,16 @@ class GlossaryValidator:
         logger.info("=" * 60)
         logger.info("📚 VALIDATION DU GLOSSAIRE")
         logger.info("=" * 60)
+
+        # Nettoyage automatique du glossaire (stopwords + faible confiance)
+        if auto_clean:
+            logger.info("\n🧹 Nettoyage automatique du glossaire...")
+            clean_stats = self.glossary.clean_all(min_occurrences=2, verbose=False)
+            logger.info(
+                f"  • Stopwords supprimés: {clean_stats['stopwords']}\n"
+                f"  • Faible confiance supprimés: {clean_stats['low_confidence']}\n"
+                f"  • Total supprimé: {clean_stats['total']}"
+            )
 
         # Afficher statistiques
         self._display_statistics()
@@ -130,23 +142,64 @@ class GlossaryValidator:
 
     def _display_conflicts(self, conflicts: dict[str, list[str]]) -> None:
         """
-        Affiche les conflits détectés.
+        Affiche les conflits détectés, organisés par priorité.
+
+        Utilise categorize_conflict() pour distinguer :
+        - Haute priorité : proper_noun, contextual (à résoudre)
+        - Basse priorité : grammatical, onomatopoeia (peuvent être ignorés)
 
         Args:
             conflicts: Dictionnaire {terme_source: [traductions_conflictuelles]}
         """
+        from ..glossary_filters import (
+            get_high_priority_conflicts,
+            get_low_priority_conflicts,
+            categorize_conflict,
+        )
+
+        high_priority = get_high_priority_conflicts(conflicts)
+        low_priority = get_low_priority_conflicts(conflicts)
+
         logger.info("\n⚠️  CONFLITS TERMINOLOGIQUES:")
+        logger.info(f"  • Total: {len(conflicts)} conflit(s)")
+        logger.info(f"  • Haute priorité: {len(high_priority)} conflit(s)")
+        logger.info(f"  • Basse priorité: {len(low_priority)} conflit(s) (peuvent être ignorés)")
 
-        for source_term, translations in sorted(conflicts.items()):
-            # Récupérer les compteurs pour chaque traduction
-            term_data = self.glossary._glossary[source_term]
-            total = sum(term_data.values())
+        # Afficher conflits haute priorité
+        if high_priority:
+            logger.info("\n🔴 CONFLITS HAUTE PRIORITÉ (noms propres/termes techniques):")
+            for source_term, translations in sorted(high_priority.items()):
+                category = categorize_conflict(source_term, translations)
+                term_data = self.glossary._glossary[source_term]
+                total = sum(term_data.values())
 
-            logger.info(f"\n  • {source_term}:")
-            for trans in translations:
-                count = term_data[trans]
-                percentage = (count / total) * 100
-                logger.info(f"    - '{trans}' ({count}×, {percentage:.0f}%)")
+                logger.info(f"\n  • {source_term} [{category}]:")
+                for trans in translations:
+                    count = term_data[trans]
+                    percentage = (count / total) * 100
+                    logger.info(f"    - '{trans}' ({count}×, {percentage:.0f}%)")
+
+        # Afficher conflits basse priorité (tronqué)
+        if low_priority:
+            logger.info("\n🟡 CONFLITS BASSE PRIORITÉ (grammaticaux/onomatopées) - échantillon:")
+            count = 0
+            for source_term, translations in sorted(low_priority.items()):
+                if count >= 5:  # Limiter à 5 exemples
+                    remaining = len(low_priority) - 5
+                    logger.info(f"  ... et {remaining} autre(s) conflit(s) basse priorité")
+                    break
+
+                category = categorize_conflict(source_term, translations)
+                term_data = self.glossary._glossary[source_term]
+                total = sum(term_data.values())
+
+                logger.info(f"\n  • {source_term} [{category}]:")
+                for trans in translations:
+                    count_trans = term_data[trans]
+                    percentage = (count_trans / total) * 100
+                    logger.info(f"    - '{trans}' ({count_trans}×, {percentage:.0f}%)")
+
+                count += 1
 
     def _auto_resolve_conflicts(self, conflicts: dict[str, list[str]]) -> None:
         """
