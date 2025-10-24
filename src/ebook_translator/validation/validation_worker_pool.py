@@ -103,11 +103,15 @@ class ValidationWorkerPool:
         self.validation_queue = ValidationQueue(maxsize=num_workers * 10)
         self.save_queue = SaveQueue(maxsize=num_workers * 10)
 
+        # Event partagé pour signal d'arrêt (tous workers)
+        self._stop_event = threading.Event()
+
         # Créer SaveWorker unique (SEUL à écrire dans Store)
         self.save_worker = SaveWorker(
             save_queue=self.save_queue,
             store=store,
             on_validated=on_validated,  # Callback géré par SaveWorker
+            stop_event=self._stop_event,  # Signal d'arrêt partagé
         )
 
         # Créer ValidationWorkers (N threads, aucun n'écrit dans Store)
@@ -120,6 +124,7 @@ class ValidationWorkerPool:
                 llm=llm,
                 target_language=target_language,
                 phase=phase,
+                stop_event=self._stop_event,  # Signal d'arrêt partagé
             )
             for i in range(num_workers)
         ]
@@ -179,13 +184,13 @@ class ValidationWorkerPool:
 
         Flux d'arrêt:
         1. Attendre que validation_queue soit idle (toutes validations terminées)
-        2. Arrêter ValidationWorkers
-        3. Attendre que save_queue soit idle (toutes sauvegardes terminées)
-        4. Arrêter SaveWorker
-        5. Attendre terminaison de tous les threads
+        2. Signaler arrêt via stop_event (TOUS les workers instantanément)
+        3. Attendre fin de tous les ValidationWorkers
+        4. Attendre que save_queue soit idle (toutes sauvegardes terminées)
+        5. Attendre fin du SaveWorker (stop_event déjà set)
 
-        IMPORTANT: Utilise is_idle() au lieu de empty() pour éviter race conditions.
-        is_idle() garantit que la queue est vide ET qu'aucun item n'est en cours.
+        IMPORTANT: Utilise threading.Event au lieu de None dans la queue.
+        Plus fiable avec plusieurs workers (1 signal → tous workers).
         """
         logger.info("Attente de la fin de la validation...")
 
@@ -193,11 +198,10 @@ class ValidationWorkerPool:
         while not self.validation_queue.is_idle():
             time.sleep(0.1)
 
-        logger.debug("Queue de validation idle, envoi des signaux d'arrêt aux ValidationWorkers")
+        logger.debug("Queue de validation idle, signal d'arrêt à TOUS les workers")
 
-        # 2. Envoyer signal d'arrêt à chaque ValidationWorker
-        for _ in self.workers:
-            self.validation_queue.put(None)
+        # 2. Signaler arrêt à TOUS les workers via Event (instantané, fiable)
+        self._stop_event.set()
 
         # 3. Attendre fin de tous les ValidationWorkers
         for thread in self.threads:
@@ -211,12 +215,9 @@ class ValidationWorkerPool:
         while not self.save_queue.is_idle():
             time.sleep(0.1)
 
-        logger.debug("Queue de sauvegarde idle, envoi du signal d'arrêt au SaveWorker")
+        logger.debug("Queue de sauvegarde idle, SaveWorker va s'arrêter automatiquement")
 
-        # 5. Envoyer signal d'arrêt au SaveWorker
-        self.save_queue.put(None)
-
-        # 6. Attendre fin du SaveWorker
+        # 5. Attendre fin du SaveWorker (stop_event déjà set)
         if self.save_thread:
             self.save_thread.join(timeout=10.0)
             if self.save_thread.is_alive():

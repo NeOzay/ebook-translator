@@ -6,6 +6,7 @@ applique le pipeline de validation, et envoie vers SaveQueue si validé.
 """
 
 import queue
+import threading
 import time
 from typing import TYPE_CHECKING, Literal
 
@@ -63,6 +64,7 @@ class ValidationWorker:
         llm: "LLM",
         target_language: str,
         phase: Literal["initial", "refined"],
+        stop_event: threading.Event,
     ):
         """
         Initialise le worker de validation.
@@ -75,6 +77,7 @@ class ValidationWorker:
             llm: Instance LLM pour corrections
             target_language: Code langue cible (ex: "fr", "en")
             phase: Phase du pipeline ("initial" ou "refined")
+            stop_event: Event partagé pour signal d'arrêt (set() → arrêt immédiat)
         """
         self.worker_id = worker_id
         self.validation_queue = validation_queue
@@ -83,6 +86,7 @@ class ValidationWorker:
         self.llm = llm
         self.target_language = target_language
         self.phase: Literal["initial", "refined"] = phase
+        self.stop_event = stop_event
 
         # Statistiques
         self.validated_count = 0
@@ -92,30 +96,31 @@ class ValidationWorker:
         """
         Boucle principale du worker.
 
-        Consomme la ValidationQueue jusqu'à recevoir un signal d'arrêt (None).
+        Consomme la ValidationQueue jusqu'à ce que stop_event soit set.
         Pour chaque item, valide et sauvegarde si OK, rejette sinon.
 
         Note:
-            Utilise un timeout court (0.5s) pour permettre une réactivité rapide
-            sans consommer trop de CPU. Si timeout, continue simplement d'attendre.
+            Utilise un timeout court (0.5s) pour permettre une réactivité rapide.
+            Vérification stop_event à chaque timeout pour arrêt immédiat.
         """
         logger.info(f"[ValidationWorker-{self.worker_id}] Démarré")
 
-        while True:
+        while not self.stop_event.is_set():
             try:
                 # Attendre un item (timeout court pour réactivité)
                 item = self.validation_queue.get(timeout=0.5)
 
             except queue.Empty:
-                # Timeout normal - continuer d'attendre
+                # Timeout - vérifier stop_event et continuer
                 continue
 
-            # Si on arrive ici, on a reçu un item (ou None pour arrêt)
-            if item is None:  # Signal d'arrêt
-                logger.debug(
-                    f"[ValidationWorker-{self.worker_id}] Signal d'arrêt reçu"
+            # Si item est None, c'est une erreur (ne devrait plus arriver avec stop_event)
+            if item is None:
+                logger.warning(
+                    f"[ValidationWorker-{self.worker_id}] Reçu None (comportement déprécié, "
+                    f"utiliser stop_event.set() à la place)"
                 )
-                break
+                continue
 
             # Valider et sauvegarder
             try:

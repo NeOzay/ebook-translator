@@ -12,6 +12,7 @@ qu'aucun conflit d'accès concurrent aux fichiers ne peut se produire.
 """
 
 import queue
+import threading
 from typing import TYPE_CHECKING, Callable, Optional
 
 from ..logger import get_logger
@@ -56,6 +57,7 @@ class SaveWorker:
         save_queue: SaveQueue,
         store: "Store",
         on_validated: Optional[Callable[["Chunk", dict[int, str]], None]] = None,
+        stop_event: threading.Event | None = None,
     ):
         """
         Initialise le SaveWorker.
@@ -66,10 +68,13 @@ class SaveWorker:
             on_validated: Callback optionnel appelé après sauvegarde réussie
                          avec (chunk, final_translations). Utile pour apprentissage
                          glossaire depuis traductions validées.
+            stop_event: Event partagé pour signal d'arrêt (set() → arrêt immédiat).
+                       Si None, crée un Event local (pour compatibilité tests).
         """
         self.save_queue = save_queue
         self.store = store
         self.on_validated = on_validated
+        self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.saved_count = 0
         self.error_count = 0
 
@@ -78,35 +83,35 @@ class SaveWorker:
         Boucle principale du SaveWorker.
 
         Consomme la save_queue et écrit chaque item dans le Store jusqu'à
-        réception du signal d'arrêt (None).
+        ce que stop_event soit set.
 
         Cette méthode bloque jusqu'à ce que:
         1. Un SaveItem soit disponible dans la queue → sauvegarde
-        2. None soit reçu → arrêt gracieux
+        2. stop_event.set() → arrêt gracieux
 
         Note:
             Cette méthode doit être lancée dans un thread séparé.
-            Elle NE retourne PAS tant qu'elle n'a pas reçu le signal d'arrêt.
             Utilise un timeout court (0.5s) pour permettre une réactivité rapide.
+            Vérification stop_event à chaque timeout pour arrêt immédiat.
         """
         logger.info("🟢 SaveWorker démarré")
 
-        while True:
+        while not self.stop_event.is_set():
             try:
                 # Récupérer prochain item (timeout court pour réactivité)
                 item = self.save_queue.get(timeout=0.5)
 
             except queue.Empty:
-                # Timeout normal - continuer d'attendre
+                # Timeout - vérifier stop_event et continuer
                 continue
 
-            # Si on arrive ici, on a reçu un item (ou None pour arrêt)
-            if item is None:  # Signal d'arrêt
-                logger.info(
-                    f"🔴 SaveWorker arrêté "
-                    f"(sauvegardés: {self.saved_count}, erreurs: {self.error_count})"
+            # Si item est None, c'est une erreur (ne devrait plus arriver avec stop_event)
+            if item is None:
+                logger.warning(
+                    "SaveWorker: Reçu None (comportement déprécié, "
+                    "utiliser stop_event.set() à la place)"
                 )
-                break
+                continue
 
             # Sauvegarder l'item
             try:
@@ -120,6 +125,11 @@ class SaveWorker:
                 )
                 self.save_queue.mark_error()
                 self.error_count += 1
+
+        logger.info(
+            f"🔴 SaveWorker arrêté "
+            f"(sauvegardés: {self.saved_count}, erreurs: {self.error_count})"
+        )
 
     def _save_item(self, item: SaveItem) -> None:
         """
