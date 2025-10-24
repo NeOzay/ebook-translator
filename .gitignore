@@ -56,4 +56,9 @@ books
 .env
 .env.local
 
+# Test preview files
+test_prompt_preview.py
+test_progressive_prompts.py
+prompt_*.txt
+
 poubelle
