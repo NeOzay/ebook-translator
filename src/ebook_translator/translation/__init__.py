@@ -15,10 +15,6 @@ Organisation du module :
 - translator.py : Orchestration complète
 
 Exports publics :
-    Classes :
-        - EpubTranslator : Orchestrateur de traduction d'EPUB
-        - TranslationEngine : Moteur de traduction des chunks
-
     Fonctions EPUB :
         - copy_epub_metadata : Copie les métadonnées
         - extract_html_items_in_spine_order : Extraction du contenu
@@ -27,39 +23,20 @@ Exports publics :
     Fonctions de traduction :
         - parse_llm_translation_output : Parse les sorties LLM
         - build_translation_map : Construit le mapping des traductions
-        - flatten_translation_map : Aplatit un mapping hiérarchique
 
 Usage :
-    >>> from ebook_translator.translation import EpubTranslator
-    >>> from ebook_translator.llm import LLM
+    >>> from ebook_translator.translation import build_translation_map
+    >>> from ebook_translator.translation import parse_llm_translation_output
     >>>
-    >>> # Traduction complète d'un EPUB
-    >>> llm = LLM(model_name="deepseek-chat", api_key="...", max_tokens=1300)
-    >>> translator = EpubTranslator(llm)
-    >>> translator.translate(
-    ...     epub_path="input.epub",
-    ...     output_epub="output.epub",
-    ...     target_language="fr",
-    ...     max_concurrent=1
-    ... )
+    >>> # Mapper traductions d'un chunk
+    >>> translation_map = build_translation_map(chunk, translated_texts)
     >>>
-    >>> # Traduction de chunk uniquement
-    >>> from ebook_translator.translation import TranslationEngine
-    >>> from ebook_translator.store import Store
-    >>> from ebook_translator.htmlpage import BilingualFormat
-    >>>
-    >>> store = Store()
-    >>> engine = TranslationEngine(llm, store, "fr")
-    >>> engine.translate_chunk(chunk, bilingual_format=BilingualFormat.SEPARATE_TAG)
+    >>> # Parser sortie LLM
+    >>> translations = parse_llm_translation_output(llm_output)
 """
 
-# Classes principales
-from .translator import EpubTranslator
-from .engine import (
-    TranslationEngine,
-    build_translation_map,
-    flatten_translation_map,
-)
+# Fonctions principales
+from .engine import build_translation_map
 from .parser import parse_llm_translation_output
 
 # Fonctions EPUB
@@ -70,16 +47,11 @@ from .epub_handler import (
 )
 
 __all__ = [
-    # Classes
-    "EpubTranslator",
-    "TranslationEngine",
     # Fonctions principales
     "parse_llm_translation_output",
+    "build_translation_map",
     # Fonctions EPUB
     "copy_epub_metadata",
     "extract_html_items_in_spine_order",
     "reconstruct_html_item",
-    # Fonctions de mapping
-    "build_translation_map",
-    "flatten_translation_map",
 ]

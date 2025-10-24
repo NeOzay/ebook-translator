@@ -24,8 +24,9 @@ class TemplateNames(ConfigBase):
     First_Pass_Template: str = "translate.jinja"
     Retry_Translation_Template: str = "retry_translation.jinja"
     Retry_Translation_Strict_Template: str = "retry_translation_strict.jinja"
-    Missing_Lines_Template: str = "retry_missing_lines.jinja"  # Obsolète (re-traduit tout)
-    Missing_Lines_Targeted_Template: str = "retry_missing_lines_targeted.jinja"  # Nouveau (seulement lignes manquantes)
+    Missing_Lines_Targeted_Template: str = (
+        "retry_missing_lines_targeted.jinja"  # Nouveau (seulement lignes manquantes)
+    )
     Refine_Template: str = "refine.jinja"  # Phase 2 affinage
 
 

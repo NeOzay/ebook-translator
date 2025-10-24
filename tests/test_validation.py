@@ -1,23 +1,23 @@
 """
-Tests pour le module de validation post-traduction (v0.5.0).
+Tests pour le module de validation de qualité sémantique (quality/).
 
 Ces tests vérifient :
 1. Détection de segments non traduits
 2. Vérification de cohérence terminologique
 3. Glossaire automatique
-4. Validateur intégré
+4. Validateur de qualité intégré
 """
 
 import pytest
 from pathlib import Path
 import tempfile
 
-from ebook_translator.validation import (
+from ebook_translator.quality import (
     UntranslatedDetector,
     TerminologyChecker,
-    Glossary,
-    TranslationValidator,
+    QualityValidator,
 )
+from ebook_translator.glossary import Glossary
 
 
 class TestUntranslatedDetector:
@@ -206,12 +206,12 @@ class TestGlossary:
             assert glossary2.get_translation("Sakamoto") == "Sakamoto"
 
 
-class TestTranslationValidator:
+class TestQualityValidator:
     """Tests pour le validateur intégré."""
 
     def test_validator_initialization(self):
         """Vérifie l'initialisation du validateur."""
-        validator = TranslationValidator(
+        validator = QualityValidator(
             source_lang="en",
             target_lang="fr",
             enable_untranslated_detection=True,
@@ -225,7 +225,7 @@ class TestTranslationValidator:
 
     def test_validate_good_translation(self):
         """Vérifie qu'une bonne traduction passe."""
-        validator = TranslationValidator(source_lang="en", target_lang="fr")
+        validator = QualityValidator(source_lang="en", target_lang="fr")
 
         result = validator.validate_translation(
             original="Hello world",
@@ -236,7 +236,7 @@ class TestTranslationValidator:
 
     def test_detect_identical_translation(self):
         """Vérifie la détection de traduction identique."""
-        validator = TranslationValidator(source_lang="en", target_lang="fr")
+        validator = QualityValidator(source_lang="en", target_lang="fr")
 
         result = validator.validate_translation(
             original="Hello world",
@@ -249,7 +249,7 @@ class TestTranslationValidator:
 
     def test_generate_report(self):
         """Vérifie la génération de rapport."""
-        validator = TranslationValidator(source_lang="en", target_lang="fr")
+        validator = QualityValidator(source_lang="en", target_lang="fr")
 
         # Ajouter des traductions
         validator.validate_translation("Matrix", "Matrice", position=0)
@@ -263,7 +263,7 @@ class TestTranslationValidator:
 
     def test_export_glossary(self):
         """Vérifie l'export du glossaire."""
-        validator = TranslationValidator(source_lang="en", target_lang="fr")
+        validator = QualityValidator(source_lang="en", target_lang="fr")
 
         # Apprendre des termes
         validator.validate_translation("Matrix", "Matrice", position=0)
@@ -281,7 +281,7 @@ class TestIntegration:
 
     def test_full_workflow(self):
         """Test du workflow complet de validation."""
-        validator = TranslationValidator(
+        validator = QualityValidator(
             source_lang="en",
             target_lang="fr",
             enable_untranslated_detection=True,

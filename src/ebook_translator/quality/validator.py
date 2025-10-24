@@ -1,8 +1,10 @@
 """
-Validateur post-traduction intégré au moteur de traduction.
+Validateur de qualité sémantique pour traductions.
 
-Ce module orchestre toutes les validations et peut être activé
-optionnellement dans le TranslationEngine.
+Ce module orchestre toutes les vérifications de qualité sémantique :
+détection de segments non traduits, cohérence terminologique, etc.
+
+Usage optionnel, indépendant du pipeline principal de validation.
 """
 
 from typing import Optional
@@ -16,15 +18,19 @@ from ..glossary import Glossary
 logger = get_logger(__name__)
 
 
-class TranslationValidator:
+class QualityValidator:
     """
-    Validateur orchestrant toutes les vérifications post-traduction.
+    Validateur de qualité sémantique pour traductions.
 
-    Ce validateur peut être activé dans le TranslationEngine pour effectuer
-    des vérifications automatiques et générer des rapports de qualité.
+    Ce validateur orchestre toutes les vérifications de qualité sémantique :
+    - Détection de segments non traduits
+    - Vérification de cohérence terminologique
+    - Glossaire automatique
+
+    Usage optionnel, à utiliser manuellement après traduction.
 
     Example:
-        >>> validator = TranslationValidator(source_lang="en", target_lang="fr")
+        >>> validator = QualityValidator(source_lang="en", target_lang="fr")
         >>> validator.validate_translation(
         ...     original="The Matrix is active",
         ...     translated="La Matrice est active",

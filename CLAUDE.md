@@ -131,6 +131,148 @@ L'extraction de texte utilise un pattern de séparateur spécial :
 - `transtator.py` a une implémentation incomplète (lignes 87-88 référencent `text_stream` et `on_response` non définis)
 - Les templates de prompts Jinja2 sont référencés mais ne sont pas présents dans le dépôt
 
+## Architecture de validation
+
+Le système de validation est divisé en **2 modules indépendants** avec des responsabilités distinctes :
+
+### Module `validation/` - Validation structurelle (OBLIGATOIRE)
+
+**Objectif** : Garantir l'intégrité structurelle des traductions avant sauvegarde.
+
+**Checks disponibles** :
+- `LineCountCheck` : Vérifie que toutes les lignes sont traduites (pas de lignes manquantes)
+- `FragmentCountCheck` : Vérifie que le nombre de fragments est préservé (séparateur `</>`)
+
+**Architecture multi-thread** :
+```
+ValidationQueue → ValidationWorkers (N threads) → SaveQueue → SaveWorker (1 thread) → Store
+```
+
+**Caractéristiques** :
+- ✅ Intégré automatiquement dans `ValidationWorkerPool`
+- ✅ Thread d'écriture unique (`SaveWorker`) élimine WinError 32 sur Windows
+- ✅ Retry automatique avec prompts spécialisés si erreurs détectées
+- ✅ Obligatoire : Chunks rejetés si validation échoue après retries
+
+**Composants clés** :
+- `ValidationWorkerPool` : Orchestre N ValidationWorkers + 1 SaveWorker
+- `ValidationWorker` : Valide les traductions (multi-thread)
+- `SaveWorker` : Seul thread autorisé à écrire dans le Store
+- `ValidationQueue` / `SaveQueue` : Queues thread-safe pour coordination
+- `ValidationPipeline` : Exécute séquentiellement les checks
+
+**Exemple d'usage** :
+```python
+from ebook_translator.checks import ValidationPipeline, LineCountCheck, FragmentCountCheck
+from ebook_translator.validation import ValidationWorkerPool
+
+pipeline = ValidationPipeline([
+    LineCountCheck(),
+    FragmentCountCheck(),
+])
+
+pool = ValidationWorkerPool(
+    num_workers=2,
+    pipeline=pipeline,
+    store=store,
+    llm=llm,
+    target_language="fr",
+    phase="initial",
+)
+
+pool.start()
+pool.submit(chunk, translated_texts)
+pool.wait_completion()
+```
+
+### Module `quality/` - Validation sémantique (OPTIONNEL)
+
+**Objectif** : Analyser la qualité sémantique des traductions après le pipeline principal.
+
+**Checks disponibles** :
+- `UntranslatedDetector` : Détecte segments restés en langue source (mots courants anglais, patterns grammaticaux)
+- `TerminologyChecker` : Détecte incohérences terminologiques (même terme → traductions différentes)
+- `Glossaire automatique` : Apprend les traductions de termes techniques et noms propres
+
+**Caractéristiques** :
+- ❌ **Non intégré** dans le pipeline principal
+- ⚙️ Usage **standalone** : À utiliser manuellement après traduction
+- 📊 Génère des **rapports de qualité** texte
+- 💾 Sauvegarde un **glossaire** JSON réutilisable
+
+**Exemple d'usage** :
+```python
+from ebook_translator.quality import QualityValidator
+
+# Initialiser
+validator = QualityValidator(
+    source_lang="en",
+    target_lang="fr",
+    glossary_path=Path("cache/glossary.json"),
+    enable_untranslated_detection=True,
+    enable_terminology_check=True,
+)
+
+# Valider paire par paire
+for original, translated in translations:
+    validator.validate_translation(original, translated, position=i)
+
+# Générer rapport
+print(validator.generate_report())
+
+# Sauvegarder glossaire
+validator.save_glossary()
+```
+
+**Rapport de qualité** :
+```
+============================================================
+📊 RAPPORT DE VALIDATION DE TRADUCTION
+============================================================
+
+## Statistiques
+  • Segments non traduits détectés: 2
+  • Problèmes de cohérence terminologique: 3
+  • Termes dans le glossaire: 45
+  • Termes validés: 0
+  • Conflits terminologiques: 1
+
+## Problèmes détectés
+
+### ⚠️ Incohérences terminologiques
+
+⚠️ Incohérence terminologique détectée:
+  • Terme source: "Matrix"
+  • Traductions trouvées:
+    - "Matrice" (5 fois)
+    - "Système" (1 fois)
+  💡 Suggestion: utiliser "Matrice" partout
+============================================================
+```
+
+### Comparaison des modules
+
+| Aspect | `validation/` (structurel) | `quality/` (sémantique) |
+|--------|---------------------------|------------------------|
+| **Intégration** | ✅ Automatique dans pipeline | ❌ Manuel (standalone) |
+| **Objectif** | Intégrité structurelle | Qualité sémantique |
+| **Checks** | Lignes, fragments | Non traduits, terminologie |
+| **Correction** | ✅ Retry automatique | ❌ Rapports seulement |
+| **Obligatoire** | ✅ Oui (rejette chunks) | ❌ Non (optionnel) |
+| **Multi-thread** | ✅ Oui (ValidationWorkers) | ❌ Non (séquentiel) |
+
+### Recommandations d'usage
+
+1. **Toujours utiliser `validation/`** : Intégré automatiquement, garantit structure correcte
+2. **Utiliser `quality/` pour** :
+   - Projets professionnels nécessitant haute qualité
+   - Détecter problèmes sémantiques post-traduction
+   - Générer glossaires pour cohérence future
+3. **Ne PAS utiliser `quality/` si** :
+   - Traduction rapide / brouillon
+   - Pas besoin d'analyse détaillée
+   - Budget tokens limité
+
 ## Historique des corrections
 
 ### Version 0.2.0 - Stabilisation (2025-10-19)

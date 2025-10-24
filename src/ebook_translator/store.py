@@ -244,7 +244,7 @@ class Store:
 
         return result
 
-    def get_from_chunk(self, chunk: "Chunk") -> tuple[list[str], bool]:
+    def get_from_chunk(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
         """
         Récupère les traductions pour tous les textes du body d'un chunk.
 
@@ -265,8 +265,9 @@ class Store:
             >>> if has_missing:
             ...     print("Certaines traductions sont manquantes")
         """
-        result: list[str] = []
+        result: dict[int, str] = {}
         has_missing = False
+        index = 0
 
         # Cache des traductions par fichier pour éviter les rechargements
         # Stocke le dictionnaire de traductions pour chaque fichier source
@@ -283,9 +284,10 @@ class Store:
             # Essayer d'abord par index, puis par texte original (fallback)
             translated = data.get(tag_key.index) or data.get(original_text)
 
-            result.append(translated or original_text)
+            result[index] = translated or original_text
             if translated is None:
                 has_missing = True
+            index += 1
 
         return result, has_missing
 

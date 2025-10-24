@@ -9,7 +9,7 @@ from typing import Optional, Callable, Awaitable
 from openai import OpenAI, OpenAIError, APITimeoutError, RateLimitError, APIError
 from openai.types.chat import ChatCompletionMessageParam
 
-from .logger import get_logger, get_session_log_path
+from ..logger import get_logger, get_session_log_path
 
 logger = get_logger(__name__)
 

@@ -6,7 +6,7 @@ Ce module fournit MultiStore qui gère séparément les traductions initiales
 """
 
 from pathlib import Path
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING, TypedDict
 
 from ..store import Store
 
@@ -14,6 +14,21 @@ if TYPE_CHECKING:
     from ..segment import Chunk
 
 PhaseType = Literal["initial", "refined"]
+
+
+class MultiStoreStats(TypedDict):
+    """
+    Statistiques du MultiStore.
+
+    Attributes:
+        active_phase: Phase actuellement active ("initial" ou "refined")
+        initial_files: Nombre de fichiers dans initial_store
+        refined_files: Nombre de fichiers dans refined_store
+    """
+
+    active_phase: PhaseType
+    initial_files: int
+    refined_files: int
 
 
 class MultiStore:
@@ -202,7 +217,7 @@ class MultiStore:
         self,
         chunk: "Chunk",
         phase: Optional[PhaseType] = None,
-    ) -> tuple[list[str], bool]:
+    ) -> tuple[dict[int, str], bool]:
         """
         Récupère les traductions pour un chunk avec fallback.
 
@@ -212,7 +227,7 @@ class MultiStore:
 
         Returns:
             Tuple (traductions, has_missing)
-            - traductions: Liste des traductions (ou texte original si manquant)
+            - traductions: Dictionnaire {index: traduction} (ou None si manquant)
             - has_missing: True si au moins une traduction manque
 
         Example:
@@ -233,13 +248,15 @@ class MultiStore:
             if has_missing:
                 # Compléter avec initial
                 initial_translations, _ = self.initial_store.get_from_chunk(chunk)
-                merged = []
-                for refined, initial in zip(translations, initial_translations):
-                    # Si refined existe, le garder, sinon prendre initial
-                    merged.append(refined if refined else initial)
+                merged = {}
+                # Fusionner: priorité à refined, fallback sur initial
+                for idx in set(translations.keys()) | set(initial_translations.keys()):
+                    refined_val = translations.get(idx)
+                    initial_val = initial_translations.get(idx)
+                    merged[idx] = refined_val if refined_val else initial_val
 
                 # Re-vérifier s'il manque encore quelque chose
-                has_missing = any(t is None for t in merged)
+                has_missing = any(t is None for t in merged.values())
                 return merged, has_missing
 
             return translations, has_missing
@@ -256,7 +273,7 @@ class MultiStore:
         self.initial_store.clear_all()
         self.refined_store.clear_all()
 
-    def get_statistics(self) -> dict:
+    def get_statistics(self) -> MultiStoreStats:
         """
         Récupère des statistiques sur les stores.
 

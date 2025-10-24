@@ -28,9 +28,6 @@ Organisation du package :
 Exports publics :
     Classes principales :
         - LLM : Client pour les API LLM (DeepSeek, OpenAI, etc.)
-        - EpubTranslator : Orchestrateur de traduction d'EPUB
-        - TranslationEngine : Moteur de traduction de chunks
-        - TranslationWorker : Worker pour traduction parallèle
         - Store : Cache persistant des traductions
         - Segmentator : Segmentation du contenu en chunks
 
@@ -101,13 +98,11 @@ License: à définir
 
 # Classes LLM et traduction
 from .llm import LLM
-from .translation import EpubTranslator, TranslationEngine
-from .translation.translator import Language
+from .translation.language import Language
 
 # Classes de segmentation et cache
 from .segment import Chunk, Segmentator, DEFAULT_OVERLAP_RATIO, DEFAULT_ENCODING
 from .store import Store
-from .worker import TranslationWorker
 
 # Classes HTML
 from .htmlpage import (
@@ -128,9 +123,6 @@ __all__ = [
     "__version__",
     # Classes principales
     "LLM",
-    "EpubTranslator",
-    "TranslationEngine",
-    "TranslationWorker",
     # Segmentation et cache
     "Chunk",
     "Segmentator",

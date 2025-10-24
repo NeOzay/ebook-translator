@@ -1,23 +1,27 @@
 """
-Module de validation post-traduction.
+Système de validation asynchrone avec workers dédiés.
 
-Ce module fournit des outils pour valider la qualité des traductions :
-- Détection de segments non traduits (restés en langue source)
-- Vérification de la cohérence terminologique
-- Détection de noms propres incohérents
-- Glossaire automatique pour termes techniques et noms propres
+Ce module fournit une infrastructure de validation parallèle qui valide
+et corrige les traductions avant sauvegarde dans le Store.
+
+Architecture:
+    ValidationQueue → ValidationWorkers (N threads) → SaveQueue → SaveWorker (1 thread) → Store
+
+Le SaveWorker est le SEUL thread autorisé à écrire dans le Store, éliminant
+ainsi complètement les conflits d'écriture (WinError 32 sur Windows).
 """
 
-from .untranslated_detector import UntranslatedDetector, UntranslatedSegment
-from .terminology_checker import TerminologyChecker, TerminologyIssue
-from ..glossary import Glossary
-from .validator import TranslationValidator
+from .validation_queue import ValidationQueue, SaveQueue, SaveItem, ValidationItem
+from .validation_worker import ValidationWorker
+from .validation_worker_pool import ValidationWorkerPool
+from .save_worker import SaveWorker
 
 __all__ = [
-    "UntranslatedDetector",
-    "UntranslatedSegment",
-    "TerminologyChecker",
-    "TerminologyIssue",
-    "Glossary",
-    "TranslationValidator",
+    "ValidationQueue",
+    "ValidationWorker",
+    "ValidationWorkerPool",
+    "SaveQueue",
+    "SaveItem",
+    "ValidationItem",
+    "SaveWorker",
 ]

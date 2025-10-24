@@ -13,24 +13,28 @@ from typing import TYPE_CHECKING
 
 from ebooklib import epub
 
-from ..logger import get_logger
-from ..stores.multi_store import MultiStore
+from ..checks import ValidationPipeline
+from ..checks.fragment_count_check import FragmentCountCheck
+from ..checks.line_count_check import LineCountCheck
 from ..glossary import Glossary
-from ..correction.error_queue import ErrorQueue
-from ..correction.correction_worker_pool import CorrectionWorkerPool
+from ..logger import get_logger
 from ..segment import Segmentator
+from ..stores.multi_store import MultiStore
 from ..translation.epub_handler import (
     copy_epub_metadata,
     extract_html_items_in_spine_order,
     reconstruct_html_item,
 )
+from ..validation import ValidationWorkerPool
+from ..validation.validation_worker_pool import ValidationPoolStats
+from .glossary_validator import GlossaryValidator
 from .phase1_worker import Phase1Worker
 from .phase2_worker import Phase2Worker
-from .glossary_validator import GlossaryValidator
 
 if TYPE_CHECKING:
     from ..llm import LLM
-    from ..translation.translator import Language
+    from ..segment import Chunk
+    from ..translation.language import Language
 
 logger = get_logger(__name__)
 
@@ -55,10 +59,10 @@ class TwoPhasePipeline:
        - Affinage avec glossaire + traduction initiale
        - Sauvegarde dans refined_store
 
-    4. Correction asynchrone :
-       - Thread dédié consommant ErrorQueue
-       - Retry automatique jusqu'à max_retries
-       - Erreurs non-bloquantes
+    4. Validation asynchrone :
+       - Thread pool dédié pour validation
+       - Retry automatique via ValidationPipeline
+       - Erreurs bloquantes (chunks rejetés si échec)
 
     5. Reconstruction EPUB :
        - Fallback refined → initial → original
@@ -70,8 +74,7 @@ class TwoPhasePipeline:
         cache_dir: Répertoire racine des caches
         multi_store: Gestionnaire initial_store + refined_store
         glossary: Glossary unifié pour cohérence
-        error_queue: Queue thread-safe pour erreurs
-        correction_worker: Thread daemon de correction
+        validation_pool: Pool de workers pour validation asynchrone
 
     Example:
         >>> pipeline = TwoPhasePipeline(llm, "book.epub", Path("cache"))
@@ -116,13 +119,53 @@ class TwoPhasePipeline:
         # Initialiser infrastructure
         self.multi_store = MultiStore(self.cache_dir)
         self.glossary = Glossary(cache_path=self.cache_dir / "glossary.json")
-        self.error_queue = ErrorQueue(maxsize=100)
-        self.correction_worker_pool: CorrectionWorkerPool | None = None
+        self.validation_pool: ValidationWorkerPool | None = None
 
         # Statistiques globales
         self.phase1_stats: dict = {}
         self.phase2_stats: dict = {}
-        self.correction_stats: dict = {}
+        self.validation_stats: ValidationPoolStats = {
+            "validated": 0,
+            "rejected": 0,
+            "pending": 0,
+            "total_submitted": 0,
+        }
+        self.glossary_pairs_learned = 0
+
+    def _learn_glossary_from_validated_chunk(
+        self, chunk: "Chunk", final_translations: dict[int, str]
+    ) -> None:
+        """
+        Callback appelé après validation réussie pour apprendre le glossaire.
+
+        Cette méthode est passée comme callback au ValidationWorkerPool et
+        est appelée uniquement après que les traductions ont été validées
+        et corrigées par le pipeline.
+
+        Args:
+            chunk: Chunk avec textes originaux
+            final_translations: Traductions finales validées {line_index: text}
+        """
+        try:
+            # Parcourir les paires (original, traduit)
+            for (page, tag_key, original_text), (idx, translated_text) in zip(
+                chunk.fetch(), final_translations.items()
+            ):
+                if original_text and translated_text:
+                    # Apprendre la paire (extraction automatique)
+                    self.glossary.learn_pair(original_text, translated_text)
+                    self.glossary_pairs_learned += 1
+
+            logger.debug(
+                f"📚 Glossaire appris depuis chunk {chunk.index} validé "
+                f"({self.glossary_pairs_learned} paires au total)"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Erreur lors de l'apprentissage glossaire depuis chunk {chunk.index}: {e}"
+            )
+            # Non-bloquant : ne pas faire échouer la validation
 
     def run(
         self,
@@ -132,7 +175,7 @@ class TwoPhasePipeline:
         phase1_max_tokens: int = 1500,
         phase2_max_tokens: int = 300,
         correction_workers: int = 2,
-        correction_timeout: float = 30.0,
+        validation_timeout: float = 30.0,
         auto_validate_glossary: bool = False,
     ) -> dict:
         """
@@ -145,7 +188,7 @@ class TwoPhasePipeline:
             phase1_max_tokens: Taille max chunks Phase 1 (défaut: 1500)
             phase2_max_tokens: Taille max chunks Phase 2 (défaut: 300)
             correction_workers: Nombre de threads parallèles pour corrections (défaut: 2)
-            correction_timeout: Timeout pour arrêt CorrectionWorkerPool (défaut: 30s)
+            validation_timeout: Timeout pour arrêt ValidationWorkerPool (défaut: 30s)
             auto_validate_glossary: Si True, résout automatiquement les conflits
                                    sans demander validation utilisateur (défaut: False)
 
@@ -171,7 +214,7 @@ class TwoPhasePipeline:
         start_time = time.time()
 
         # Normaliser target_language
-        from ..translation.translator import Language
+        from ..translation.language import Language
 
         target_language_str = (
             target_language.value
@@ -203,17 +246,23 @@ class TwoPhasePipeline:
         logger.info(f"  • {len(html_items)} chapitres extraits")
 
         # =====================================================================
-        # DÉMARRAGE CORRECTION WORKER POOL
+        # DÉMARRAGE VALIDATION WORKER POOL
         # =====================================================================
-        logger.info("🔧 Démarrage du pool de correction...")
-        self.correction_worker_pool = CorrectionWorkerPool(
-            error_queue=self.error_queue,
-            llm=self.llm,
+        logger.info("🔧 Démarrage du pool de validation...")
+        pipeline = ValidationPipeline([
+            LineCountCheck(),
+            FragmentCountCheck(),
+        ])
+        self.validation_pool = ValidationWorkerPool(
+            num_workers=correction_workers,  # Réutiliser paramètre (défaut: 2)
+            pipeline=pipeline,
             store=self.multi_store.initial_store,  # Commence avec initial
+            llm=self.llm,
             target_language=target_language_str,
-            num_workers=correction_workers,
+            phase="initial",
+            on_validated=self._learn_glossary_from_validated_chunk,  # Apprendre glossaire après validation
         )
-        self.correction_worker_pool.start()
+        self.validation_pool.start()
 
         try:
             # =================================================================
@@ -234,8 +283,7 @@ class TwoPhasePipeline:
             phase1_worker = Phase1Worker(
                 llm=self.llm,
                 store=self.multi_store.initial_store,
-                glossary=self.glossary,
-                error_queue=self.error_queue,
+                validation_pool=self.validation_pool,
                 target_language=target_language_str,
             )
 
@@ -256,39 +304,23 @@ class TwoPhasePipeline:
             logger.info("🔄 TRANSITION PHASE 1 → PHASE 2")
             logger.info("=" * 60)
 
-            # 1. Vérifier que la queue d'erreurs est vide
-            error_stats = self.error_queue.get_statistics()
-            if error_stats.pending > 0:
-                logger.warning(
-                    f"⚠️  {error_stats.pending} erreur(s) en attente de correction"
-                )
-                logger.info("⏳ Attente de fin des corrections avant Phase 2...")
+            # 1. Attendre fin de la validation Phase 1
+            logger.info("⏳ Attente de fin des validations Phase 1...")
+            self.validation_pool.wait_completion()
 
-                # Attendre que le CorrectionWorker finisse
-                import time
-
-                timeout = 60.0  # 60 secondes max
-                start_wait = time.time()
-
-                while error_stats.pending > 0 and (time.time() - start_wait) < timeout:
-                    time.sleep(2.0)
-                    error_stats = self.error_queue.get_statistics()
-                    logger.info(f"  • Corrections restantes: {error_stats.pending}")
-
-                # Vérifier à nouveau après attente
-                error_stats = self.error_queue.get_statistics()
-                if error_stats.pending > 0:
-                    raise RuntimeError(
-                        f"❌ Impossible de passer à la Phase 2: {error_stats.pending} erreur(s) non corrigée(s)\n"
-                        f"  • Corrigées: {error_stats.corrected}\n"
-                        f"  • Échouées: {error_stats.failed}\n"
-                        f"  • En attente: {error_stats.pending}\n"
-                        "Veuillez vérifier les logs pour plus de détails."
-                    )
-
+            # Afficher statistiques de validation
+            validation_stats = self.validation_pool.get_statistics()
             logger.info(
-                "✅ Queue d'erreurs vide, toutes les corrections sont terminées"
+                f"✅ Validation Phase 1 terminée:\n"
+                f"  • Validés: {validation_stats['validated']}\n"
+                f"  • Rejetés: {validation_stats['rejected']}"
             )
+
+            if validation_stats['rejected'] > 0:
+                raise RuntimeError(
+                    f"❌ {validation_stats['rejected']} chunk(s) rejeté(s) après validation Phase 1\n"
+                    "Veuillez vérifier les logs pour plus de détails."
+                )
 
             # 2. Validation du glossaire
             logger.info("\n📚 Validation du glossaire avant Phase 2...")
@@ -317,9 +349,18 @@ class TwoPhasePipeline:
             self.multi_store.switch_to_refined()
             logger.info("  • MultiStore basculé vers refined_store")
 
-            # Switch CorrectionWorkerPool vers refined_store
-            self.correction_worker_pool.switch_all_stores(self.multi_store.refined_store)
-            logger.info("  • CorrectionWorkerPool basculé vers refined_store")
+            # Recréer ValidationWorkerPool pour Phase 2 (refined_store)
+            logger.info("🔄 Recréation ValidationWorkerPool pour Phase 2 (refined)...")
+            self.validation_pool = ValidationWorkerPool(
+                num_workers=correction_workers,
+                pipeline=pipeline,  # Réutiliser même pipeline
+                store=self.multi_store.refined_store,  # ← Changé pour refined
+                llm=self.llm,
+                target_language=target_language_str,
+                phase="refined",  # ← Changé pour refined
+            )
+            self.validation_pool.start()
+            logger.info("  • ValidationWorkerPool basculé vers refined_store")
 
             # Sauvegarder glossaire
             self.glossary.save()
@@ -343,8 +384,8 @@ class TwoPhasePipeline:
             phase2_worker = Phase2Worker(
                 llm=self.llm,
                 multi_store=self.multi_store,
+                validation_pool=self.validation_pool,
                 glossary=self.glossary,
-                error_queue=self.error_queue,
                 target_language=target_language_str,
             )
 
@@ -352,34 +393,30 @@ class TwoPhasePipeline:
             self.phase2_stats = phase2_worker.run_sequential(chunks=chunks_phase2)
 
             # =================================================================
-            # FINALISATION CORRECTIONS
+            # FINALISATION VALIDATIONS
             # =================================================================
             logger.info("=" * 60)
-            logger.info("🛑 FINALISATION DES CORRECTIONS")
+            logger.info("🛑 FINALISATION DES VALIDATIONS")
             logger.info("=" * 60)
 
-            # Arrêter CorrectionWorkerPool proprement
-            logger.info(
-                f"  • Attente de fin des corrections (timeout: {correction_timeout}s)..."
-            )
-            stopped = self.correction_worker_pool.stop(timeout=correction_timeout)
+            # Arrêter ValidationWorkerPool proprement
+            logger.info("  • Attente de fin des validations Phase 2...")
+            self.validation_pool.wait_completion()
 
-            if not stopped:
+            # Statistiques validations finales
+            self.validation_stats = self.validation_pool.get_statistics()
+
+            logger.info(
+                f"  • Validés (total): {self.validation_stats['validated']}\n"
+                f"  • Rejetés (total): {self.validation_stats['rejected']}\n"
+                f"  • En attente: {self.validation_stats['pending']}"
+            )
+
+            if self.validation_stats['rejected'] > 0:
                 logger.warning(
-                    f"⚠️ CorrectionWorkerPool n'a pas pu s'arrêter dans le délai ({correction_timeout}s)"
+                    f"⚠️ {self.validation_stats['rejected']} chunk(s) ont été rejetés "
+                    f"(n'ont pas passé la validation après corrections)"
                 )
-
-            # Statistiques corrections (agrégées de tous les workers)
-            self.correction_stats = {
-                **self.correction_worker_pool.get_aggregated_statistics(),
-                **self.error_queue.get_statistics().__dict__,
-            }
-
-            logger.info(
-                f"  • Corrections réussies: {self.correction_stats['corrected']}\n"
-                f"  • Corrections échouées: {self.correction_stats['failed']}\n"
-                f"  • Erreurs en attente: {self.correction_stats['pending']}"
-            )
 
             # =================================================================
             # RECONSTRUCTION EPUB
@@ -408,7 +445,7 @@ class TwoPhasePipeline:
             stats = {
                 "phase1": self.phase1_stats,
                 "phase2": self.phase2_stats,
-                "corrections": self.correction_stats,
+                "validation": self.validation_stats,
                 "glossary": glossary_stats,
                 "total_duration": duration,
             }
@@ -420,7 +457,7 @@ class TwoPhasePipeline:
                 f"📊 RÉSUMÉ:\n"
                 f"  • Phase 1: {self.phase1_stats['translated']}/{self.phase1_stats['total_chunks']} chunks traduits\n"
                 f"  • Phase 2: {self.phase2_stats['refined']}/{self.phase2_stats['total_chunks']} chunks affinés\n"
-                f"  • Corrections: {self.correction_stats['corrected']} réussies, {self.correction_stats['failed']} échouées\n"
+                f"  • Validation: {self.validation_stats['validated']} validés, {self.validation_stats['rejected']} rejetés\n"
                 f"  • Glossaire: {glossary_stats['total_terms']} termes, {glossary_stats['validated_terms']} validés\n"
                 f"  • Durée totale: {duration:.1f}s\n"
                 f"  • EPUB final: {output_epub}"
@@ -430,29 +467,30 @@ class TwoPhasePipeline:
 
         except KeyboardInterrupt:
             logger.error("❌ Pipeline interrompu par l'utilisateur")
-            if self.correction_worker_pool:
-                self.correction_worker_pool.stop(timeout=5.0)
+            if self.validation_pool:
+                self.validation_pool.wait_completion()
             raise
 
         except Exception as e:
             logger.exception(f"❌ Erreur fatale dans le pipeline: {e}")
-            if self.correction_worker_pool:
-                self.correction_worker_pool.stop(timeout=5.0)
+            if self.validation_pool:
+                self.validation_pool.wait_completion()
             raise
 
-    def get_failed_errors(self) -> list:
+    def get_validation_stats(self) -> ValidationPoolStats:
         """
-        Récupère la liste des erreurs non récupérables.
+        Récupère les statistiques de validation.
 
         Returns:
-            Liste des ErrorItem qui ont échoué après tous les retries
+            Dictionnaire avec statistiques de validation
 
         Example:
-            >>> failed = pipeline.get_failed_errors()
-            >>> for error in failed:
-            ...     print(f"Chunk {error.chunk.index}: {error.error_type}")
+            >>> stats = pipeline.get_validation_stats()
+            >>> print(f"Validés: {stats['validated']}, Rejetés: {stats['rejected']}")
         """
-        return self.error_queue.get_failed_items()
+        if self.validation_pool:
+            return self.validation_pool.get_statistics()
+        return self.validation_stats
 
     def clear_caches(self) -> None:
         """

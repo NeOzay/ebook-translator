@@ -3,64 +3,59 @@ Worker pour la Phase 1 du pipeline (traduction initiale + apprentissage glossair
 
 Ce module gère la traduction initiale avec gros blocs (1500 tokens) et
 l'apprentissage automatique du glossaire depuis les paires texte original/traduit.
+
+Note: La validation et sauvegarde sont désormais gérées par ValidationWorkerPool.
 """
 
+from ..store import Store
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
-from ..logger import get_logger
-from ..translation.engine import TranslationEngine, build_translation_map
-from ..translation.parser import (
-    parse_llm_translation_output,
-    validate_line_count,
-    validate_fragment_count,
-)
 from ..config import TemplateNames
-from ..correction.error_queue import ErrorItem
+from ..logger import get_logger
+from ..translation.parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ..llm import LLM
     from ..segment import Chunk
-    from ..store import Store
-    from ..glossary import Glossary
-    from ..correction.error_queue import ErrorQueue
+    from ..validation import ValidationWorkerPool
 
 logger = get_logger(__name__)
 
 
 class Phase1Worker:
     """
-    Worker pour la Phase 1 : Traduction initiale avec apprentissage glossaire.
+    Worker pour la Phase 1 : Traduction initiale.
 
-    Ce worker traduit des chunks de 1500 tokens en parallèle et apprend
-    automatiquement le glossaire depuis les paires (original, traduit).
+    Ce worker traduit des chunks de 1500 tokens en parallèle.
+    L'apprentissage du glossaire est géré par ValidationWorkerPool via callback.
 
-    En cas d'erreur de traduction :
-    - Soumet l'erreur à ErrorQueue (non-bloquant)
-    - Continue avec les autres chunks
-    - Le CorrectionWorker tentera la correction en arrière-plan
+    Note: Validation et sauvegarde sont désormais gérées par ValidationWorkerPool.
+    Ce worker se concentre uniquement sur :
+    1. Vérification cache
+    2. Requête LLM pour traduction si cache manquant
+    3. Parsing de la sortie LLM
+    4. Soumission à ValidationWorkerPool pour validation/sauvegarde/glossaire
 
     Attributes:
         llm: Instance LLM pour traduction
-        store: Store pour sauvegarder traductions initiales
-        glossary: Glossary pour apprentissage automatique
-        error_queue: Queue pour soumettre erreurs (non-bloquant)
+        store: Store initial pour vérification cache
+        validation_pool: Pool de workers pour validation/sauvegarde
         target_language: Langue cible (ex: "fr")
 
     Example:
-        >>> worker = Phase1Worker(llm, store, glossary, error_queue, "fr")
+        >>> worker = Phase1Worker(llm, store, validation_pool, "fr")
         >>> stats = worker.run_parallel(chunks, max_workers=4)
-        >>> print(f"Translated: {stats['translated']}, Errors: {stats['errors_submitted']}")
+        >>> print(f"Translated: {stats['translated']}")
     """
 
     def __init__(
         self,
         llm: "LLM",
         store: "Store",
-        glossary: "Glossary",
-        error_queue: "ErrorQueue",
+        validation_pool: "ValidationWorkerPool",
         target_language: str,
     ):
         """
@@ -68,234 +63,68 @@ class Phase1Worker:
 
         Args:
             llm: Instance LLM pour traduction
-            store: Store pour sauvegarder traductions (initial_store)
-            glossary: Glossary pour apprentissage automatique
-            error_queue: Queue pour soumettre erreurs non-bloquantes
+            store: Store initial pour vérification cache
+            validation_pool: Pool de workers pour validation/sauvegarde
             target_language: Code langue cible (ex: "fr", "en")
         """
         self.llm = llm
         self.store = store
-        self.glossary = glossary
-        self.error_queue = error_queue
+        self.validation_pool = validation_pool
         self.target_language = target_language
 
         # Statistiques
         self.translated_count = 0
-        self.errors_submitted = 0
-        self.glossary_pairs_learned = 0
 
     def translate_chunk(self, chunk: "Chunk") -> bool:
         """
-        Traduit un chunk (Phase 1) avec apprentissage glossaire.
+        Traduit un chunk (Phase 1) et soumet pour validation.
 
-        Flux :
-        1. Vérifier cache
-        2. Si manquant → appeler LLM
-        3. Parser et valider sortie LLM
-        4. Si erreur → soumettre à ErrorQueue (non-bloquant)
-        5. Si succès → sauvegarder + apprendre glossaire
+        Flux simplifié :
+        1. Requête LLM pour traduction
+        2. Parser sortie LLM
+        3. Soumettre à ValidationWorkerPool (validation + sauvegarde async)
+        4. Apprendre glossaire
 
         Args:
             chunk: Chunk à traduire (1500 tokens)
 
         Returns:
-            True si traduction réussie, False si erreur soumise à queue
+            True si traduction LLM réussie, False si erreur parsing
         """
         try:
             # 1. Vérifier cache
-            cached_translations, has_missing = self.store.get_from_chunk(chunk)
+            translated_texts, has_missing = self.store.get_from_chunk(chunk)
 
-            if not has_missing:
-                logger.debug(f"Chunk {chunk.index} déjà en cache (Phase 1)")
-                # Même si en cache, apprendre glossaire si possible
-                self._learn_glossary_from_chunk(chunk, cached_translations)
-                return True
-
-            # 2. Requête LLM
-            source_content = str(chunk)
-            prompt = self.llm.render_prompt(
-                TemplateNames.First_Pass_Template,
-                target_language=self.target_language,
-                user_prompt=None,  # Phase 1 sans user_prompt
-            )
-            context = f"phase1_chunk_{chunk.index:03d}"
-            llm_output = self.llm.query(prompt, source_content, context=context)
-            translated_texts = parse_llm_translation_output(llm_output)
-
-            # 3. Validation structurelle (nombre de lignes)
-            is_valid, error_message = validate_line_count(
-                translations=translated_texts,
-                source_content=source_content,
-            )
-
-            if not is_valid:
-                # Soumettre erreur à la queue (non-bloquant)
-                self._submit_missing_lines_error(
-                    chunk, translated_texts, error_message or ""
+            if has_missing:
+                # 2. Requête LLM
+                source_content = str(chunk)
+                prompt = self.llm.render_prompt(
+                    TemplateNames.First_Pass_Template,
+                    target_language=self.target_language,
+                    user_prompt=None,  # Phase 1 sans user_prompt
                 )
-                return False
+                context = f"phase1_chunk_{chunk.index:03d}"
+                llm_output = self.llm.query(prompt, source_content, context=context)
 
-            # 3b. Validation structurelle (nombre de fragments)
-            # Valider chaque paire (original, traduit) pour détecter fragment_mismatch
-            for line_idx, translated_text in translated_texts.items():
-                # Récupérer le texte original correspondant
-                original_items = list(chunk.fetch())
-                if line_idx < len(original_items):
-                    _, _, original_text = original_items[line_idx]
+                # 3. Parser sortie LLM
+                translated_texts = parse_llm_translation_output(llm_output)
 
-                    # Valider que les fragments correspondent
-                    is_valid_fragments, fragment_error = validate_fragment_count(
-                        original_text, translated_text
-                    )
-
-                    if not is_valid_fragments:
-                        # Soumettre erreur de fragment mismatch à la queue
-                        self._submit_fragment_mismatch_error(
-                            chunk, line_idx, original_text, translated_text, fragment_error or ""
-                        )
-                        return False
-
-            # 4. Sauvegarder traductions
-            translation_map = build_translation_map(chunk, translated_texts)
-            for source_file, translations in translation_map.items():
-                self.store.save_all(source_file, translations)
-
-            # 5. Apprendre glossaire depuis paires
-            self._learn_glossary_from_chunk(chunk, list(translated_texts.values()))
+            # 4. Soumettre à ValidationWorkerPool
+            # La validation et sauvegarde seront faites en arrière-plan
+            # Le glossaire sera appris via callback après validation réussie
+            self.validation_pool.submit(chunk, translated_texts)
 
             self.translated_count += 1
-            logger.debug(f"✅ Chunk {chunk.index} traduit (Phase 1)")
+            logger.debug(
+                f"✅ Chunk {chunk.index} traduit et soumis pour validation (Phase 1)"
+            )
             return True
 
         except Exception as e:
             logger.exception(
                 f"Erreur inattendue lors de la traduction du chunk {chunk.index}: {e}"
             )
-            # Soumettre erreur générique à la queue
-            self.error_queue.put(
-                ErrorItem(
-                    chunk=chunk,
-                    error_type="missing_lines",
-                    error_data={
-                        "error_message": str(e),
-                        "missing_indices": [],
-                        "translated_texts": {},
-                    },
-                    phase="initial",
-                )
-            )
-            self.errors_submitted += 1
             return False
-
-    def _submit_missing_lines_error(
-        self,
-        chunk: "Chunk",
-        translated_texts: dict[int, str],
-        error_message: str,
-    ) -> None:
-        """
-        Soumet une erreur de lignes manquantes à la queue.
-
-        Args:
-            chunk: Chunk avec erreur
-            translated_texts: Traductions partielles reçues
-            error_message: Message d'erreur de validation
-        """
-        from ..translation.parser import count_expected_lines
-
-        source_content = str(chunk)
-        expected_count = count_expected_lines(source_content)
-        expected_indices = set(range(expected_count))
-        actual_indices = set(translated_texts.keys())
-        missing_indices = sorted(expected_indices - actual_indices)
-
-        error_item = ErrorItem(
-            chunk=chunk,
-            error_type="missing_lines",
-            error_data={
-                "error_message": error_message,
-                "expected_count": expected_count,
-                "missing_indices": missing_indices,
-                "translated_texts": translated_texts,
-            },
-            phase="initial",
-        )
-
-        self.error_queue.put(error_item)
-        self.errors_submitted += 1
-        logger.warning(
-            f"⚠️ Chunk {chunk.index}: {len(missing_indices)} lignes manquantes → ErrorQueue"
-        )
-
-    def _submit_fragment_mismatch_error(
-        self,
-        chunk: "Chunk",
-        line_idx: int,
-        original_text: str,
-        translated_text: str,
-        error_message: str,
-    ) -> None:
-        """
-        Soumet une erreur de fragment mismatch à la queue.
-
-        Args:
-            chunk: Chunk avec erreur
-            line_idx: Index de la ligne avec mismatch
-            original_text: Texte original de la ligne
-            translated_text: Texte traduit avec mauvais nombre de fragments
-            error_message: Message d'erreur de validation
-        """
-        error_item = ErrorItem(
-            chunk=chunk,
-            error_type="fragment_mismatch",
-            error_data={
-                "error_message": error_message,
-                "line_idx": line_idx,
-                "original_text": original_text,
-                "translated_text": translated_text,
-                "expected_fragments": original_text.count("</>") + 1,
-                "actual_fragments": translated_text.count("</>") + 1,
-            },
-            phase="initial",
-        )
-
-        self.error_queue.put(error_item)
-        self.errors_submitted += 1
-        logger.warning(
-            f"⚠️ Chunk {chunk.index} ligne {line_idx}: Fragment mismatch → ErrorQueue"
-        )
-
-    def _learn_glossary_from_chunk(
-        self,
-        chunk: "Chunk",
-        translated_texts: list[str],
-    ) -> None:
-        """
-        Apprend le glossaire depuis les paires (original, traduit) du chunk.
-
-        Utilise glossary.learn_pair() pour extraire automatiquement les termes
-        (noms propres, acronymes, termes techniques) et leurs traductions.
-
-        Args:
-            chunk: Chunk avec textes originaux
-            translated_texts: Liste des traductions (même ordre que chunk.fetch())
-        """
-        try:
-            for (page, tag_key, original_text), translated_text in zip(
-                chunk.fetch(), translated_texts
-            ):
-                if original_text and translated_text:
-                    # Apprendre la paire (extraction automatique)
-                    self.glossary.learn_pair(original_text, translated_text)
-                    self.glossary_pairs_learned += 1
-
-            logger.debug(
-                f"📚 Glossaire appris depuis chunk {chunk.index} ({self.glossary_pairs_learned} paires)"
-            )
-
-        except Exception as e:
-            logger.warning(f"Erreur lors de l'apprentissage glossaire: {e}")
-            # Non-bloquant : ne pas faire échouer la traduction
 
     def run_parallel(
         self,
@@ -305,8 +134,8 @@ class Phase1Worker:
         """
         Lance la traduction de tous les chunks en parallèle (Phase 1).
 
-        Utilise ThreadPoolExecutor pour paralléliser les traductions.
-        Les erreurs sont soumises à ErrorQueue sans bloquer.
+        Utilise ThreadPoolExecutor pour paralléliser les traductions LLM.
+        La validation et sauvegarde sont gérées en arrière-plan par ValidationWorkerPool.
 
         Args:
             chunks: Liste des chunks à traduire (1500 tokens chacun)
@@ -316,10 +145,10 @@ class Phase1Worker:
             Statistiques de la Phase 1 :
             {
                 "translated": nombre de chunks traduits avec succès,
-                "errors_submitted": nombre d'erreurs soumises à la queue,
-                "glossary_pairs_learned": nombre de paires apprises,
                 "total_chunks": nombre total de chunks
             }
+
+            Note: Le glossaire est appris via callback ValidationWorkerPool
 
         Example:
             >>> chunks = list(segmentator.get_all_segments())
@@ -351,9 +180,7 @@ class Phase1Worker:
                     try:
                         success = future.result()
                         if not success:
-                            pbar.write(
-                                f"⚠️ Chunk {chunk.index}: Erreur soumise à ErrorQueue"
-                            )
+                            pbar.write(f"⚠️ Chunk {chunk.index}: Erreur traduction LLM")
                     except KeyboardInterrupt:
                         pbar.write("\n❌ Phase 1 interrompue par l'utilisateur")
                         raise
@@ -368,16 +195,13 @@ class Phase1Worker:
         # Statistiques finales
         stats = {
             "translated": self.translated_count,
-            "errors_submitted": self.errors_submitted,
-            "glossary_pairs_learned": self.glossary_pairs_learned,
             "total_chunks": total_chunks,
         }
 
         logger.info(
             f"✅ Phase 1 terminée:\n"
             f"  • Traduits: {stats['translated']}/{total_chunks}\n"
-            f"  • Erreurs soumises: {stats['errors_submitted']}\n"
-            f"  • Paires glossaire apprises: {stats['glossary_pairs_learned']}"
+            f"  Note: Validation et apprentissage glossaire en cours en arrière-plan (voir ValidationWorkerPool)"
         )
 
         return stats

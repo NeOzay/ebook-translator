@@ -31,10 +31,10 @@ Tu DOIS produire **EXACTEMENT {{ expected_count }} segments** séparés par le m
 
 **Exemple de format CORRECT** :
 
-<0/>Translated text with </>tags</> preserved...
+Translated text with </>tags</> preserved...
 
-```
-<0/>Texte traduit avec </>balises</> conservées...
+```txt
+Texte traduit avec </>balises</> conservées...
 
 [=[END]=]
 ```
@@ -51,10 +51,11 @@ Tu DOIS produire **EXACTEMENT {{ expected_count }} segments** séparés par le m
 ## 🔄 RE-TRADUCTION DEMANDÉE :
 
 Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT le nombre de fragments.
-Prends la précédente traduction comme référence:
-{{" ".join(incorrect_segments)}}
 
 **Nombre de segments attendus** : {{ expected_count }}
 **Séparateurs requis** : {{ expected_count - 1 }} fois `</>`
 
-Produis ta traduction corrigée maintenant :
+Prends la précédente traduction comme référence:
+{{" ".join(incorrect_segments)}}
+
+La phrase à traduire:
