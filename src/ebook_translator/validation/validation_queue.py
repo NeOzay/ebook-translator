@@ -125,6 +125,7 @@ class ValidationQueue:
         self._queue: queue.Queue[Optional[ValidationItem]] = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._stats = ValidationQueueStats()
+        self._in_progress = 0  # Items sortis de la queue mais pas encore validés/rejetés
 
     def put(
         self, item: Optional[ValidationItem], block: bool = True, timeout: Optional[float] = None
@@ -158,29 +159,34 @@ class ValidationQueue:
             timeout: Temps d'attente maximum en secondes (None = infini)
 
         Returns:
-            ValidationItem ou None si signal d'arrêt ou timeout
+            ValidationItem ou None UNIQUEMENT si signal d'arrêt explicite (put(None))
 
         Raises:
-            queue.Empty: Si la queue est vide et block=False ou timeout expiré
+            queue.Empty: Si timeout expiré (NE retourne PAS None sur timeout)
+
+        Note:
+            Si timeout expire, lève queue.Empty au lieu de retourner None.
+            Cela permet de distinguer timeout (normal) vs signal d'arrêt (None).
         """
-        try:
-            return self._queue.get(block=block, timeout=timeout)
-        except queue.Empty:
-            if not block or timeout is not None:
-                return None
-            raise
+        item = self._queue.get(block=block, timeout=timeout)
+        if item is not None:
+            with self._lock:
+                self._in_progress += 1
+        return item
 
     def mark_validated(self) -> None:
         """Marque un item comme validé avec succès."""
         with self._lock:
             self._stats.validated += 1
             self._stats.pending -= 1
+            self._in_progress -= 1
 
     def mark_rejected(self) -> None:
         """Marque un item comme rejeté (échec validation)."""
         with self._lock:
             self._stats.rejected += 1
             self._stats.pending -= 1
+            self._in_progress -= 1
 
     def get_statistics(self) -> ValidationQueueStats:
         """
@@ -201,10 +207,26 @@ class ValidationQueue:
         """
         Vérifie si la queue est vide.
 
+        ATTENTION: Ne garantit PAS que tout le travail est terminé!
+        Utilisez is_idle() pour vérifier qu'il n'y a aucun item en cours.
+
         Returns:
             True si la queue est vide, False sinon
         """
         return self._queue.empty()
+
+    def is_idle(self) -> bool:
+        """
+        Vérifie si queue vide ET aucun item en cours de traitement.
+
+        C'est la méthode à utiliser pour savoir si on peut arrêter les workers
+        en toute sécurité (garantit qu'aucun travail n'est perdu).
+
+        Returns:
+            True si vraiment idle (queue vide + aucun en cours), False sinon
+        """
+        with self._lock:
+            return self._queue.empty() and self._in_progress == 0
 
     def qsize(self) -> int:
         """
@@ -258,6 +280,7 @@ class SaveQueue:
         self._queue: queue.Queue[Optional[SaveItem]] = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._stats = {"saved": 0, "pending": 0, "errors": 0}
+        self._in_progress = 0  # Items sortis de la queue mais pas encore sauvegardés
 
     def put(
         self, item: Optional[SaveItem], block: bool = True, timeout: Optional[float] = None
@@ -290,29 +313,34 @@ class SaveQueue:
             timeout: Temps d'attente maximum en secondes (None = infini)
 
         Returns:
-            SaveItem ou None si signal d'arrêt ou timeout
+            SaveItem ou None UNIQUEMENT si signal d'arrêt explicite (put(None))
 
         Raises:
-            queue.Empty: Si la queue est vide et block=False ou timeout expiré
+            queue.Empty: Si timeout expiré (NE retourne PAS None sur timeout)
+
+        Note:
+            Si timeout expire, lève queue.Empty au lieu de retourner None.
+            Cela permet de distinguer timeout (normal) vs signal d'arrêt (None).
         """
-        try:
-            return self._queue.get(block=block, timeout=timeout)
-        except queue.Empty:
-            if not block or timeout is not None:
-                return None
-            raise
+        item = self._queue.get(block=block, timeout=timeout)
+        if item is not None:
+            with self._lock:
+                self._in_progress += 1
+        return item
 
     def mark_saved(self) -> None:
         """Marque un item comme sauvegardé avec succès."""
         with self._lock:
             self._stats["saved"] += 1
             self._stats["pending"] -= 1
+            self._in_progress -= 1
 
     def mark_error(self) -> None:
         """Marque un item comme ayant échoué lors de la sauvegarde."""
         with self._lock:
             self._stats["errors"] += 1
             self._stats["pending"] -= 1
+            self._in_progress -= 1
 
     def get_statistics(self) -> dict[str, int]:
         """
@@ -332,10 +360,26 @@ class SaveQueue:
         """
         Vérifie si la queue est vide.
 
+        ATTENTION: Ne garantit PAS que tout le travail est terminé!
+        Utilisez is_idle() pour vérifier qu'il n'y a aucun item en cours.
+
         Returns:
             True si la queue est vide, False sinon
         """
         return self._queue.empty()
+
+    def is_idle(self) -> bool:
+        """
+        Vérifie si queue vide ET aucun item en cours de sauvegarde.
+
+        C'est la méthode à utiliser pour savoir si on peut arrêter le SaveWorker
+        en toute sécurité (garantit qu'aucune sauvegarde n'est perdue).
+
+        Returns:
+            True si vraiment idle (queue vide + aucun en cours), False sinon
+        """
+        with self._lock:
+            return self._queue.empty() and self._in_progress == 0
 
     def qsize(self) -> int:
         """

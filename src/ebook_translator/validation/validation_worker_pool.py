@@ -178,22 +178,22 @@ class ValidationWorkerPool:
         Attend que tous les chunks soumis soient validés ET sauvegardés.
 
         Flux d'arrêt:
-        1. Attendre que validation_queue soit vide (toutes validations terminées)
+        1. Attendre que validation_queue soit idle (toutes validations terminées)
         2. Arrêter ValidationWorkers
-        3. Attendre que save_queue soit vide (toutes sauvegardes terminées)
+        3. Attendre que save_queue soit idle (toutes sauvegardes terminées)
         4. Arrêter SaveWorker
         5. Attendre terminaison de tous les threads
 
-        IMPORTANT: Ne pas oublier d'attendre save_queue, sinon certaines
-        sauvegardes peuvent être perdues!
+        IMPORTANT: Utilise is_idle() au lieu de empty() pour éviter race conditions.
+        is_idle() garantit que la queue est vide ET qu'aucun item n'est en cours.
         """
         logger.info("Attente de la fin de la validation...")
 
-        # 1. Attendre que validation_queue soit vide
-        while not self.validation_queue.empty():
+        # 1. Attendre que validation_queue soit idle (vide + aucun en cours)
+        while not self.validation_queue.is_idle():
             time.sleep(0.1)
 
-        logger.debug("Queue de validation vide, envoi des signaux d'arrêt aux ValidationWorkers")
+        logger.debug("Queue de validation idle, envoi des signaux d'arrêt aux ValidationWorkers")
 
         # 2. Envoyer signal d'arrêt à chaque ValidationWorker
         for _ in self.workers:
@@ -207,11 +207,11 @@ class ValidationWorkerPool:
 
         logger.debug("ValidationWorkers terminés, attente de fin des sauvegardes...")
 
-        # 4. Attendre que save_queue soit vide (CRITIQUE!)
-        while not self.save_queue.empty():
+        # 4. Attendre que save_queue soit idle (vide + aucun en cours) - CRITIQUE!
+        while not self.save_queue.is_idle():
             time.sleep(0.1)
 
-        logger.debug("Queue de sauvegarde vide, envoi du signal d'arrêt au SaveWorker")
+        logger.debug("Queue de sauvegarde idle, envoi du signal d'arrêt au SaveWorker")
 
         # 5. Envoyer signal d'arrêt au SaveWorker
         self.save_queue.put(None)

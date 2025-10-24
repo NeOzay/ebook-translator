@@ -5,6 +5,7 @@ Ce module fournit un worker qui consomme une ValidationQueue,
 applique le pipeline de validation, et envoie vers SaveQueue si validé.
 """
 
+import queue
 import time
 from typing import TYPE_CHECKING, Literal
 
@@ -86,7 +87,6 @@ class ValidationWorker:
         # Statistiques
         self.validated_count = 0
         self.rejected_count = 0
-        self._running = False
 
     def run(self):
         """
@@ -94,38 +94,41 @@ class ValidationWorker:
 
         Consomme la ValidationQueue jusqu'à recevoir un signal d'arrêt (None).
         Pour chaque item, valide et sauvegarde si OK, rejette sinon.
+
+        Note:
+            Utilise un timeout court (0.5s) pour permettre une réactivité rapide
+            sans consommer trop de CPU. Si timeout, continue simplement d'attendre.
         """
-        self._running = True
         logger.info(f"[ValidationWorker-{self.worker_id}] Démarré")
 
-        while self._running:
+        while True:
             try:
-                # Attendre un item (timeout pour permettre arrêt gracieux)
-                item = self.validation_queue.get(timeout=1.0)
+                # Attendre un item (timeout court pour réactivité)
+                item = self.validation_queue.get(timeout=0.5)
 
-                if item is None:  # Signal d'arrêt
-                    logger.debug(
-                        f"[ValidationWorker-{self.worker_id}] Signal d'arrêt reçu"
-                    )
-                    break
+            except queue.Empty:
+                # Timeout normal - continuer d'attendre
+                continue
 
-                # Valider et sauvegarder
+            # Si on arrive ici, on a reçu un item (ou None pour arrêt)
+            if item is None:  # Signal d'arrêt
+                logger.debug(
+                    f"[ValidationWorker-{self.worker_id}] Signal d'arrêt reçu"
+                )
+                break
+
+            # Valider et sauvegarder
+            try:
                 self._validate_and_save(item.chunk, item.translated_texts)
-
             except Exception as e:
-                if self._running:  # Ignorer erreurs après arrêt
-                    logger.exception(
-                        f"[ValidationWorker-{self.worker_id}] Erreur inattendue: {e}"
-                    )
+                logger.exception(
+                    f"[ValidationWorker-{self.worker_id}] Erreur lors de la validation: {e}"
+                )
 
         logger.info(
             f"[ValidationWorker-{self.worker_id}] Arrêté "
             f"(validated={self.validated_count}, rejected={self.rejected_count})"
         )
-
-    def stop(self):
-        """Arrête gracieusement le worker."""
-        self._running = False
 
     def _validate_and_save(self, chunk: "Chunk", translated_texts: dict[int, str]):
         """

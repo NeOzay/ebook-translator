@@ -11,6 +11,7 @@ Le SaveWorker est le SEUL thread autorisé à appeler store.save_all(), garantis
 qu'aucun conflit d'accès concurrent aux fichiers ne peut se produire.
 """
 
+import queue
 from typing import TYPE_CHECKING, Callable, Optional
 
 from ..logger import get_logger
@@ -86,15 +87,21 @@ class SaveWorker:
         Note:
             Cette méthode doit être lancée dans un thread séparé.
             Elle NE retourne PAS tant qu'elle n'a pas reçu le signal d'arrêt.
+            Utilise un timeout court (0.5s) pour permettre une réactivité rapide.
         """
         logger.info("🟢 SaveWorker démarré")
 
         while True:
-            # Récupérer prochain item (bloquant)
-            item = self.save_queue.get(timeout=1.0)
+            try:
+                # Récupérer prochain item (timeout court pour réactivité)
+                item = self.save_queue.get(timeout=0.5)
 
-            # Signal d'arrêt ?
-            if item is None:
+            except queue.Empty:
+                # Timeout normal - continuer d'attendre
+                continue
+
+            # Si on arrive ici, on a reçu un item (ou None pour arrêt)
+            if item is None:  # Signal d'arrêt
                 logger.info(
                     f"🔴 SaveWorker arrêté "
                     f"(sauvegardés: {self.saved_count}, erreurs: {self.error_count})"
