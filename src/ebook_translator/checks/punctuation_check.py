@@ -1,9 +1,9 @@
 """
-Check de validation du nombre de fragments.
+Check de validation des paires de ponctuation.
 
-Ce check vérifie que le nombre de séparateurs </> correspond entre
-texte original et traduit, et corrige automatiquement en retranslant
-les lignes problématiques avec un prompt strict.
+Ce check vérifie que le nombre de paires de guillemets correspond entre
+texte original et traduit, garantissant la préservation de la structure narrative
+(dialogues interrompus, citations, etc.).
 """
 
 from typing import TYPE_CHECKING, cast
@@ -12,10 +12,10 @@ from ..logger import get_logger
 from .base import (
     Check,
     CheckResult,
+    PunctuationErrorData,
+    PunctuationErrorDetail,
     ValidationContext,
     ErrorData,
-    FragmentCountErrorData,
-    FragmentErrorDetail,
 )
 from .retry_helper import retry_with_reasoning
 
@@ -24,26 +24,23 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-FRAGMENT_SEPARATOR = "</>"
 
-
-class FragmentCountCheck(Check):
+class PunctuationCheck(Check):
     """
-    Vérifie que le nombre de fragments </> correspond.
+    Vérifie que le nombre de paires de guillemets correspond.
 
-    Ce check compare le nombre de séparateurs </> dans chaque ligne
-    traduite avec le nombre attendu dans le texte original. Les fragments
-    sont utilisés lors de la reconstruction HTML pour aligner correctement
-    les traductions avec les balises.
+    Ce check compare le nombre de paires de guillemets dans chaque ligne
+    traduite avec le nombre attendu dans le texte original. Cela garantit
+    la préservation de la structure narrative (dialogues interrompus, citations).
 
-    En cas d'erreur, retranslate les lignes problématiques individuellement
-    avec un prompt ultra-strict insistant sur la préservation des séparateurs.
+    En cas d'erreur, retranslate les lignes problématiques avec un prompt
+    insistant sur la préservation du nombre de paires.
 
     Attributes:
-        name: Identifiant unique "fragment_count"
+        name: Identifiant unique "punctuation"
 
     Example:
-        >>> check = FragmentCountCheck()
+        >>> check = PunctuationCheck()
         >>> result = check.validate(context)
         >>> if not result.is_valid:
         ...     corrected = check.correct(context, result.error_data)
@@ -52,11 +49,50 @@ class FragmentCountCheck(Check):
     @property
     def name(self) -> str:
         """Nom unique du check."""
-        return "fragment_count"
+        return "punctuation"
+
+    def _count_quote_pairs(self, text: str) -> int:
+        """
+        Compte le nombre de paires de guillemets dans un texte.
+
+        Supporte :
+        - Guillemets anglais doubles : "..."
+        - Guillemets français : « ... »
+        - Guillemets simples : '...'
+
+        Args:
+            text: Texte à analyser
+
+        Returns:
+            Nombre de paires de guillemets
+
+        Example:
+            >>> self._count_quote_pairs('"Hello" world')
+            1
+            >>> self._count_quote_pairs('"A," he said, "B"')
+            2
+            >>> self._count_quote_pairs('« Bonjour » monde')
+            1
+        """
+        # Compter guillemets anglais doubles
+        # double_quotes = text.count('"')
+        english_quote = text.count("“") + text.count("”")
+
+        # Compter guillemets français
+        french_quote = text.count("«") + text.count("»")
+
+        # Compter guillemets simples
+        # single_quotes = text.count("'")
+        # pairs_single = single_quotes // 2
+
+        # Total des paires
+        total_pairs = (english_quote + french_quote) // 2
+
+        return total_pairs
 
     def validate(self, context: ValidationContext) -> CheckResult:
         """
-        Valide que le nombre de fragments correspond pour chaque ligne.
+        Valide que le nombre de paires de guillemets correspond pour chaque ligne.
 
         Args:
             context: Contexte de validation
@@ -67,8 +103,8 @@ class FragmentCountCheck(Check):
         Example:
             >>> context = ValidationContext(
             ...     chunk=chunk,
-            ...     translated_texts={0: "Bonjour monde"},  # Séparateur manquant
-            ...     original_texts={0: "Hello</>world"},    # Contient </>
+            ...     translated_texts={0: '« Bonjour monde »'},  # 1 paire
+            ...     original_texts={0: '"Hello," he said, "world"'},  # 2 paires
             ...     ...
             ... )
             >>> result = check.validate(context)
@@ -77,10 +113,10 @@ class FragmentCountCheck(Check):
             >>> result.error_data["errors"][0]
             {
                 "line_idx": 0,
-                "original_text": "Hello</>world",
-                "translated_text": "Bonjour monde",
-                "expected_fragments": 2,
-                "actual_fragments": 1,
+                "original_text": '"Hello," he said, "world"',
+                "translated_text": '« Bonjour monde »',
+                "expected_pairs": 2,
+                "actual_pairs": 1,
             }
         """
         errors = []
@@ -92,18 +128,18 @@ class FragmentCountCheck(Check):
                 continue
 
             original_text = context.original_texts[line_idx]
-            # Compter les séparateurs (pas les segments)
-            expected_separators = original_text.count(FRAGMENT_SEPARATOR)
-            actual_separators = translated_text.count(FRAGMENT_SEPARATOR)
 
-            if expected_separators != actual_separators:
-                # expected_fragments = nombre de segments (séparateurs + 1)
-                error_detail: FragmentErrorDetail = {
+            # Compter les paires de guillemets
+            expected_pairs = self._count_quote_pairs(original_text)
+            actual_pairs = self._count_quote_pairs(translated_text)
+
+            if expected_pairs != actual_pairs:
+                error_detail: PunctuationErrorDetail = {
                     "line_idx": line_idx,
                     "original_text": original_text,
                     "translated_text": translated_text,
-                    "expected_fragments": expected_separators + 1,
-                    "actual_fragments": actual_separators + 1,
+                    "expected_pairs": expected_pairs,
+                    "actual_pairs": actual_pairs,
                 }
                 errors.append(error_detail)
 
@@ -112,19 +148,17 @@ class FragmentCountCheck(Check):
 
         # Construire message d'erreur
         first_error = errors[0]
-        expected_sep = first_error["expected_fragments"] - 1
-        actual_sep = first_error["actual_fragments"] - 1
-        text_type = "Texte continu" if expected_sep == 0 else "Texte fragmenté"
+        expected_p = first_error["expected_pairs"]
+        actual_p = first_error["actual_pairs"]
 
         error_message = (
-            f"Nombre de séparateurs </> incorrect sur {len(errors)} ligne(s)\n"
+            f"Nombre de paires de guillemets incorrect sur {len(errors)} ligne(s)\n"
             f"  • Première erreur: ligne {first_error['line_idx']}\n"
-            f"    - Séparateurs attendus: {expected_sep}\n"
-            f"    - Séparateurs reçus: {actual_sep}\n"
-            f"    - Type: {text_type}"
+            f"    - Paires attendues: {expected_p}\n"
+            f"    - Paires reçues: {actual_p}\n"
         )
 
-        error_data: FragmentCountErrorData = {"errors": errors}
+        error_data: PunctuationErrorData = {"errors": errors}
 
         return CheckResult(
             is_valid=False,
@@ -137,15 +171,14 @@ class FragmentCountCheck(Check):
         self, context: ValidationContext, error_data: ErrorData
     ) -> dict[int, str]:
         """
-        Corrige en retranslant les lignes avec mauvais nombre de fragments.
+        Corrige en retranslant les lignes avec mauvais nombre de paires.
 
         Cette méthode retraduit chaque ligne problématique individuellement
-        avec un prompt strict qui insiste lourdement sur la préservation
-        des séparateurs </>.
+        avec un prompt strict insistant sur la préservation du nombre de paires.
 
         Args:
             context: Contexte de validation
-            error_data: Données d'erreur avec liste d'erreurs de fragments
+            error_data: Données d'erreur avec liste d'erreurs de ponctuation
 
         Returns:
             Nouvelles traductions {line_index: translated_text} incluant corrections
@@ -154,16 +187,15 @@ class FragmentCountCheck(Check):
             Exception: Si context.llm est None ou traduction échoue
 
         Example:
-            >>> # Contexte avec ligne 0 ayant mauvais nombre de fragments
             >>> error_data = {
             ...     "errors": [{
             ...         "line_idx": 0,
-            ...         "original_text": "Hello</>world",
-            ...         "expected_fragments": 2,
+            ...         "original_text": '"A," he said, "B"',
+            ...         "expected_pairs": 2,
             ...     }]
             ... }
             >>> corrected = check.correct(context, error_data)
-            >>> # corrected[0] contiendra maintenant un séparateur </>
+            >>> # corrected[0] contiendra maintenant 2 paires de guillemets
         """
         from ..translation.parser import parse_llm_translation_output
 
@@ -172,44 +204,36 @@ class FragmentCountCheck(Check):
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        # Type narrowing: on sait que error_data est FragmentCountErrorData
-        typed_error_data = cast(FragmentCountErrorData, error_data)
+        # Type narrowing
+        typed_error_data = cast(PunctuationErrorData, error_data)
         errors = typed_error_data["errors"]
         result = dict(context.translated_texts)
 
         logger.info(
-            f"[FragmentCountCheck] Correction de {len(errors)} ligne(s) "
+            f"[PunctuationCheck] Correction de {len(errors)} ligne(s) "
             f"pour chunk {context.chunk.index} (max {context.max_retries} tentatives)"
         )
 
-        # Retranslater chaque ligne problématique avec retry progressif
+        # Retranslater chaque ligne problématique
         for error in errors:
             line_idx = error["line_idx"]
             original_text = error["original_text"]
-            expected_fragments = error["expected_fragments"]
-            actual_fragments = error["actual_fragments"]
+            expected_pairs = error["expected_pairs"]
+            actual_pairs = error["actual_pairs"]
+            incorrect_translation = error["translated_text"]
 
-            # Calculer nombre de séparateurs (pas de segments)
-            expected_separators = expected_fragments - 1
-            actual_separators = actual_fragments - 1
-
-            # Récupérer la traduction incorrecte actuelle
-            incorrect_translation = context.translated_texts.get(line_idx, "")
-
+            # Fonction de rendu du prompt
             def render_prompt(attempt: int, use_reasoning: bool) -> str:
                 # Le paramètre use_reasoning est passé mais non utilisé ici
                 # car le même template est utilisé pour les deux tentatives
                 if context.llm is None:
                     raise ValueError("LLM is None")
-                return context.llm.renderer.render_retry_fragments(
+                return context.llm.renderer.render_retry_punctuation(
                     target_language=context.target_language,
                     original_text=original_text,
                     incorrect_translation=incorrect_translation,
-                    expected_separators=expected_separators,
-                    actual_separators=actual_separators,
-                    mode=(
-                        "NORMAL" if attempt != 2 or use_reasoning else "FLEXIBLE"
-                    ),  # Template FLEXIBLE par défaut
+                    expected_pairs=expected_pairs,
+                    actual_pairs=actual_pairs,
                 )
 
             # Fonction de validation
@@ -219,10 +243,10 @@ class FragmentCountCheck(Check):
                     if 0 not in corrected_line:
                         return False
                     corrected_text = corrected_line[0]
-                    corrected_separators = corrected_text.count(FRAGMENT_SEPARATOR)
+                    corrected_pairs = self._count_quote_pairs(corrected_text)
 
                     # Validation : NOMBRE EXACT requis
-                    if corrected_separators == expected_separators:
+                    if corrected_pairs == expected_pairs:
                         # Stocker le résultat pour l'utiliser après
                         result[line_idx] = corrected_text
                         return True
@@ -235,19 +259,15 @@ class FragmentCountCheck(Check):
                 context=context,
                 render_prompt=render_prompt,
                 validate_result=validate_result,
-                context_name=f"fragment_line_{line_idx}",
-                max_attempts=3,
+                context_name=f"punctuation_line_{line_idx}",
+                max_attempts=2,
             )
 
             if not success:
-                # Toutes tentatives épuisées
                 logger.error(
-                    f"[FragmentCountCheck] ❌ Échec correction chunk {context.chunk.index}, Ligne {line_idx} "
-                    f"NON corrigée après 2 tentatives "
-                    f"(attendu {expected_separators} séparateurs)"
+                    f"[PunctuationCheck] ❌ Échec correction chunk {context.chunk.index}, "
+                    f"ligne {line_idx} après 2 tentatives"
                 )
-                # Garder traduction originale incorrecte
-                # Le pipeline la rejettera lors de la re-validation
 
         return result
 
@@ -255,33 +275,32 @@ class FragmentCountCheck(Check):
         self, context: ValidationContext, error_data: ErrorData
     ) -> set[int]:
         """
-        Identifie les lignes avec mauvais nombre de fragments comme invalides.
+        Identifie les lignes avec mauvaise ponctuation comme invalides.
 
         Args:
             context: Contexte de validation
-            error_data: Données d'erreur avec liste d'erreurs de fragments
+            error_data: Données d'erreur avec liste d'erreurs de ponctuation
 
         Returns:
-            Set des indices de lignes avec mauvais fragments (à filtrer)
+            Set des indices de lignes avec ponctuation incorrecte (à filtrer)
 
         Example:
             >>> error_data = {
             ...     "errors": [
-            ...         {"line_idx": 5, ...},
-            ...         {"line_idx": 10, ...},
+            ...         {"line_idx": 3, ...},
+            ...         {"line_idx": 7, ...},
             ...     ]
             ... }
             >>> invalid = check.get_invalid_lines(context, error_data)
-            >>> # invalid = {5, 10}
+            >>> # invalid = {3, 7}
         """
-        typed_error_data = cast(FragmentCountErrorData, error_data)
+        typed_error_data = cast(PunctuationErrorData, error_data)
         return {error["line_idx"] for error in typed_error_data["errors"]}
 
-    def build_filter_reason(self, line_idx, error_data: FragmentCountErrorData):
-        # Chercher détails dans error_data
+    def build_filter_reason(self, line_idx, error_data: PunctuationErrorData):
         for err in error_data["errors"]:
             if err.get("line_idx") == line_idx:
-                expected = err.get("expected_fragments", "?")
-                actual = err.get("actual_fragments", "?")
-                return f"Fragments: attendu {expected}, reçu {actual}"
-        return "Nombre de fragments incorrect"
+                expected = err.get("expected_pairs", "?")
+                actual = err.get("actual_pairs", "?")
+                return f"Ponctuation: attendu {expected} paires, reçu {actual}"
+        return "Ponctuation incorrecte"

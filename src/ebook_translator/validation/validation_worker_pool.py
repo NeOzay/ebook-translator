@@ -83,6 +83,7 @@ class ValidationWorkerPool:
         llm: "LLM",
         target_language: str,
         phase: Literal["initial", "refined"],
+        max_retries: int = 1,
         on_validated: Callable[["Chunk", dict[int, str]], None] | None = None,
     ):
         """
@@ -125,6 +126,7 @@ class ValidationWorkerPool:
                 target_language=target_language,
                 phase=phase,
                 stop_event=self._stop_event,  # Signal d'arrêt partagé
+                max_retries=max_retries,
             )
             for i in range(num_workers)
         ]

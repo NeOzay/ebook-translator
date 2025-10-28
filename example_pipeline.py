@@ -41,8 +41,8 @@ def main():
             phase1_workers=1,  # 4 threads parallèles en Phase 1
             phase1_max_tokens=1300,  # Gros blocs pour apprentissage
             phase2_max_tokens=300,  # Petits blocs pour affinage
-            validation_timeout=60.0,  # Timeout pour corrections
-            auto_validate_glossary=False,  # Validation interactive (défaut)
+            auto_validate_glossary=True,  # Validation interactive (défaut)
+            max_retries=1,
         )
 
         # Afficher résultats

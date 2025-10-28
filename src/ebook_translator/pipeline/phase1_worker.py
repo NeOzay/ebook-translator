@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
-from ..config import TemplateNames
 from ..logger import get_logger
 from ..translation.parser import parse_llm_translation_output
 
@@ -98,10 +97,8 @@ class Phase1Worker:
             if has_missing:
                 # 2. Requête LLM
                 source_content = str(chunk)
-                prompt = self.llm.render_prompt(
-                    TemplateNames.First_Pass_Template,
-                    target_language=self.target_language,
-                    user_prompt=None,  # Phase 1 sans user_prompt
+                prompt = self.llm.renderer.render_translate(
+                    target_language=self.target_language
                 )
                 context = f"phase1_chunk_{chunk.index:03d}"
                 llm_output = self.llm.query(prompt, source_content, context=context)

@@ -63,9 +63,65 @@ class FragmentCountErrorData(TypedDict):
     errors: list[FragmentErrorDetail]
 
 
+class PunctuationErrorDetail(TypedDict):
+    """Détails d'une erreur de ponctuation sur une ligne."""
+
+    line_idx: int
+    original_text: str
+    translated_text: str
+    expected_pairs: int
+    actual_pairs: int
+
+
+class PunctuationErrorData(TypedDict):
+    """Données d'erreur pour validation de ponctuation."""
+
+    errors: list[PunctuationErrorDetail]
+
+
 # Type union pour tous les error_data possibles
 # Garde dict pour extensibilité (nouveaux checks futurs)
-ErrorData = LineCountErrorData | FragmentCountErrorData | dict
+ErrorData = LineCountErrorData | FragmentCountErrorData | PunctuationErrorData | dict
+
+
+@dataclass
+class FilteredLine:
+    """
+    Information sur une ligne filtrée lors de la validation.
+
+    Cette dataclass enregistre toutes les métadonnées nécessaires pour
+    identifier précisément une ligne qui a été filtrée (retirée) lors
+    de la validation car elle ne passait pas les checks après correction.
+
+    Attributes:
+        file_name: Nom du fichier EPUB HTML source (ex: "chapter01.xhtml")
+        file_line: Index du fragment dans le fichier HTML (depuis TagKey.index)
+        chunk_index: Index du chunk contenant cette ligne
+        chunk_line: Index de la ligne dans le body du chunk (0, 1, 2, ...)
+        check_name: Nom du check qui a filtré cette ligne (ex: "line_count")
+        reason: Raison descriptive du filtrage (ex: "Ligne manquante après correction")
+        original_text: Texte original de la ligne (pour debug/analyse)
+
+    Example:
+        >>> filtered = FilteredLine(
+        ...     file_name="chapter01.xhtml",
+        ...     file_line="42",
+        ...     chunk_index=3,
+        ...     chunk_line=12,
+        ...     check_name="line_count",
+        ...     reason="Ligne manquante après correction",
+        ...     original_text="Hello world",
+        ... )
+    """
+
+    file_name: str
+    file_line: str
+    chunk_index: int
+    chunk_line: int
+    check_name: str
+    reason: str
+    original_text: str
+    translated_text: str
 
 
 @dataclass
@@ -120,6 +176,7 @@ class ValidationContext:
         target_language: Code langue cible (ex: "fr", "en")
         phase: Phase du pipeline ("initial" ou "refined")
         max_retries: Nombre maximum de tentatives de correction par check
+        filtered_lines: Liste accumulant toutes les lignes filtrées (remplie par pipeline)
 
     Example:
         >>> context = ValidationContext(
@@ -140,6 +197,7 @@ class ValidationContext:
     target_language: str
     phase: Literal["initial", "refined"]
     max_retries: int = 2
+    filtered_lines: list[FilteredLine] = field(default_factory=list)
 
 
 class Check(Protocol):
@@ -222,3 +280,45 @@ class Check(Protocol):
             >>> assert new_result.is_valid
         """
         ...
+
+    def get_invalid_lines(
+        self, context: ValidationContext, error_data: ErrorData
+    ) -> set[int]:
+        """
+        Identifie les lignes invalides à filtrer après échec de correction.
+
+        Cette méthode est appelée par le pipeline si correct() échoue après
+        max_retries. Elle permet au check de spécifier quelles lignes doivent
+        être filtrées (retirées) au lieu de rejeter tout le chunk.
+
+        Args:
+            context: Contexte de validation (avec traductions actuelles)
+            error_data: Données d'erreur retournées par validate()
+
+        Returns:
+            Set d'indices de lignes à RETIRER (lignes invalides)
+
+        Example:
+            >>> # LineCountCheck: retourner les lignes manquantes
+            >>> def get_invalid_lines(self, context, error_data):
+            ...     return set(error_data["missing_indices"])
+            >>>
+            >>> # FragmentCountCheck: retourner lignes avec mauvais fragments
+            >>> def get_invalid_lines(self, context, error_data):
+            ...     return {err["line_idx"] for err in error_data["errors"]}
+        """
+        ...
+
+    def build_filter_reason(self, line_idx: int, error_data: ErrorData) -> str:
+        """
+        Construit un message descriptif pour la raison du filtrage.
+
+        Args:
+            check_name: Nom du check
+            line_idx: Index de la ligne
+            error_data: Données d'erreur du check
+
+        Returns:
+            Message descriptif (ex: "Ligne manquante après correction")
+        """
+        return f"Check {self.name} échoué"

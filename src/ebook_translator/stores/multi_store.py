@@ -11,7 +11,8 @@ from typing import Literal, Optional, TYPE_CHECKING, TypedDict
 from ..store import Store
 
 if TYPE_CHECKING:
-    from ..segment import Chunk
+    from segment import Chunk
+    from htmlpage import TagKey
 
 PhaseType = Literal["initial", "refined"]
 
@@ -241,25 +242,56 @@ class MultiStore:
                 return self.initial_store.get_from_chunk(chunk)
             else:
                 return self.refined_store.get_from_chunk(chunk)
-        else:
-            # Fallback: essayer refined, puis initial
-            translations, has_missing = self.refined_store.get_from_chunk(chunk)
 
-            if has_missing:
-                # Compléter avec initial
-                initial_translations, _ = self.initial_store.get_from_chunk(chunk)
-                merged = {}
-                # Fusionner: priorité à refined, fallback sur initial
-                for idx in set(translations.keys()) | set(initial_translations.keys()):
-                    refined_val = translations.get(idx)
-                    initial_val = initial_translations.get(idx)
-                    merged[idx] = refined_val if refined_val else initial_val
+        # Fallback: essayer refined, puis initial
+        translations, has_missing = self.refined_store.get_from_chunk(chunk)
 
-                # Re-vérifier s'il manque encore quelque chose
-                has_missing = any(t is None for t in merged.values())
-                return merged, has_missing
+        if has_missing:
+            # Compléter avec initial
+            initial_translations, _ = self.initial_store.get_from_chunk(chunk)
+            merged = {}
+            # Fusionner: priorité à refined, fallback sur initial
+            for idx in set(translations.keys()) | set(initial_translations.keys()):
+                refined_val = translations.get(idx)
+                initial_val = initial_translations.get(idx)
+                merged[idx] = refined_val if refined_val else initial_val
 
-            return translations, has_missing
+            # Re-vérifier s'il manque encore quelque chose
+            has_missing = any(t for t in merged.values())
+            return merged, has_missing
+
+        return translations, has_missing
+
+    def get_all_from_chunk(
+        self,
+        chunk: "Chunk",
+        phase: Optional[PhaseType] = None,
+    ) -> tuple[dict["TagKey", str], bool]:
+        if phase:
+            # Phase spécifique
+            if phase == "initial":
+                return self.initial_store.get_all_from_chunk(chunk)
+            else:
+                return self.refined_store.get_all_from_chunk(chunk)
+
+        # Fallback: essayer refined, puis initial
+        translations, has_missing = self.refined_store.get_all_from_chunk(chunk)
+
+        if has_missing:
+            # Compléter avec initial
+            initial_translations, _ = self.initial_store.get_all_from_chunk(chunk)
+            merged: dict[TagKey, str] = {}
+            # Fusionner: priorité à refined, fallback sur initial
+            for idx in set(translations.keys()) | set(initial_translations.keys()):
+                refined_val = translations.get(idx)
+                initial_val = initial_translations.get(idx, "")
+                merged[idx] = refined_val if refined_val else initial_val
+
+            # Re-vérifier s'il manque encore quelque chose
+            has_missing = any(not t for t in merged.values())
+            return merged, has_missing
+
+        return translations, has_missing
 
     def clear_all(self) -> None:
         """

@@ -1,0 +1,366 @@
+{# ========================================
+   SECTION 1 : ANALYSE DE L'ERREUR
+   ======================================== #}
+
+⚠️ ATTENTION : Nombre de paires de guillemets INCORRECT
+
+Tu es un traducteur professionnel. Ta traduction précédente a échoué car tu n'as PAS préservé le nombre de paires de guillemets.
+
+---
+
+## 📊 ANALYSE DE L'ERREUR
+
+**Texte original** :
+{{ original_text }}
+
+**Ta traduction INCORRECTE** :
+{{ incorrect_translation }}
+
+❌ **ERREUR DÉTECTÉE** :
+- Paires de guillemets attendues : {{ expected_pairs }}
+- Paires dans ta traduction : {{ actual_pairs }}
+
+{% if actual_pairs < expected_pairs %}
+💡 Il te manque **{{ expected_pairs - actual_pairs }} paire(s)** de guillemets.
+→ Tu as probablement **fusionné** plusieurs dialogues en un seul bloc.
+{% elif actual_pairs > expected_pairs %}
+💡 Tu as **{{ actual_pairs - expected_pairs }} paire(s) en trop**.
+→ Tu as probablement **divisé** un dialogue continu ou ajouté des guillemets superflus.
+{% endif %}
+
+---
+
+{# ========================================
+   SECTION 2 : RÈGLE CRITIQUE
+   ======================================== #}
+
+## 🔴 RÈGLE ABSOLUE : Préserver EXACTEMENT le nombre de paires
+
+{% if expected_pairs == 0 %}
+Le texte original **ne contient AUCUN guillemet**.
+
+Ta traduction NE DOIT PAS contenir de guillemets.
+
+✅ **Autorisé** :
+- Traduire comme un texte narratif normal
+- Utiliser la ponctuation standard (virgules, points, etc.)
+
+❌ **INTERDIT** :
+- Ajouter des guillemets pour encadrer des mots ou phrases
+
+{% elif expected_pairs == 1 %}
+Le texte original contient **EXACTEMENT 1 paire de guillemets**.
+
+Ta traduction DOIT contenir **EXACTEMENT 1 paire**.
+
+✅ **Structure attendue** :
+- **Dialogue simple** : `“Hello”` → `« Bonjour »`
+- **Dialogue continu** : Un seul bloc de dialogue
+
+❌ **INTERDIT** :
+- Diviser le dialogue en plusieurs paires
+- Supprimer les guillemets
+
+{% else %}
+Le texte original contient **EXACTEMENT {{ expected_pairs }} paires de guillemets**.
+
+Ta traduction DOIT contenir **EXACTEMENT {{ expected_pairs }} paires**.
+
+✅ **Structure attendue** :
+- **Dialogue interrompu** : `“A,” he said, “B”` → `« A », dit-il, « B »` (2 paires)
+- **Multiples dialogues** : `“A” she said. “B” he replied.` → `« A », dit-elle. « B », répondit-il.` (2 paires)
+
+🎯 **Points critiques** :
+1. Si le narrateur interrompt le dialogue (`“A,” he said, “B”`), tu DOIS préserver cette interruption
+2. Chaque dialogue séparé DOIT avoir sa propre paire de guillemets
+3. Ne fusionne PAS plusieurs dialogues en un seul bloc
+
+❌ **INTERDIT** :
+- Fusionner dialogues interrompus : `“A,” he said, “B”` → `« A, dit-il, B »` ❌
+- Supprimer des paires de guillemets
+
+{% endif %}
+
+---
+
+{# ========================================
+   SECTION 3 : EXEMPLE SPÉCIFIQUE
+   ======================================== #}
+
+## 💡 Exemple pour ton cas ({{ expected_pairs }} paire(s))
+
+{% if expected_pairs == 0 %}
+**Exemple : Texte sans guillemets**
+
+Original (0 paire) :
+```
+The cat slept peacefully on the couch.
+```
+
+✅ CORRECT (0 paire) :
+```
+Le chat dormait paisiblement sur le canapé.
+```
+
+❌ INCORRECT (1 paire ajoutée par erreur) :
+```
+Le chat « dormait paisiblement » sur le canapé.
+```
+
+{% elif expected_pairs == 1 %}
+**Exemple : Dialogue simple**
+
+Original (1 paire) :
+```
+“Hello, world!”
+```
+
+✅ CORRECT (1 paire) :
+```
+« Bonjour, monde ! »
+```
+
+❌ INCORRECT (dialogue divisé en 2 paires) :
+```
+« Bonjour », « monde » !
+```
+
+{% elif expected_pairs == 2 %}
+**Exemple : Dialogue interrompu**
+
+Original (2 paires) :
+```
+“You can think,” she said, “after you arrest him!”
+```
+
+❌ INCORRECT (fusion en 1 paire) :
+```
+« Tu peux penser, dit-elle, après l'avoir arrêté ! »
+```
+→ Le narrateur `she said` n'est plus séparé du dialogue
+
+✅ CORRECT (2 paires préservées) :
+```
+« Tu peux penser », dit-elle, « après l'avoir arrêté ! »
+```
+→ Structure claire : [Dialogue 1] [Narrateur] [Dialogue 2]
+
+**Exemple 2bis : Pensées intérieures + dialogues avec séparateurs (CRITIQUE)**
+
+Original (2 paires, 5 séparateurs `</>`) :
+```
+He declined a reward</>, she thought, </>but I really must find </>some </>way to pay him back...</> “Yes,” she said, finally. “That would indeed be the adventurer I hired.”
+```
+
+❌ INCORRECT (guillemets ajoutés aux pensées + séparateurs supprimés) :
+```
+« Il a refusé une récompense », pensa-t-elle, « mais je dois vraiment trouver un moyen de le rembourser... » « Oui », dit-elle finalement. « Ce serait effectivement l'aventurier que j'ai engagé. »
+```
+→ ERREUR 1 : 4 paires de guillemets au lieu de 2 (pensées en guillemets ❌)
+→ ERREUR 2 : 0 séparateurs `</>` au lieu de 5 (tous supprimés ❌)
+
+✅ CORRECT (2 paires aux positions des dialogues, 5 séparateurs préservés) :
+```
+Il a refusé une récompense</>, pensa-t-elle, </>mais je dois vraiment trouver </>un </>moyen de le rembourser...</> « Oui », dit-elle finalement. « Ce serait effectivement l'aventurier que j'ai engagé. »
+```
+→ Seulement 2 paires de guillemets (aux dialogues `“Yes”` et `“That would”`) ✅
+→ 5 séparateurs `</>` préservés exactement aux mêmes positions ✅
+→ Pensées intérieures SANS guillemets (comme l'original) ✅
+
+💡 **Règles critiques** :
+1. **Guillemets seulement aux positions EXACTES** où l'original en a (ne pas ajouter aux pensées)
+2. **TOUS les séparateurs `</>`** doivent être préservés (ne jamais les supprimer)
+3. Si texte SANS guillemets dans l'original (pensées, narration) → NE PAS ajouter guillemets
+
+{% elif expected_pairs == 3 %}
+**Exemple : 3 paires de guillemets**
+
+Original (3 paires) :
+```
+“I'll never forget it. At first I thought Balirossa had just gotten a little overzealous and charged in too far.” The two of them burst into laughter. “So Rys,” Flio said, “what are you in the mood for today?”
+```
+
+Structure des 3 paires :
+- Paire 1 : `“I'll never forget it. ... too far.”` (dialogue complet)
+- Paire 2 : `“So Rys,”` (dialogue interrompu - partie 1)
+- Paire 3 : `“what are you in the mood for today?”` (dialogue interrompu - partie 2)
+
+✅ CORRECT (3 paires préservées) :
+```
+« Je n'oublierai jamais ça. Au début, j'ai cru que Balirossa s'était juste un peu trop enthousiasmée et avait chargé trop loin. » Tous deux éclatèrent de rire. « Alors Rys, » dit Flio, « qu'as-tu envie de faire aujourd'hui ? »
+```
+
+💡 **Astuce** : Numérote mentalement chaque paire dans l'original (P1, P2, P3) avant de traduire !
+
+{% elif expected_pairs == 4 %}
+**Exemple : 4 paires de guillemets**
+
+Original (4 paires) :
+```
+“First dialogue,” he said. “Second dialogue,” she replied, “third part,” he ended the discussion, “fourth part.”
+```
+
+Structure des 4 paires :
+- Paire 1 (P1) : `“First dialogue,”`
+- Paire 2 (P2) : `“Second dialogue,”`
+- Paire 3 (P3) : `“third part.”` (début interrompu)
+- Paire 4 (P4) : (suite de l'interruption)
+
+Méthode : Numérote chaque ouverture `“` dans l'original → P1, P2, P3, P4
+
+✅ CORRECT (4 paires préservées) :
+```
+« Premier dialogue », dit-il. « Deuxième dialogue », répondit-elle, « troisième partie », il mit fin à la discussion, « quatrième partie. »
+```
+
+💡 **Astuce** : Pour 4+ paires, numérote chaque `“` ouvrant dans l'original (P1, P2, P3, P4) avant de traduire !
+
+{% else %}
+**Exemple : Multiples paires ({{ expected_pairs }} paires)**
+
+Original ({{ expected_pairs }} paires) :
+```
+Texte avec {{ expected_pairs }} paires de guillemets bien séparées.
+```
+
+✅ CORRECT ({{ expected_pairs }} paires) :
+```
+Traduction avec EXACTEMENT {{ expected_pairs }} paires de guillemets.
+```
+
+💡 **Procédure pour 5+ paires** :
+1. Numérote chaque guillemet ouvrant dans l'original : P1, P2, P3, P4, P5...
+2. Identifie où chaque paire se ferme (dialogue complet ou interrompu)
+3. Préserve EXACTEMENT la même structure dans ta traduction
+4. Vérifie que tu as bien {{ expected_pairs }} paires avant de répondre
+
+{% endif %}
+
+---
+
+{# ========================================
+   SECTION 4 : FORMAT DE SORTIE EXACT
+   ======================================== #}
+
+## 🎯 FORMAT DE SORTIE EXACT
+
+{% if expected_pairs == 0 %}
+**Structure attendue** : Texte continu SANS aucun guillemet
+
+Exemple :
+```
+Le chat dort sur le canapé. Il ronfle doucement.
+```
+
+{% elif expected_pairs == 1 %}
+**Structure attendue** : UNE ouverture « et UNE fermeture »
+
+Exemple :
+```
+« Bonjour le monde ! »
+```
+
+{% elif expected_pairs == 2 %}
+**Structure attendue** : DEUX ouvertures « et DEUX fermetures »
+
+Si dialogue interrompu, structure OBLIGATOIRE :
+```
+« Partie 1 » narrateur « Partie 2 »
+```
+
+⚠️ ATTENTION : Les guillemets doivent ENTOURER seulement le dialogue, PAS le narrateur !
+
+❌ INCORRECT :
+```
+« Partie 1 narrateur Partie 2 »
+```
+→ Le narrateur est DANS les guillemets (fusion) ❌
+
+✅ CORRECT :
+```
+« Partie 1 » narrateur « Partie 2 »
+```
+→ Le narrateur est HORS des guillemets (interruption préservée) ✅
+
+{% elif expected_pairs >= 3 %}
+**Structure attendue** : {{ expected_pairs }} ouvertures « et {{ expected_pairs }} fermetures »
+
+Pour {{ expected_pairs }} paires, tu DOIS avoir :
+- {{ expected_pairs }} symboles « (guillemets ouvrants)
+- {{ expected_pairs }} symboles » (guillemets fermants)
+
+📝 **MÉTHODE DE VÉRIFICATION OBLIGATOIRE** :
+
+AVANT de finaliser ta réponse, COMPTE manuellement :
+
+1️⃣ Compte les « dans ta traduction : _______
+2️⃣ Compte les » dans ta traduction : _______
+3️⃣ Vérifie : Si les deux nombres = {{ expected_pairs }} → ✅ OK
+4️⃣ Sinon → 🔴 ERREUR, corrige immédiatement !
+
+**Exemple de structure pour {{ expected_pairs }} paires** :
+
+Si dialogues interrompus :
+```
+« P1 » narrateur « P2 » narrateur. « P3 » narrateur « P4 »
+```
+
+Si dialogues séparés :
+```
+« P1 » narrateur. « P2 » narrateur. « P3 » narrateur. « P4 »
+```
+
+⚠️ RÈGLE CRITIQUE : Chaque « doit avoir sa » correspondante !
+
+{% endif %}
+
+---
+
+{# ========================================
+   SECTION 5 : RE-TRADUCTION DEMANDÉE
+   ======================================== #}
+
+## 🔄 RE-TRADUCTION DEMANDÉE
+
+Re-traduis le texte en **{{ target_language }}** en préservant STRICTEMENT le nombre de paires de guillemets.
+
+{% if expected_pairs == 0 %}
+**Nombre de paires requis** : AUCUNE (texte sans guillemets)
+{% else %}
+**Nombre de paires requis** : EXACTEMENT {{ expected_pairs }}
+{% endif %}
+
+**Texte à re-traduire** :
+{{ original_text }}
+
+---
+
+{# ========================================
+   SECTION 6 : CHECKLIST
+   ======================================== #}
+
+## ✅ CHECKLIST POST-GÉNÉRATION
+
+⚠️ **IMPORTANT** : Vérifie APRÈS avoir écrit ta traduction complète !
+
+{% if expected_pairs == 0 %}
+- [ ] Ma traduction ne contient AUCUN guillemet (ni `«`, ni `»`)
+- [ ] C'est un texte narratif normal
+{% else %}
+- [ ] J'ai COMPTÉ mes guillemets ouvrants « : j'en ai exactement {{ expected_pairs }}
+- [ ] J'ai COMPTÉ mes guillemets fermants » : j'en ai exactement {{ expected_pairs }}
+- [ ] Chaque « a bien sa » correspondante
+{% if expected_pairs >= 2 %}
+- [ ] Si dialogue interrompu, le narrateur est HORS des guillemets (pas fusionné)
+- [ ] Chaque dialogue séparé a sa propre paire distincte
+{% endif %}
+{% endif %}
+- [ ] Je termine par `[=[END]=]`
+
+---
+
+⚠️ **RAPPEL CRITIQUE** : {{ expected_pairs }} paire(s) requise(s) (pas plus, pas moins)
+
+🔴 **DERNIÈRE VÉRIFICATION** : Compte les « et » dans ta réponse ci-dessous AVANT de la finaliser !
+
+Corrige la traduction incorrecte maintenant :

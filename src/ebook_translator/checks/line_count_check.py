@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from ..logger import get_logger
 from .base import Check, CheckResult, ValidationContext, LineCountErrorData, ErrorData
+from .retry_helper import retry_with_reasoning
 
 if TYPE_CHECKING:
     pass
@@ -124,8 +125,8 @@ class LineCountCheck(Check):
         Corrige en retranslant uniquement les lignes manquantes.
 
         Cette méthode construit un prompt ciblé contenant seulement les
-        lignes manquantes, les traduit, puis merge avec les traductions
-        existantes.
+        lignes manquantes, les traduit avec retry automatique (normal → reasoning),
+        puis merge avec les traductions existantes.
 
         Args:
             context: Contexte de validation
@@ -143,7 +144,6 @@ class LineCountCheck(Check):
             >>> corrected = check.correct(context, error_data)
             >>> # corrected = {0: "Bonjour", 1: "Monde"}
         """
-        from ..config import TemplateNames
         from ..translation.parser import (
             parse_llm_translation_output,
             validate_retry_indices,
@@ -158,44 +158,93 @@ class LineCountCheck(Check):
         typed_error_data = cast(LineCountErrorData, error_data)
         missing_indices = typed_error_data["missing_indices"]
 
-        # Construire le contenu source avec seulement les lignes manquantes
-        missing_texts = {idx: context.original_texts[idx] for idx in missing_indices}
-        source_content = "\n".join(
-            f"<{idx}/>{text}" for idx, text in missing_texts.items()
-        )
-
-        # Construire prompt ciblé
-        prompt = context.llm.render_prompt(
-            TemplateNames.Missing_Lines_Targeted_Template,
-            target_language=context.target_language,
-            missing_indices=missing_indices,
-            source_content=source_content,
-        )
-
-        logger.debug(
+        logger.info(
             f"[LineCountCheck] Correction de {len(missing_indices)} lignes "
             f"pour chunk {context.chunk.index}"
         )
 
-        # Appel LLM
-        llm_context = f"correction_missing_chunk_{context.chunk.index:03d}"
-        llm_output = context.llm.query(prompt, "", context=llm_context)
-        corrected_translations = parse_llm_translation_output(llm_output)
+        # Stocker les corrections réussies
+        corrected_translations: dict[int, str] = {}
 
-        # Valider que le retry a fourni les bons indices
-        is_retry_valid, retry_error = validate_retry_indices(
-            corrected_translations, missing_indices
+        # Fonction de rendu du prompt
+        def render_prompt(attempt: int, use_reasoning: bool) -> str:
+            # Le paramètre use_reasoning est passé mais non utilisé ici
+            # car le même template est utilisé pour les deux tentatives
+            if context.llm is None:
+                raise ValueError("LLM is None")
+            return context.llm.renderer.render_missing_lines(
+                context.chunk,
+                missing_indices=missing_indices,
+                target_language=context.target_language,
+            )
+
+        # Fonction de validation
+        def validate_result(llm_output: str) -> bool:
+            try:
+                parsed = parse_llm_translation_output(llm_output)
+
+                # Valider que le retry a fourni les bons indices
+                is_retry_valid, retry_error = validate_retry_indices(
+                    parsed, missing_indices
+                )
+
+                if is_retry_valid:
+                    # Stocker les corrections pour utilisation après
+                    corrected_translations.update(parsed)
+                    return True
+                else:
+                    logger.warning(
+                        f"[LineCountCheck] Validation échouée: {retry_error}"
+                    )
+                    return False
+            except Exception as e:
+                logger.warning(f"[LineCountCheck] Erreur parsing: {e}")
+                return False
+
+        # Exécuter le retry avec reasoning
+        success, _ = retry_with_reasoning(
+            context=context,
+            render_prompt=render_prompt,
+            validate_result=validate_result,
+            context_name="missing_lines",
+            max_attempts=2,
         )
 
-        if not is_retry_valid:
-            raise ValueError(f"Retry invalide: {retry_error}")
+        if not success:
+            raise ValueError(
+                f"[LineCountCheck] Échec correction après 2 tentatives pour chunk {context.chunk.index}"
+            )
 
         # Merger avec traductions existantes
         result = dict(context.translated_texts)
         result.update(corrected_translations)
 
-        logger.debug(
-            f"[LineCountCheck] Correction réussie: {len(corrected_translations)} lignes corrigées"
+        logger.info(
+            f"[LineCountCheck] ✅ Correction réussie: {len(corrected_translations)} lignes corrigées"
         )
 
         return result
+
+    def get_invalid_lines(
+        self, context: ValidationContext, error_data: ErrorData
+    ) -> set[int]:
+        """
+        Identifie les lignes manquantes comme invalides.
+
+        Args:
+            context: Contexte de validation
+            error_data: Données d'erreur avec missing_indices
+
+        Returns:
+            Set des indices de lignes manquantes (à filtrer)
+
+        Example:
+            >>> error_data = {"missing_indices": [5, 10, 15]}
+            >>> invalid = check.get_invalid_lines(context, error_data)
+            >>> # invalid = {5, 10, 15}
+        """
+        typed_error_data = cast(LineCountErrorData, error_data)
+        return set(typed_error_data["missing_indices"])
+
+    def build_filter_reason(self, line_idx, error_data):
+        return "Ligne manquante après correction"

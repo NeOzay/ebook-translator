@@ -13,9 +13,14 @@ from typing import TYPE_CHECKING
 
 from ebooklib import epub
 
-from ..checks import ValidationPipeline
-from ..checks.fragment_count_check import FragmentCountCheck
-from ..checks.line_count_check import LineCountCheck
+from ..htmlpage.bilingual import BilingualFormat
+
+from ..checks import (
+    ValidationPipeline,
+    FragmentCountCheck,
+    LineCountCheck,
+    PunctuationCheck,
+)
 from ..glossary import Glossary
 from ..logger import get_logger
 from ..segment import Segmentator
@@ -149,7 +154,7 @@ class TwoPhasePipeline:
         try:
             # Parcourir les paires (original, traduit)
             for (page, tag_key, original_text), (idx, translated_text) in zip(
-                chunk.fetch(), final_translations.items()
+                chunk.fetch_body(), final_translations.items()
             ):
                 if original_text and translated_text:
                     # Apprendre la paire (extraction automatique)
@@ -175,8 +180,9 @@ class TwoPhasePipeline:
         phase1_max_tokens: int = 1500,
         phase2_max_tokens: int = 300,
         correction_workers: int = 2,
-        validation_timeout: float = 30.0,
+        max_retries: int = 1,
         auto_validate_glossary: bool = False,
+        bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
     ) -> dict:
         """
         Exécute le pipeline complet de traduction en 2 phases.
@@ -249,10 +255,13 @@ class TwoPhasePipeline:
         # DÉMARRAGE VALIDATION WORKER POOL
         # =====================================================================
         logger.info("🔧 Démarrage du pool de validation...")
-        pipeline = ValidationPipeline([
-            LineCountCheck(),
-            FragmentCountCheck(),
-        ])
+        pipeline = ValidationPipeline(
+            [
+                LineCountCheck(),
+                PunctuationCheck(),
+                FragmentCountCheck(),
+            ]
+        )
         self.validation_pool = ValidationWorkerPool(
             num_workers=correction_workers,  # Réutiliser paramètre (défaut: 2)
             pipeline=pipeline,
@@ -260,7 +269,8 @@ class TwoPhasePipeline:
             llm=self.llm,
             target_language=target_language_str,
             phase="initial",
-            on_validated=self._learn_glossary_from_validated_chunk,  # Apprendre glossaire après validation
+            # on_validated=self._learn_glossary_from_validated_chunk,  # Apprendre glossaire après validation
+            max_retries=max_retries,
         )
         self.validation_pool.start()
 
@@ -316,7 +326,7 @@ class TwoPhasePipeline:
                 f"  • Rejetés: {validation_stats['rejected']}"
             )
 
-            if validation_stats['rejected'] > 0:
+            if validation_stats["rejected"] > 0:
                 raise RuntimeError(
                     f"❌ {validation_stats['rejected']} chunk(s) rejeté(s) après validation Phase 1\n"
                     "Veuillez vérifier les logs pour plus de détails."
@@ -326,9 +336,13 @@ class TwoPhasePipeline:
             logger.info("\n📚 Validation du glossaire avant Phase 2...")
             validator = GlossaryValidator(self.glossary)
 
+            logger.info(self.glossary.get_statistics())
+
             glossary_validated = validator.validate_interactive(
                 auto_resolve=auto_validate_glossary
             )
+
+            self.glossary.clean_all()
 
             if not glossary_validated:
                 raise RuntimeError(
@@ -351,6 +365,22 @@ class TwoPhasePipeline:
 
             # Recréer ValidationWorkerPool pour Phase 2 (refined_store)
             logger.info("🔄 Recréation ValidationWorkerPool pour Phase 2 (refined)...")
+
+            def _put_translation_in_html_item(
+                chunk: "Chunk", final_translations: dict[int, str]
+            ) -> None:
+                for index, (page, tag_key, original_text) in enumerate(
+                    chunk.fetch_body()
+                ):
+                    translated_text = final_translations.get(index)
+                    if original_text and translated_text:
+                        page.replace_text(
+                            tag_key,
+                            translated_text,
+                            bilingual_format=bilingual_format,
+                            original_text=original_text,
+                        )
+
             self.validation_pool = ValidationWorkerPool(
                 num_workers=correction_workers,
                 pipeline=pipeline,  # Réutiliser même pipeline
@@ -358,6 +388,8 @@ class TwoPhasePipeline:
                 llm=self.llm,
                 target_language=target_language_str,
                 phase="refined",  # ← Changé pour refined
+                max_retries=max_retries,
+                on_validated=_put_translation_in_html_item,  # Mettre à jour HTML après validation
             )
             self.validation_pool.start()
             logger.info("  • ValidationWorkerPool basculé vers refined_store")
@@ -374,7 +406,9 @@ class TwoPhasePipeline:
             logger.info("=" * 60)
 
             # Segmentation Phase 2 (petits blocs)
-            segmentator_phase2 = Segmentator(html_items, max_tokens=phase2_max_tokens)
+            segmentator_phase2 = Segmentator(
+                html_items, max_tokens=phase2_max_tokens, overlap_ratio=1
+            )
             chunks_phase2 = list(segmentator_phase2.get_all_segments())
             logger.info(
                 f"  • {len(chunks_phase2)} chunks créés ({phase2_max_tokens} tokens)"
@@ -412,7 +446,7 @@ class TwoPhasePipeline:
                 f"  • En attente: {self.validation_stats['pending']}"
             )
 
-            if self.validation_stats['rejected'] > 0:
+            if self.validation_stats["rejected"] > 0:
                 logger.warning(
                     f"⚠️ {self.validation_stats['rejected']} chunk(s) ont été rejetés "
                     f"(n'ont pas passé la validation après corrections)"

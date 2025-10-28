@@ -22,13 +22,10 @@ class ConfigBase:
 
 class TemplateNames(ConfigBase):
     First_Pass_Template: str = "translate.jinja"
-    Retry_Translation_Template: str = "retry_translation.jinja"
-    Retry_Translation_Flexible_Template: str = "retry_translation_flexible.jinja"  # Placement libre, même nombre
-    Retry_Translation_Strict_Template: str = "retry_translation_strict.jinja"
-    Missing_Lines_Targeted_Template: str = (
-        "retry_missing_lines_targeted.jinja"  # Nouveau (seulement lignes manquantes)
-    )
-    Refine_Template: str = "refine.jinja"  # Phase 2 affinage
+    Retry_Fragments_Template: str = "retry_fragments.jinja"
+    Retry_Fragments_Flexible_Template: str = "retry_fragments_flexible.jinja"
+    Missing_Lines_Targeted_Template: str = "retry_missing_lines_targeted.jinja"
+    Refine_Template: str = "refine.jinja"
 
 
 class Logger_Level(ConfigBase):

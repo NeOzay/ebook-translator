@@ -7,13 +7,17 @@ contexte entre les chunks via un système de chevauchement (overlap).
 """
 
 from dataclasses import dataclass, field
-from typing import Iterator
+from typing import Iterator, TYPE_CHECKING
 
 import tiktoken
 
 from .htmlpage import TagKey, get_files, HtmlPage
 from .logger import get_logger
 from ebooklib import epub
+
+if TYPE_CHECKING:
+    from .store import Store
+    from .stores import MultiStore
 
 logger = get_logger(__name__)
 
@@ -50,11 +54,11 @@ class Chunk:
     """
 
     index: int
-    head: list[str] = field(default_factory=list)
+    head: dict[TagKey, str] = field(default_factory=dict)
     body: dict[TagKey, str] = field(default_factory=dict)
-    tail: list[str] = field(default_factory=list)
+    tail: dict[TagKey, str] = field(default_factory=dict)
 
-    def fetch(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
+    def fetch_body(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
         """
         Génère des tuples (page, tag_key, texte) pour chaque fragment du body.
 
@@ -76,6 +80,20 @@ class Chunk:
         for tag_key, text in self.body.items():
             yield tag_key.page, tag_key, text
 
+    def fetch_all(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
+        """
+        Génère des tuples (page, tag_key, texte) pour chaque fragment du chunk.
+
+        Cela inclut les fragments du head, body et tail, dans cet ordre.
+
+        Yields:
+            Tuples (HtmlPage, TagKey, texte original)
+        """
+
+        for section in (self.head, self.body, self.tail):
+            for tag_key, text in section.items():
+                yield tag_key.page, tag_key, text
+
     def __str__(self) -> str:
         """
         Convertit le chunk en format string pour envoi au LLM.
@@ -92,11 +110,11 @@ class Chunk:
         Returns:
             Représentation textuelle formatée du chunk
         """
-        parts = []
+        parts: list[str] = []
 
         # Ajouter le contexte du head
         if self.head:
-            parts.extend(self.head)
+            parts.extend(self.head.values())
 
         # Ajouter le body avec indices
         for index, text in enumerate(self.body.values()):
@@ -104,7 +122,7 @@ class Chunk:
 
         # Ajouter le contexte du tail
         if self.tail:
-            parts.extend(self.tail)
+            parts.extend(self.tail.values())
 
         return "\n\n".join(parts)
 
@@ -155,11 +173,11 @@ class Chunk:
             Le nom "mark_lines_to_numbered" signifie "marquer (numéroter) les lignes
             spécifiées", pas "renvoyer seulement les lignes numérotées".
         """
-        parts = []
+        parts: list[str] = []
 
         # Ajouter le contexte du head
         if self.head:
-            parts.extend(self.head)
+            parts.extend(self.head.values())
 
         # Ajouter le body avec indices
         for index, text in enumerate(self.body.values()):
@@ -170,9 +188,40 @@ class Chunk:
 
         # Ajouter le contexte du tail
         if self.tail:
-            parts.extend(self.tail)
+            parts.extend(self.tail.values())
 
         return "\n\n".join(parts)
+
+    def get_translation_for_prompt(self, store: "Store|MultiStore") -> tuple[str, bool]:
+        translations, missing = store.get_all_from_chunk(self)
+
+        parts: list[str] = []
+
+        # Ajouter le contexte du head
+        if self.head:
+            parts.extend(map(lambda tag_key: translations[tag_key], self.head.keys()))
+
+        # Ajouter le body avec indices
+        for index, tag_key in enumerate(self.body.keys()):
+            parts.append(f"<{index}/>{translations[tag_key]}")
+
+        # Ajouter le contexte du tail
+        if self.tail:
+            parts.extend(map(lambda tag_key: translations[tag_key], self.tail.keys()))
+
+        return "\n\n".join(parts), missing
+
+    def get_body_size(self) -> int:
+        """Retourne le nombre de fragments dans le body du chunk."""
+        return len(self.body)
+
+    def get_head_size(self) -> int:
+        """Retourne le nombre de fragments dans le head du chunk."""
+        return len(self.head)
+
+    def get_tail_size(self) -> int:
+        """Retourne le nombre de fragments dans le tail du chunk."""
+        return len(self.tail)
 
     def __hash__(self) -> int:
         """Retourne le hash basé sur l'identité de l'objet."""
@@ -311,7 +360,7 @@ class Segmentator:
                 for chunk in list(chunk_queue.keys()):
                     # Ajouter au tail tant qu'il reste du budget
                     if chunk_queue[chunk] > 0:
-                        chunk.tail.append(text)
+                        chunk.tail[tag_key] = text
                         chunk_queue[chunk] -= token_count
 
                     # Si le budget est épuisé ou négatif, yield le chunk
@@ -326,13 +375,13 @@ class Segmentator:
 
                 chunk_index += 1
                 current_chunk = self._create_new_chunk(index=chunk_index)
-                self._add_fragment_to_chunk(current_chunk, page, tag_key, text)
+                self._add_fragment_to_body(current_chunk, page, tag_key, text)
                 self._fill_head_from_previous(chunk_queue, current_chunk)
 
                 current_token_count = token_count
             else:
                 # Ajouter au chunk actuel
-                self._add_fragment_to_chunk(current_chunk, page, tag_key, text)
+                self._add_fragment_to_body(current_chunk, page, tag_key, text)
                 current_token_count += token_count
 
         # Yield les chunks restants dans la queue
@@ -364,7 +413,7 @@ class Segmentator:
         """
         return int(self.max_tokens * self.overlap_ratio)
 
-    def _add_fragment_to_chunk(
+    def _add_fragment_to_body(
         self, chunk: Chunk, page: HtmlPage, tag_key: TagKey, text: str
     ) -> None:
         """
@@ -407,21 +456,24 @@ class Segmentator:
         """
         overlap_budget = self._calculate_overlap_tokens()
 
+        collect_text: dict[TagKey, str] = {}
         for chunk in reversed(previous_chunks.keys()):
-            body_texts = list(chunk.body.values())
             # Parcourir le body en ordre inverse
-            for text in reversed(body_texts):
+            for tag_key in reversed(chunk.body):
+                text = chunk.body[tag_key]
                 token_count = self.count_tokens(text)
                 overlap_budget -= token_count
 
                 if overlap_budget > 0:
                     # Ajouter au début du head
-                    current_chunk.head.insert(0, text)
+                    collect_text[tag_key] = text
                 else:
                     # Budget épuisé
                     break
             if overlap_budget <= 0:
                 break
+        for tag_key in reversed(collect_text):
+            current_chunk.head[tag_key] = collect_text[tag_key]
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
@@ -431,7 +483,9 @@ class Segmentator:
         if self.overlap_ratio < 1.0:
             overlap_str = f"{self.overlap_ratio*100:.0f}% ({overlap_tokens} tokens)"
         else:
-            overlap_str = f"{self.overlap_ratio:.1f}× max_tokens ({overlap_tokens} tokens)"
+            overlap_str = (
+                f"{self.overlap_ratio:.1f}× max_tokens ({overlap_tokens} tokens)"
+            )
 
         return (
             f"Segmentator("

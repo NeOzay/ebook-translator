@@ -50,10 +50,10 @@ def build_translation_map(
     """
     translation_map: dict[str, dict[str, str]] = {}
 
-    for i, (current_file, tag_key, original_text) in enumerate(chunk.fetch()):
+    for i, (current_file, tag_key, original_text) in enumerate(chunk.fetch_body()):
         # Obtenir la traduction
         if i not in translated_texts:
-            raise KeyError(f"Index {i} manquant dans translated_texts")
+            continue
 
         source_path = current_file.epub_html.file_name
         translated_text = translated_texts[i]

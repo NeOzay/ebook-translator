@@ -3,11 +3,49 @@ Tests pour la validation du nombre de lignes dans les traductions.
 """
 
 import pytest
-from ebook_translator.translation.parser import (
-    count_expected_lines,
-    validate_line_count,
-    parse_llm_translation_output,
-)
+from ebook_translator.checks.line_count_check import count_expected_lines
+from ebook_translator.translation.parser import parse_llm_translation_output
+
+
+# validate_line_count a été supprimée, logique déplacée dans LineCountCheck
+def validate_line_count(
+    translations: dict[int, str],
+    expected_count: int | None = None,
+    source_content: str | None = None
+) -> tuple[bool, str | None]:
+    """Fonction de compatibilité pour tests existants."""
+    if expected_count is None and source_content is None:
+        raise ValueError("Au moins un de expected_count ou source_content doit être fourni")
+
+    if expected_count is None and source_content is not None:
+        expected_count = count_expected_lines(source_content)
+
+    actual = len(translations)
+    expected_indices = set(range(expected_count))  # type: ignore
+    actual_indices = set(translations.keys())
+
+    if expected_count == actual:
+        return True, None
+
+    # Construire message d'erreur détaillé
+    missing = sorted(expected_indices - actual_indices)
+    extra = sorted(actual_indices - expected_indices)
+
+    error_parts = [f"Attendu: {expected_count} lignes", f"Reçu: {actual} lignes"]
+
+    if missing:
+        missing_str = ", ".join(f"<{i}/>" for i in missing[:10])
+        if len(missing) > 10:
+            missing_str += f" (+{len(missing) - 10} autres)"
+        error_parts.append(f"Lignes manquantes: {missing_str}")
+
+    if extra:
+        extra_str = ", ".join(f"<{i}/>" for i in extra[:10])
+        if len(extra) > 10:
+            extra_str += f" (+{len(extra) - 10} autres)"
+        error_parts.append(f"Lignes en trop: {extra_str}")
+
+    return False, "\n".join(error_parts)
 
 
 class TestCountExpectedLines:

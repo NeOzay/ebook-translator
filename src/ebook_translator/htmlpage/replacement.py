@@ -8,11 +8,15 @@ from bs4.element import NavigableString, Tag
 
 from .constants import FRAGMENT_SEPARATOR, VALID_ROOT_TAGS
 from .bilingual import BilingualFormat, format_bilingual_inline
+from ..logger import get_logger
 
 if TYPE_CHECKING:
     from typing import Union
 
     TextFragment = Union[NavigableString, list[NavigableString]]
+
+
+logger = get_logger(__name__)
 
 
 def preserve_whitespace(original: str, translated: str) -> str:
@@ -118,8 +122,6 @@ class TextReplacer:
             # AVERTISSEMENT: Cette erreur aurait dû être détectée AVANT la reconstruction
             # par Phase1Worker ou Phase2Worker. Si elle apparaît ici, c'est que la validation
             # a échoué ou a été contournée (traduction manuelle, cache corrompu, etc.)
-            from ..logger import get_logger
-            logger = get_logger(__name__)
             logger.error(
                 f"⚠️ FRAGMENT MISMATCH DÉTECTÉ PENDANT LA RECONSTRUCTION!\n"
                 f"  • Cette erreur aurait dû être détectée en Phase 1/2\n"
@@ -132,7 +134,6 @@ class TextReplacer:
                 f"  • Un bug dans la validation Phase 1/2"
             )
 
-            # Tenter de lever l'exception structurée pour permettre le retry
             try:
                 from .exceptions import FragmentMismatchError
 
@@ -316,7 +317,9 @@ class TextReplacer:
                         # Préserver les espaces de bordure du fragment original
                         original_text = str(child)
                         translated_segment = segments[segment_index]
-                        preserved_text = preserve_whitespace(original_text, translated_segment)
+                        preserved_text = preserve_whitespace(
+                            original_text, translated_segment
+                        )
                         target.append(preserved_text)
                         segment_index += 1
                 elif isinstance(child, Tag):

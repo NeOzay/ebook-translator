@@ -1,3 +1,7 @@
+{# ========================================
+   SECTION 1 : ANALYSE DE L'ERREUR
+   ======================================== #}
+
 ⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de séparateurs `</>`.
 
 Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté la structure du texte original.
@@ -28,62 +32,72 @@ Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as
 
 ---
 
+{# ========================================
+   SECTION 2 : RÈGLES À RESPECTER
+   ======================================== #}
+
 {% if expected_separators == 0 %}
-## ✅ RÈGLE À RESPECTER : Texte CONTINU (AUCUN séparateur)
+## ✅ RÈGLE : Texte CONTINU (AUCUN séparateur)
 
 Le texte original **ne contient AUCUN séparateur `</>`**.
 
-Ta traduction doit donc être **UN SEUL BLOC de texte continu**, fluide, sans `</>`.
+Ta traduction doit être **UN SEUL BLOC** de texte fluide, sans `</>`.
 
 ⚠️ **INTERDIT** :
 - Ajouter des `</>` dans la traduction
 - Couper le texte en plusieurs parties
-- Séparer les mots ou les phrases avec `</>`
 
 ✅ **AUTORISÉ** :
-- Traduire le texte comme une phrase complète et fluide
+- Traduire comme une phrase complète et fluide
 - Utiliser la ponctuation normale (virgules, points, guillemets)
 
-**Exemple de format CORRECT (texte continu)** :
+{% else %}
+## ✅ RÈGLE : Texte avec {{ expected_separators }} séparateur(s) `</>`
 
+Le texte original contient **EXACTEMENT {{ expected_separators }} séparateur(s) `</>`**.
+
+Tu dois **conserver EXACTEMENT ces séparateurs** aux mêmes positions relatives.
+
+⚠️ **Position des séparateurs** :
+
+{{ original_text | replace('</>', ' [</>] ') }}
+
+Tu dois :
+1. Traduire chaque partie séparément
+2. Remettre les séparateurs `</>` aux mêmes endroits
+3. Ne pas ajouter ou supprimer de séparateurs
+
+{% endif %}
+
+---
+
+{# ========================================
+   SECTION 3 : EXEMPLES
+   ======================================== #}
+
+## 💡 Exemples
+
+{% if expected_separators == 0 %}
+**Exemple CORRECT (texte continu)** :
 ```txt
 Ceci est une phrase complète traduite sans aucun séparateur, avec une ponctuation normale.
-
 [=[END]=]
 ```
 
 **Exemple INCORRECT (séparateurs ajoutés par erreur)** :
-
 ```txt
 Ceci est</>une phrase</>traduite incorrectement.
 [=[END]=]
 ```
 
 {% else %}
-## ✅ RÈGLE À RESPECTER : Texte avec {{ expected_separators }} séparateur(s) `</>`
-
-Le texte original contient **EXACTEMENT {{ expected_separators }} séparateur(s) `</>`**.
-
-Tu dois **conserver EXACTEMENT ces séparateurs** aux mêmes positions relatives dans ta traduction.
-
-⚠️ **Position des séparateurs dans l'original** :
-
-{{ original_text | replace('</>', ' [</>] ') }}
-
-Chaque séparateur `</>` divise le texte en parties. Tu dois :
-1. Traduire chaque partie séparément
-2. Remettre les séparateurs `</>` aux mêmes endroits (entre les parties traduites)
-3. Ne pas ajouter ou supprimer de séparateurs
-
-**Exemple de format CORRECT (avec séparateurs)** :
-
+**Exemple CORRECT (avec séparateurs)** :
 ```txt
 Premier fragment</>Deuxième fragment</>Troisième fragment
 [=[END]=]
 ```
 
 **Exemple INCORRECT (séparateurs déplacés/supprimés)** :
-
 ```txt
 Premier fragment Deuxième fragment</>Troisième fragment
 [=[END]=]
@@ -92,6 +106,10 @@ Premier fragment Deuxième fragment</>Troisième fragment
 {% endif %}
 
 ---
+
+{# ========================================
+   SECTION 4 : RE-TRADUCTION DEMANDÉE
+   ======================================== #}
 
 ## 🔄 RE-TRADUCTION DEMANDÉE
 
@@ -109,6 +127,10 @@ Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT la struct
 
 ---
 
+{# ========================================
+   SECTION 5 : CHECKLIST
+   ======================================== #}
+
 ## ✅ CHECKLIST AVANT DE RÉPONDRE
 
 {% if expected_separators == 0 %}
@@ -125,4 +147,4 @@ Re-traduis le texte en {{ target_language }} en respectant STRICTEMENT la struct
 
 ---
 
-Fournis ta re-traduction maintenant :
+Corrige la traduction incorrecte maintenant :

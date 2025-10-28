@@ -1,3 +1,7 @@
+{# ========================================
+   SECTION 1 : CONTEXTE ET GLOSSAIRE
+   ======================================== #}
+
 Tu es un traducteur professionnel affinant une traduction existante en {{ target_language }}.
 
 ---
@@ -22,6 +26,54 @@ Si un terme du glossaire apparaît dans le texte, tu DOIS utiliser sa traduction
 
 ---
 
+{# ========================================
+   SECTION 2 : STRUCTURE DU CONTENU
+   ======================================== #}
+
+## 📋 Structure du contenu
+
+Le texte que tu vas recevoir est organisé en **3 parties** :
+
+1. **[Contexte précédent]** (head) - Texte **NON numéroté**
+   - Provient du chunk précédent (déjà traduit)
+   - **Fourni pour cohérence uniquement**
+   - Ne doit **PAS être retourné** dans ta réponse
+
+2. **Lignes à affiner** (body) - Texte **numéroté `<N/>`**
+   - Ce sont les SEULES lignes que tu dois affiner et retourner
+
+3. **[Contexte suivant]** (tail) - Texte **NON numéroté**
+   - Provient du chunk suivant (déjà traduit)
+   - **Fourni pour cohérence uniquement**
+   - Ne doit **PAS être retourné** dans ta réponse
+
+### 🎯 Pourquoi le contexte est crucial ?
+
+Le contexte non numéroté (head/tail) t'aide à :
+- **Résoudre les pronoms** : Identifier à qui/quoi se réfère "il", "elle", "ils", "cela", etc.
+- **Maintenir la cohérence narrative** : Ton, style, registre de langue
+- **Préserver les références** : Personnages, lieux, événements mentionnés avant/après
+- **Assurer la continuité** : Fil narratif, enchaînement logique des idées
+- **Adapter le vocabulaire** : Utiliser les mêmes termes/traductions que dans le contexte
+
+⚠️ **RÈGLE ABSOLUE** : Utilise le contexte pour **guider ton affinage**, mais NE LE RETOURNE PAS dans ta sortie !
+
+---
+
+{# ========================================
+   SECTION 3 : TEXTES DE RÉFÉRENCE
+   ======================================== #}
+
+## 📋 Texte source (original)
+
+Voici le texte original en langue source pour référence:
+
+```
+{{ original_text }}
+```
+
+---
+
 ## 📋 Traduction initiale à affiner
 
 Voici la traduction de la Phase 1 (gros blocs) que tu dois affiner:
@@ -30,33 +82,53 @@ Voici la traduction de la Phase 1 (gros blocs) que tu dois affiner:
 {{ initial_translation }}
 ```
 
----
-
-## ⚠️ RÈGLES STRICTES D'AFFINAGE
-
-1. **Cohérence terminologique**:
-   - UTILISE le glossaire pour TOUS les noms propres (personnages, lieux)
-   - UTILISE le glossaire pour TOUS les termes techniques
-   - Vérifie que les traductions sont cohérentes avec le contexte précédent
-
-2. **Préservation structurelle** (CRITIQUE):
-   - PRÉSERVE le nombre EXACT de lignes `<N/>` ({{ expected_count }} lignes)
-   - PRÉSERVE le nombre EXACT de séparateurs `</>`
-   - NE FUSIONNE PAS et NE DIVISE PAS les lignes
-
-3. **Qualité linguistique**:
-   - Améliore la fluidité des phrases
-   - Corrige les maladresses de formulation
-   - Respecte le registre de langue (formel/informel/soutenu)
-   - Préserve le rythme et la musicalité du texte narratif
-
-4. **Interdictions ABSOLUES**:
-   - N'INVENTE PAS de nouveau contenu
-   - NE SUPPRIME PAS de contenu existant
-   - NE CHANGE PAS le sens du texte original
-   - N'AJOUTE PAS d'explications ou commentaires personnels
+**💡 Compare le texte original avec la traduction initiale** pour:
+- Vérifier que tous les éléments ont été traduits
+- Identifier les termes techniques/noms propres à cohérencer avec le glossaire
+- Détecter d'éventuelles erreurs de sens à corriger
 
 ---
+
+{# ========================================
+   SECTION 4 : RÈGLES D'AFFINAGE
+   ======================================== #}
+
+## ⚠️ Règles d'affinage
+
+**1. Cohérence terminologique (CRITIQUE)**
+   - UTILISE le glossaire pour TOUS les noms propres et termes techniques
+   - Vérifie cohérence avec le contexte précédent
+
+**2. Préservation structurelle (CRITIQUE)**
+   - PRÉSERVE exactement {{ expected_count }} lignes `<N/>` et tous les séparateurs `</>`
+   - NE fusionne PAS, NE divise PAS les lignes
+
+**3. Qualité linguistique**
+   - Améliore fluidité et naturel des phrases
+   - Corrige maladresses de formulation
+   - Respecte registre (formel/informel/soutenu) et rythme narratif
+
+**3.5. Préservation de la ponctuation et structure narrative (CRITIQUE)**
+   - **Vérifie le nombre de paires** : Si l'original a N paires de guillemets, la traduction DOIT avoir N paires
+   - **Préserve les interruptions narratives** :
+     - Si dialogue interrompu (`"A," he said, "B"`), préserver cette structure
+     - Ne PAS fusionner en un seul dialogue continu
+   - **Conventions typographiques** selon {{ target_language }} :
+     - Anglais : `"..."` → Français : `« ... »` (avec espaces insécables)
+   - **Exemples de structures à préserver** :
+     - Dialogue simple : `"Hello"` → `« Bonjour »` (1 paire)
+     - Dialogue interrompu : `"A," she said, "B"` → `« A », dit-elle, « B »` (2 paires)
+     - Dialogue avec incise : `"A—" he paused "—B"` → `« A... » Il marqua une pause. « B »`
+
+**4. Interdictions**
+   - ❌ Inventer, supprimer ou changer le sens du contenu
+   - ❌ Ajouter explications ou commentaires personnels
+
+---
+
+{# ========================================
+   SECTION 5 : EXEMPLES
+   ======================================== #}
 
 ## 💡 Exemples d'affinage
 
@@ -76,7 +148,52 @@ Traduction initiale (Phase 1):
 <1/>La Matrice s'anima doucement.
 ```
 
-**Exemple 2 : Amélioration fluidité sans changer structure**
+**Exemple 2 : Utilisation du contexte pour cohérence (pronoms et références)**
+
+Texte source avec contexte:
+```
+Sarah était fatiguée après une longue journée.
+
+<0/>Elle regarda par la fenêtre.
+<1/>Le paysage lui rappelait son enfance.
+
+Elle sourit en pensant à ces souvenirs.
+```
+
+Traduction initiale avec contexte:
+```
+Sarah était fatiguée après une longue journée.
+
+<0/>Elle regarda par la fenêtre.
+<1/>Le paysage lui rappela son enfance.
+
+Elle sourit en pensant à ces souvenirs.
+```
+
+✅ Affinage CORRECT (utilise contexte pour identifier "Elle" = Sarah, maintenir cohérence):
+```
+<0/>Elle contempla par la fenêtre.
+<1/>Le paysage lui rappelait son enfance.
+[=[END]=]
+```
+→ Utilise le contexte "Sarah" pour savoir que "Elle" = féminin singulier
+→ Maintient la cohérence avec "son enfance" (déjà établi dans le contexte)
+→ **NE RETOURNE PAS** le contexte head/tail, uniquement les lignes `<N/>`
+
+❌ Affinage INCORRECT (inclut le contexte dans la sortie):
+```
+Sarah était fatiguée après une longue journée.
+
+<0/>Elle contempla par la fenêtre.
+<1/>Le paysage lui rappelait son enfance.
+
+Elle sourit en pensant à ces souvenirs.
+[=[END]=]
+```
+→ ERREUR : Le contexte (head/tail) a été inclus dans la sortie !
+→ ERREUR : {{ expected_count }} lignes attendues, mais plus de lignes retournées !
+
+**Exemple 3 : Amélioration fluidité sans changer structure**
 
 Traduction initiale:
 ```
@@ -97,11 +214,77 @@ Traduction initiale:
 ```
 → ERREUR : Les séparateurs `</>` ont été supprimés !
 
+**Exemple 4 : Préservation de la structure narrative avec interruptions de dialogue**
+
+Traduction initiale (dialogue interrompu, 2 paires de guillemets):
+```
+<0/>"You can </>think</>," she said, "after you </>arrest him</>!"
+```
+
+❌ Affinage INCORRECT (fusion du dialogue, structure perdue):
+```
+<0/>« Tu peux </>penser</>, dit-elle, après l'avoir </>arrêté</> ! »
+[=[END]=]
+```
+→ ERREUR : 1 seule paire de guillemets au lieu de 2
+→ ERREUR : L'interruption narrative `she said` n'est plus encadrée correctement
+→ PROBLÈME : Le lecteur peut croire que "dit-elle, après l'avoir arrêté !" fait partie du dialogue
+
+✅ Affinage CORRECT (structure narrative préservée):
+```
+<0/>« Tu peux </>penser</> », dit-elle, « après l'avoir </>arrêté</> ! »
+[=[END]=]
+```
+→ 2 paires de guillemets (comme l'original) ✅
+→ L'interruption narrative `dit-elle,` est clairement séparée des dialogues ✅
+→ Structure lisible : [Dialogue 1] [Narrateur] [Dialogue 2] ✅
+
 ---
 
-## 🧾 FORMAT DE SORTIE OBLIGATOIRE
+**Exemple 4b : Cas complexe avec multiples paires et séparateurs `</>`**
 
-Tu DOIS produire EXACTEMENT {{ expected_count }} lignes dans l'ordre:
+Traduction initiale (6 séparateurs, 2 paires de guillemets):
+```
+<0/>"You can </>think</>," she said, "after you </>arrest</>! This is </>mewtiny</>!"
+```
+
+❌ Affinage INCORRECT (fusion, perte de structure):
+```
+<0/>« Tu peux </>penser</>, dit-elle, après l'avoir </>arrêté</> ! C'est de la </>miautinerie</> ! »
+[=[END]=]
+```
+→ ERREUR : 1 paire au lieu de 2
+→ ERREUR : 6 séparateurs `</>` préservés ✅, mais guillemets fusionnés ❌
+
+✅ Affinage CORRECT (6 séparateurs ET 2 paires préservés):
+```
+<0/>« Tu peux </>penser</> », dit-elle, « après l'avoir </>arrêté</> ! C'est de la </>miautinerie</> ! »
+[=[END]=]
+```
+→ 6 séparateurs `</>` préservés ✅
+→ 2 paires de guillemets préservées ✅
+→ Structure narrative claire ✅
+
+💡 **Règle générale** :
+- Compte les paires de guillemets dans l'original : N paires
+- Ta traduction DOIT avoir exactement N paires
+- Si dialogue interrompu par narrateur, préserver cette interruption
+
+---
+
+{# ========================================
+   SECTION 6 : FORMAT DE SORTIE
+   ======================================== #}
+
+## 🧾 Format de sortie
+
+⚠️ **IMPORTANT** : Retourne **UNIQUEMENT** les {{ expected_count }} lignes numérotées `<N/>` (le body).
+
+**NE retourne PAS le contexte** :
+- ❌ Head (texte avant les lignes `<N/>`)
+- ❌ Tail (texte après les lignes `<N/>`)
+
+**Format attendu** :
 
 ```
 <0/>Traduction affinée ligne 0
@@ -112,15 +295,25 @@ Tu DOIS produire EXACTEMENT {{ expected_count }} lignes dans l'ordre:
 [=[END]=]
 ```
 
+⚠️ Si tu inclus le contexte (head/tail) dans ta sortie, la validation **échouera** !
+
 ---
+
+{# ========================================
+   SECTION 7 : CHECKLIST
+   ======================================== #}
 
 ## ✅ CHECKLIST AVANT D'ENVOYER
 
-1. ✅ Ai-je utilisé TOUTES les traductions du glossaire pour les termes concernés?
-2. ✅ Ai-je produit EXACTEMENT {{ expected_count }} lignes?
-3. ✅ Ai-je préservé TOUS les séparateurs `</>`?
-4. ✅ Ai-je ajouté `[=[END]=]` à la fin?
-5. ✅ Ai-je amélioré la fluidité SANS changer le sens?
+1. ✅ Ai-je utilisé le contexte (head/tail) pour maintenir la cohérence?
+2. ✅ Ai-je utilisé TOUTES les traductions du glossaire pour les termes concernés?
+3. ✅ Ai-je produit EXACTEMENT {{ expected_count }} lignes numérotées `<N/>`?
+4. ✅ Ai-je vérifié que je NE RETOURNE PAS le contexte (head/tail)?
+5. ✅ Ai-je préservé TOUS les séparateurs `</>`?
+5.5. ✅ Ai-je préservé le NOMBRE DE PAIRES de guillemets (si original a 2 paires, traduction aussi)?
+5.6. ✅ Ai-je préservé les interruptions narratives dans les dialogues (`"A," she said, "B"`)?
+6. ✅ Ai-je ajouté `[=[END]=]` à la fin?
+7. ✅ Ai-je amélioré la fluidité SANS changer le sens?
 
 ---
 

@@ -8,7 +8,7 @@ correction inline et retry automatique.
 from typing import TYPE_CHECKING
 
 from ..logger import get_logger
-from .base import Check, CheckResult, ValidationContext
+from .base import Check, CheckResult, ValidationContext, ErrorData
 
 if TYPE_CHECKING:
     pass
@@ -106,7 +106,7 @@ class ValidationPipeline:
             >>> # results contient tous les CheckResult
         """
         # Copier traductions actuelles (seront modifiées par corrections)
-        current_translations = dict(context.translated_texts)
+        current_translations: dict[int, str] = dict(context.translated_texts)
         all_results: list[CheckResult] = []
 
         # Exécuter chaque check séquentiellement
@@ -147,19 +147,59 @@ class ValidationPipeline:
                         )
 
                     except Exception as e:
-                        # Correction impossible
-                        logger.error(
-                            f"❌ Correction {check.name} échouée (chunk {context.chunk.index}): {e}"
+                        # Correction impossible → passer au filtrage
+                        logger.warning(
+                            f"⚠️ Correction {check.name} échouée (chunk {context.chunk.index}): {e}"
                         )
-                        return False, current_translations, all_results
+                        # Incrémenter retry_count pour sortir de la boucle
+                        retry_count = context.max_retries
 
                 else:
-                    # Max retries atteint → échec définitif
-                    logger.error(
-                        f"❌ {check.name} échoué après {context.max_retries} tentatives "
-                        f"(chunk {context.chunk.index}): {result.error_message}"
+                    # Max retries atteint → tenter filtrage si check supporte get_invalid_lines
+                    logger.warning(
+                        f"⚠️ {check.name} échoué après {context.max_retries} tentatives "
+                        f"(chunk {context.chunk.index}), filtrage des lignes invalides..."
                     )
-                    return False, current_translations, all_results
+
+                    # Obtenir les indices des lignes invalides
+                    invalid_indices = check.get_invalid_lines(
+                        context, result.error_data
+                    )
+
+                    if invalid_indices:
+                        # Construire FilteredLine pour chaque ligne invalide
+                        self._build_filtered_lines(
+                            context, check, invalid_indices, check.name, result
+                        )
+
+                        # Filtrer les traductions : retirer lignes invalides
+                        current_translations = {
+                            idx: text
+                            for idx, text in current_translations.items()
+                            if idx not in invalid_indices
+                        }
+
+                        # Filtrer original_texts aussi
+                        context.original_texts = {
+                            idx: text
+                            for idx, text in context.original_texts.items()
+                            if idx not in invalid_indices
+                        }
+
+                        logger.warning(
+                            f"🔧 {check.name} chunk {context.chunk.index}: {len(invalid_indices)} ligne(s) filtrée(s), "
+                            f"{len(current_translations)} ligne(s) conservée(s)"
+                        )
+
+                        # Continuer avec les lignes valides au check suivant
+                        break  # Sortir de la boucle retry, passer au check suivant
+                    else:
+                        # Pas de lignes invalides identifiées → échec complet
+                        logger.error(
+                            f"❌ {check.name} échoué mais aucune ligne invalide identifiée "
+                            f"(chunk {context.chunk.index})"
+                        )
+                        return False, current_translations, all_results
 
         # Tous checks OK
         logger.debug(
@@ -209,6 +249,66 @@ class ValidationPipeline:
                 )
 
         return results
+
+    def _build_filtered_lines(
+        self,
+        context: ValidationContext,
+        check: Check,
+        invalid_indices: set[int],
+        check_name: str,
+        result: CheckResult,
+    ) -> None:
+        """
+        Construit les FilteredLine pour chaque ligne invalide et les ajoute au contexte.
+
+        Cette méthode récupère les métadonnées depuis chunk.body (TagKey) pour
+        construire des FilteredLine avec toutes les informations nécessaires
+        (file_name, file_line, chunk_index, chunk_line).
+
+        Args:
+            context: Contexte de validation (sera modifié pour ajouter filtered_lines)
+            invalid_indices: Set des indices de lignes invalides
+            check_name: Nom du check qui a filtré
+            result: CheckResult contenant error_message et error_data
+
+        Example:
+            >>> invalid_indices = {5, 10, 15}
+            >>> self._build_filtered_lines(context, invalid_indices, "line_count", result)
+            >>> # context.filtered_lines contient maintenant 3 FilteredLine
+        """
+        from .base import FilteredLine
+
+        # Énumérer le body pour récupérer les TagKey
+        body_items = list(context.chunk.body.items())
+
+        for chunk_line_idx in invalid_indices:
+            # Vérifier que l'index est valide
+            if chunk_line_idx >= len(body_items):
+                logger.warning(
+                    f"[ValidationPipeline] Index invalide {chunk_line_idx} "
+                    f"(body size: {len(body_items)}), skip"
+                )
+                continue
+
+            # Récupérer TagKey et texte original
+            tag_key, original_text = body_items[chunk_line_idx]
+
+            # Construire raison du filtrage depuis error_message
+            reason = check.build_filter_reason(chunk_line_idx, result.error_data)
+
+            # Construire FilteredLine
+            filtered = FilteredLine(
+                file_name=tag_key.page.epub_html.file_name,
+                file_line=tag_key.index,  # Index du fragment dans le fichier HTML
+                chunk_index=context.chunk.index,
+                chunk_line=chunk_line_idx,
+                check_name=check_name,
+                reason=reason,
+                original_text=original_text,  # Limiter à 100 chars
+                translated_text=context.translated_texts.get(chunk_line_idx, ""),
+            )
+
+            context.filtered_lines.append(filtered)
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""

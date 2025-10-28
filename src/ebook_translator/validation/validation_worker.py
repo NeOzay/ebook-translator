@@ -65,6 +65,7 @@ class ValidationWorker:
         target_language: str,
         phase: Literal["initial", "refined"],
         stop_event: threading.Event,
+        max_retries: int = 1,
     ):
         """
         Initialise le worker de validation.
@@ -87,6 +88,7 @@ class ValidationWorker:
         self.target_language = target_language
         self.phase: Literal["initial", "refined"] = phase
         self.stop_event = stop_event
+        self.max_retries = max_retries
 
         # Statistiques
         self.validated_count = 0
@@ -146,7 +148,7 @@ class ValidationWorker:
         # Construire original_texts depuis chunk.fetch()
         original_texts = {
             idx: original_text
-            for idx, (_, _, original_text) in enumerate(chunk.fetch())
+            for idx, (_, _, original_text) in enumerate(chunk.fetch_body())
         }
 
         # Construire contexte de validation
@@ -157,7 +159,7 @@ class ValidationWorker:
             llm=self.llm,
             target_language=self.target_language,
             phase=self.phase,
-            max_retries=2,
+            max_retries=self.max_retries,
         )
 
         # Exécuter pipeline
@@ -179,12 +181,35 @@ class ValidationWorker:
             # Envoyer vers SaveQueue (SaveWorker s'en occupera)
             self.save_queue.put(save_item)
 
-            self.validated_count += 1
-            self.validation_queue.mark_validated()
-            logger.debug(
-                f"[ValidationWorker-{self.worker_id}] ✅ Chunk {chunk.index} validé "
-                f"et envoyé vers SaveQueue"
-            )
+            # Logger les lignes filtrées si présentes
+            if context.filtered_lines:
+                self.rejected_count += 1
+                self.validation_queue.mark_rejected()
+                logger.warning(
+                    f"[ValidationWorker-{self.worker_id}] ⚠️ {len(context.filtered_lines)} ligne(s) "
+                    f"filtrée(s) pour chunk {chunk.index}:"
+                )
+                for filtered in context.filtered_lines:
+                    logger.warning(
+                        f"  • File: {filtered.file_name}, "
+                        f"Line: {filtered.file_line}, "
+                        f"Chunk: {filtered.chunk_index}, "
+                        f"ChunkLine: {filtered.chunk_line}, "
+                        f"Check: {filtered.check_name}, "
+                        f"Reason: {filtered.reason}"
+                    )
+                logger.info(
+                    f"[ValidationWorker-{self.worker_id}] ✅ Chunk {chunk.index} validé "
+                    f"avec {len(final_translations)} ligne(s) sauvegardée(s) "
+                    f"({len(context.filtered_lines)} filtrées)"
+                )
+            else:
+                self.validated_count += 1
+                self.validation_queue.mark_validated()
+                logger.debug(
+                    f"[ValidationWorker-{self.worker_id}] ✅ Chunk {chunk.index} validé "
+                    f"et envoyé vers SaveQueue"
+                )
 
         else:
             # Rejeter - ne pas sauver

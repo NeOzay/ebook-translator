@@ -54,9 +54,9 @@ class TestProgressiveRetryStrategy:
         result = check.validate(context)
         check.correct(context, result.error_data)
 
-        # Vérifier 1ère tentative = strict
+        # Vérifier 1ère tentative = NORMAL (strict)
         assert len(templates_used) == 1
-        assert templates_used[0] == TemplateNames.Retry_Translation_Template
+        assert templates_used[0] == TemplateNames.Retry_Fragments_Template
 
     def test_second_retry_uses_flexible_template(self, mock_chunk):
         """Test : 2ème tentative utilise template FLEXIBLE."""
@@ -93,10 +93,10 @@ class TestProgressiveRetryStrategy:
 
         # Vérifier ordre des templates
         assert len(templates_used) == 2
-        assert templates_used[0] == TemplateNames.Retry_Translation_Template  # Strict
+        assert templates_used[0] == TemplateNames.Retry_Fragments_Template  # NORMAL
         assert (
-            templates_used[1] == TemplateNames.Retry_Translation_Flexible_Template
-        )  # Flexible
+            templates_used[1] == TemplateNames.Retry_Fragments_Flexible_Template
+        )  # FLEXIBLE
 
     def test_flexible_requires_exact_count(self, mock_chunk):
         """Test : Template FLEXIBLE exige nombre EXACT (pas ±1)."""

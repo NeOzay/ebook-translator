@@ -10,6 +10,7 @@ from openai import OpenAI, OpenAIError, APITimeoutError, RateLimitError, APIErro
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..logger import get_logger, get_session_log_path
+from .template_renderers import TemplateRenderer
 
 logger = get_logger(__name__)
 
@@ -68,22 +69,38 @@ class LLM:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-        # Config Jinja2
-        self.env = Environment(
-            loader=FileSystemLoader(prompt_dir),
-            autoescape=select_autoescape(["html", "xml"]),
-        )
-
         # Compteur pour nommage unique des logs
         self._log_counter = 0
+
+        # Renderer encapsulé pour templates typés (API recommandée)
+        self.renderer = TemplateRenderer(prompt_dir)
 
     # -----------------------------------
     # 🔹 Rendu du template
     # -----------------------------------
     def render_prompt(self, template_name: str, **kwargs) -> str:
-        """Rend un template Jinja2 avec les variables données."""
-        template = self.env.get_template(template_name)
-        return template.render(**kwargs)
+        """
+        Rend un template Jinja2 avec les variables données.
+
+        Note:
+            Cette méthode est conservée pour rétrocompatibilité.
+            Pour une API typée et simplifiée, utilisez `self.renderer.render_XXX()`.
+
+        Example:
+            >>> # API recommandée (typée)
+            >>> prompt = llm.renderer.render_translate(target_language="fr")
+            >>>
+            >>> # API legacy (non typée, conservée pour compatibilité)
+            >>> prompt = llm.render_prompt("translate.jinja", target_language="fr")
+
+        Args:
+            template_name: Nom du fichier template (ex: "translate.jinja")
+            **kwargs: Variables à passer au template
+
+        Returns:
+            Prompt rendu
+        """
+        return self.renderer.render_prompt(template_name, **kwargs)
 
     # -----------------------------------
     # 🔹 Gestion du log
@@ -145,6 +162,7 @@ class LLM:
         system_prompt: str,
         content: str,
         context: Optional[str] = None,
+        use_reasoning_mode: bool = False,
     ) -> str:
         """
         Envoie une requête au LLM avec gestion d'erreurs spécifiques et retry automatique.
@@ -154,6 +172,8 @@ class LLM:
             content: Le contenu à traiter
             context: Contexte optionnel pour nommer le fichier de log
                     (ex: "chunk_042", "retry_phase1", "validation")
+            use_reasoning_mode: Si True, utilise deepseek-reasoner au lieu de deepseek-chat.
+                               Le modèle génère alors un reasoning_content explicite.
 
         Returns:
             La réponse du LLM ou un message d'erreur entre crochets
@@ -163,9 +183,20 @@ class LLM:
             Les erreurs Timeout et RateLimitError déclenchent un retry automatique
             avec backoff exponentiel.
             Le fichier de log n'est créé qu'au moment où la réponse est disponible.
+
+            En mode raisonnement (use_reasoning_mode=True), le modèle deepseek-reasoner
+            génère un processus de pensée explicite (reasoning_content) qui est loggé
+            séparément pour faciliter le debugging des corrections complexes.
         """
         log_path = self._create_log(system_prompt, content, context)
         last_error: Optional[Exception] = None
+
+        # Choisir le modèle selon le mode
+        model_name = "deepseek-reasoner" if use_reasoning_mode else self.model_name
+
+        # Log du mode utilisé
+        if use_reasoning_mode:
+            logger.info(f"🧠 Mode raisonnement activé pour : {context}")
 
         for attempt in range(self.max_retries):
             try:
@@ -174,13 +205,21 @@ class LLM:
                     {"role": "user", "content": content},
                 ]
                 resp = self.client.chat.completions.create(
-                    model=self.model_name,
+                    model=model_name,
                     messages=messages,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
                 )
                 result = resp.choices[0].message.content
                 response_text = result.strip() if result is not None else "Result Empty"
+
+                # Extraire le raisonnement si présent (deepseek-reasoner)
+                reasoning_text = ""
+                if hasattr(resp.choices[0].message, "reasoning_content"):
+                    reasoning_content = resp.choices[0].message.reasoning_content  # type: ignore
+                    reasoning_text = (
+                        reasoning_content if reasoning_content is not None else ""
+                    )
 
                 if attempt > 0:
                     logger.info(
@@ -190,7 +229,23 @@ class LLM:
                 else:
                     logger.info(f"✅ Requête LLM réussie ({len(content)} chars)")
 
-                self._append_response(log_path, response_text)
+                # Logger avec raisonnement séparé si présent
+                if reasoning_text:
+                    log_content = f"""
+{'=' * 80}
+🧠 REASONING (deepseek-reasoner):
+{'=' * 80}
+{reasoning_text}
+
+{'=' * 80}
+📝 RESPONSE:
+{'=' * 80}
+{response_text}
+"""
+                    self._append_response(log_path, log_content)
+                else:
+                    self._append_response(log_path, response_text)
+
                 return response_text
 
             except APITimeoutError as e:

@@ -1,3 +1,7 @@
+{# ========================================
+   SECTION 1 : ERREUR DÉTECTÉE
+   ======================================== #}
+
 ⚠️ ATTENTION : Ta traduction précédente était INCOMPLÈTE
 
 Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as PAS traduit TOUTES les lignes.
@@ -10,26 +14,28 @@ Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as
 
 ---
 
-## 📋 RÈGLE STRICTE
+{# ========================================
+   SECTION 2 : RÈGLES STRICTES
+   ======================================== #}
 
-**Tu DOIS traduire UNIQUEMENT les lignes manquantes listées ci-dessous.**
+## ⚠️ RÈGLES STRICTES
 
-Cela inclut **OBLIGATOIREMENT** tous les types de contenu :
-- ✅ Les lignes de copyright et mentions légales
-- ✅ Les newsletters et liens de subscription
-- ✅ Les crédits d'auteur, traducteur, éditeur
-- ✅ Les informations éditoriales (ISBN, publication, etc.)
-- ✅ Les titres de chapitres, sections, side stories
-- ✅ Les métadonnées techniques
-- ✅ TOUT ce qui commence par `<N/>`, même si cela semble "non narratif"
+**Tu DOIS traduire TOUTES les lignes numérotées `<N/>` ci-dessous.**
 
-❌ **IL EST INTERDIT** de :
-- Sauter des lignes sous prétexte qu'elles sont "inutiles"
-- Juger qu'une ligne ne mérite pas d'être traduite
-- Ignorer les lignes répétitives ou techniques
-- Omettre les métadonnées
+Cela inclut **OBLIGATOIREMENT** :
+- ✅ Copyright, mentions légales, newsletters
+- ✅ Crédits (auteur, traducteur, éditeur)
+- ✅ Informations éditoriales (ISBN, publication)
+- ✅ Titres, métadonnées, contenu technique
+- ✅ **TOUT ce qui commence par `<N/>`, même si non narratif**
+
+❌ **INTERDIT** : Sauter/ignorer des lignes, juger qu'elles sont "inutiles"
 
 ---
+
+{# ========================================
+   SECTION 3 : TRADUCTION CIBLÉE
+   ======================================== #}
 
 ## 🎯 TRADUCTION CIBLÉE - LIGNES MANQUANTES UNIQUEMENT
 
@@ -43,36 +49,35 @@ Voici les lignes que tu as OUBLIÉES dans ta réponse précédente :
 
 ---
 
-## 🧾 FORMAT DE SORTIE OBLIGATOIRE
+{# ========================================
+   SECTION 4 : FORMAT DE SORTIE
+   ======================================== #}
 
-Tu DOIS produire **EXACTEMENT {{ missing_indices|length }} lignes traduites** en {{ target_language }}, en **conservant leurs indices originaux** :
+## 📋 FORMAT DE SORTIE
 
-{% if missing_indices|length == 1 %}
+Tu DOIS produire **EXACTEMENT {{ missing_indices|length }} ligne(s)** en {{ target_language }}, avec **indices conservés** :
+
+**Exemple** :
 ```
-<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
+<{{ missing_indices[0] }}/>Texte traduit ligne {{ missing_indices[0] }}
+{% if missing_indices|length > 1 %}<{{ missing_indices[1] }}/>Texte traduit ligne {{ missing_indices[1] }}{% endif %}
+{% if missing_indices|length > 2 %}...
+<{{ missing_indices[-1] }}/>Texte traduit ligne {{ missing_indices[-1] }}{% endif %}
 [=[END]=]
 ```
-{% elif missing_indices|length == 2 %}
-```
-<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
-<{{ missing_indices[1] }}/>Texte traduit de la ligne {{ missing_indices[1] }}
-[=[END]=]
-```
-{% else %}
-```
-<{{ missing_indices[0] }}/>Texte traduit de la ligne {{ missing_indices[0] }}
-<{{ missing_indices[1] }}/>Texte traduit de la ligne {{ missing_indices[1] }}
-...
-<{{ missing_indices[-1] }}/>Texte traduit de la ligne {{ missing_indices[-1] }}
-[=[END]=]
-```
-{% endif %}
 
-⚠️ **VÉRIFICATION FINALE AVANT D'ENVOYER** :
-1. Compte tes lignes : as-tu bien {{ missing_indices|length }} ligne(s) ?
-2. As-tu conservé les bons indices ({% for idx in missing_indices %}<{{ idx }}/>{% if not loop.last %}, {% endif %}{% endfor %}) ?
-3. As-tu bien traduit les métadonnées/copyright si présents ?
-4. As-tu bien ajouté `[=[END]=]` à la fin ?
+---
+
+{# ========================================
+   SECTION 5 : CHECKLIST
+   ======================================== #}
+
+## ✅ CHECKLIST
+
+- [ ] {{ missing_indices|length }} ligne(s) traduites (ni plus, ni moins)
+- [ ] Indices conservés ({% for idx in missing_indices %}<{{ idx }}/>{% if not loop.last %}, {% endif %}{% endfor %})
+- [ ] Métadonnées/copyright traduits si présents
+- [ ] Marqueur `[=[END]=]` présent
 
 Si tu ne respectes pas ces règles, ta réponse sera rejetée.
 

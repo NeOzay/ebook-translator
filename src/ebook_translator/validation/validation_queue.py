@@ -122,13 +122,20 @@ class ValidationQueue:
         Args:
             maxsize: Taille maximale de la queue (défaut: 100)
         """
-        self._queue: queue.Queue[Optional[ValidationItem]] = queue.Queue(maxsize=maxsize)
+        self._queue: queue.Queue[Optional[ValidationItem]] = queue.Queue(
+            maxsize=maxsize
+        )
         self._lock = threading.Lock()
         self._stats = ValidationQueueStats()
-        self._in_progress = 0  # Items sortis de la queue mais pas encore validés/rejetés
+        self._in_progress = (
+            0  # Items sortis de la queue mais pas encore validés/rejetés
+        )
 
     def put(
-        self, item: Optional[ValidationItem], block: bool = True, timeout: Optional[float] = None
+        self,
+        item: Optional[ValidationItem],
+        block: bool = True,
+        timeout: Optional[float] = None,
     ) -> None:
         """
         Ajoute un item à la queue.
@@ -283,7 +290,10 @@ class SaveQueue:
         self._in_progress = 0  # Items sortis de la queue mais pas encore sauvegardés
 
     def put(
-        self, item: Optional[SaveItem], block: bool = True, timeout: Optional[float] = None
+        self,
+        item: Optional[SaveItem],
+        block: bool = True,
+        timeout: Optional[float] = None,
     ) -> None:
         """
         Ajoute un item à la queue de sauvegarde.

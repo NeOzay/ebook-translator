@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
-from ..config import TemplateNames
 from ..logger import get_logger
 from ..translation.parser import parse_llm_translation_output
 
@@ -100,62 +99,25 @@ class Phase2Worker:
             True si affinage LLM réussi, False si erreur (ex: traduction initiale manquante)
         """
         try:
-            # 1. Récupérer traduction initiale (Phase 1)
-            initial_translations, initial_missing = (
-                self.multi_store.initial_store.get_from_chunk(chunk)
+            # 1. Vérifier cache
+            refined_texts, has_missing = self.multi_store.get_from_chunk(
+                chunk, "refined"
             )
 
-            if initial_missing:
-                logger.warning(
-                    f"⚠️ Chunk {chunk.index}: Traduction initiale manquante (Phase 1 incomplète)"
-                )
-                self.fallback_to_initial += 1
-                return False
+            if has_missing:
+                # 2. Affinage via LLM
+                refined_texts, success = self._do_translation(chunk)
+                if not success:
+                    return False  # Traduction initiale manquante, fallback géré
 
-            # 2. Formatter traduction initiale pour le prompt
-            initial_translation = self._format_initial_translation(
-                chunk, initial_translations
-            )
-
-            # 3. Exporter glossaire
-            glossary_export = self.glossary.export_for_prompt(
-                max_terms=50, min_confidence=0.5
-            )
-
-            # 4. Compter nombre de lignes attendues
-            from ..checks.line_count_check import count_expected_lines
-
-            source_content = str(chunk)
-            expected_count = count_expected_lines(source_content)
-
-            # 5. Construire prompt enrichi
-            prompt = self.llm.render_prompt(
-                TemplateNames.Refine_Template,
-                target_language=self.target_language,
-                initial_translation=initial_translation,
-                glossaire=(
-                    glossary_export
-                    if glossary_export
-                    else "Aucun terme dans le glossaire."
-                ),
-                expected_count=expected_count,
-            )
-
-            # 6. Appeler LLM
-            context = f"phase2_chunk_{chunk.index:03d}"
-            llm_output = self.llm.query(
-                prompt, "", context=context
-            )  # Pas de source_content, tout dans prompt
-
-            # 7. Parser sortie LLM
-            refined_texts = parse_llm_translation_output(llm_output)
-
-            # 8. Soumettre à ValidationWorkerPool
+            # 9. Soumettre à ValidationWorkerPool
             # La validation et sauvegarde seront faites en arrière-plan
             self.validation_pool.submit(chunk, refined_texts)
 
             self.refined_count += 1
-            logger.debug(f"✅ Chunk {chunk.index} affiné et soumis pour validation (Phase 2)")
+            logger.debug(
+                f"✅ Chunk {chunk.index} affiné et soumis pour validation (Phase 2)"
+            )
             return True
 
         except Exception as e:
@@ -164,42 +126,30 @@ class Phase2Worker:
             )
             return False
 
-    def _format_initial_translation(
-        self,
-        chunk: "Chunk",
-        initial_translations: dict[int, str],
-    ) -> str:
-        """
-        Formatte la traduction initiale pour injection dans le prompt.
+    def _do_translation(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
+        try:
+            # 1. Construire prompt enrichi (encapsule toute la logique)
+            prompt = self.llm.renderer.render_refine(
+                chunk=chunk,
+                multi_store=self.multi_store,
+                glossary=self.glossary,
+                target_language=self.target_language,
+            )
 
-        Format :
-        <0/>Traduction initiale ligne 0
-        <1/>Traduction initiale ligne 1
-        ...
+            # 2. Appeler LLM
+            context = f"phase2_chunk_{chunk.index:03d}"
+            llm_output = self.llm.query(
+                prompt, "", context=context
+            )  # Pas de source_content, tout dans prompt
 
-        Args:
-            chunk: Chunk avec textes originaux
-            initial_translations: Dictionnaire {index: traduction} des traductions initiales
+            # 3. Parser sortie LLM
+            return parse_llm_translation_output(llm_output), True
 
-        Returns:
-            Traduction formatée avec numéros de ligne
-        """
-        lines = []
-        for i, translated_text in initial_translations.items():
-            if translated_text:
-                lines.append(f"<{i}/>{translated_text}")
-            else:
-                # Si traduction manquante, utiliser texte original
-                original_text = (
-                    list(chunk.body.values())[i] if i < len(chunk.body) else ""
-                )
-                lines.append(f"<{i}/>{original_text}")
-                logger.warning(
-                    f"⚠️ Chunk {chunk.index}, ligne {i}: Traduction initiale manquante, utilisation de l'original"
-                )
-
-        return "\n".join(lines)
-
+        except ValueError as e:
+            # Traduction initiale manquante (Phase 1 incomplète)
+            logger.warning(f"⚠️ Chunk {chunk.index}: {e}")
+            self.fallback_to_initial += 1
+            return {}, False
 
     def run_sequential(self, chunks: list["Chunk"]) -> dict:
         """
