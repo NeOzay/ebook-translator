@@ -7,7 +7,8 @@ l'apprentissage automatique du glossaire depuis les paires texte original/tradui
 Note: La validation et sauvegarde sont désormais gérées par ValidationWorkerPool.
 """
 
-from ..store import Store
+from ebook_translator.validation.validation_queue import ValidationItem
+from ..stores.store import Store
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,7 @@ from ..translation.parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ..llm import LLM
-    from ..segment import Chunk
+    from ..segmentation.segmentator import Chunk
     from ..validation import ValidationWorkerPool
 
 logger = get_logger(__name__)
@@ -109,7 +110,7 @@ class Phase1Worker:
             # 4. Soumettre à ValidationWorkerPool
             # La validation et sauvegarde seront faites en arrière-plan
             # Le glossaire sera appris via callback après validation réussie
-            self.validation_pool.submit(chunk, translated_texts)
+            self.validation_pool.submit(ValidationItem(chunk, translated_texts))
 
             self.translated_count += 1
             logger.debug(

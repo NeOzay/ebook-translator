@@ -1,0 +1,121 @@
+{#- ================================================================
+COMMON CORRECTION RULES (BASE TEMPLATE)
+
+This file is included by:
+  - retry_correct_fragments.jinja (Fix fragment count - STRICT)
+  - retry_correct_fragments_flexible.jinja (Fix fragment count - FLEXIBLE)
+  - retry_correct_punctuation.jinja (Fix quote pair count)
+
+Purpose: Centralize shared correction rules to avoid duplication
+         and ensure consistency across all correction prompts.
+================================================================ -#}
+{#- ========================================
+CORRECTION PHILOSOPHY
+======================================== #}
+
+## 🎯 Philosophie de correction
+
+**Ce qu'EST une correction** :
+- ✅ Corriger l'erreur structurelle détectée (balises, ponctuation)
+- ✅ Préserver la qualité et le sens de la traduction existante
+- ✅ Maintenir tous les autres aspects de la traduction
+
+**Ce qu'elle N'EST PAS** :
+- ❌ Une re-traduction complète depuis zéro
+- ❌ Une amélioration du vocabulaire ou du style
+- ❌ Un changement du sens ou du registre
+- ❌ Un ajout ou suppression de contenu
+
+**Objectif** : Corriger UNIQUEMENT l'erreur structurelle spécifique, rien d'autre.
+
+---
+{#- ========================================
+ERROR CONTEXT PRESENTATION
+======================================== #}
+
+## 📊 Présentation de l'erreur
+
+Chaque correction doit afficher :
+
+1. **Texte original** : Le texte source pour référence
+2. **Traduction incorrecte** : La tentative qui a échoué
+3. **Erreur quantifiée** : Nombres explicites (Attendu: X, Reçu: Y)
+4. **Cause probable** : Pourquoi l'erreur s'est produite (fusion, division, décalage, etc.)
+
+---
+{#- ========================================
+TAG HANDLING (SAME AS TRANSLATE)
+======================================== #}
+
+### 🧩 Gestion des balises :
+
+- `<N/>` : Balise de **numérotation de ligne**.
+  Chaque ligne corrigée doit **commencer par la même balise `<N/>`** que dans le texte source.
+  Ne change ni l'ordre ni le nombre de ces lignes.
+
+- `</>` : Balise de **formatage**.
+  Tu dois la **conserver exactement** aux positions appropriées dans la correction.
+  Ces balises peuvent apparaître isolées ou entourer du texte.
+
+---
+{#- ========================================
+OUTPUT FORMAT (SAME AS TRANSLATE)
+======================================== #}
+
+### 🧾 Format de sortie :
+
+Tu dois produire ta correction **en texte brut**, sans aucun commentaire, sans balise additionnelle et sans notes.
+À la toute fin de ta correction, ajoute sur une ligne le marqueur `[=[END]=]`
+
+Utilise strictement la structure suivante :
+
+```txt
+<N/>Texte corrigé...
+<N+1/>Texte corrigé avec </>balises</> aux bonnes positions...
+<N+2/>Texte corrigé...
+[=[END]=]
+```
+
+---
+{#- ========================================
+VERIFICATION CHECKLIST
+======================================== #}
+
+## ✅ Checklist de vérification POST-CORRECTION
+
+**CRITIQUE** : Après avoir écrit ta correction, tu DOIS MANUELLEMENT VÉRIFIER :
+
+### Vérifications générales (toutes corrections)
+1. **Marqueur de fin** : `[=[END]=]` est présent sur sa propre ligne
+2. **Structure des lignes** : Toutes les balises `<N/>` sont préservées
+3. **Contenu préservé** : Pas de changement de sens par rapport à la traduction incorrecte
+4. **Qualité maintenue** : Vocabulaire et style de la traduction incorrecte conservés
+
+### Vérifications spécifiques (ajoutées par chaque template)
+{# Chaque template spécifique ajoutera ses propres vérifications :
+   - retry_correct_fragments.jinja : Compter les `</>`
+   - retry_correct_punctuation.jinja : Compter les paires `« »`
+#}
+
+---
+{#- ========================================
+EXAMPLE STRUCTURE
+======================================== #}
+
+## 💡 Structure des exemples
+
+Chaque correction doit fournir des exemples au format suivant :
+
+✅ **CORRECT** :
+```
+<Output qui corrige l'erreur>
+```
+
+❌ **INCORRECT** :
+```
+<Output qui répète la même erreur>
+```
+
+**Explication** : Pourquoi la version correcte résout le problème
+
+---

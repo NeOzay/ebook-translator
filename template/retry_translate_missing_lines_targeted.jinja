@@ -1,6 +1,18 @@
-{# ========================================
-   SECTION 1 : ERREUR DÉTECTÉE
-   ======================================== #}
+{#- ================================================================
+RETRY_TRANSLATE_MISSING_LINES_TARGETED.JINJA - Targeted Translation
+
+Purpose: Translate only the specific lines that were missing in
+         a previous translation attempt.
+
+Input: Source text with only missing lines numbered (<N/>)
+Output: Translation of missing lines only
+
+This template uses common translation rules from:
+- common_translate_rules.jinja (shared with all TRANSLATE templates)
+================================================================ -#}
+{#- ========================================
+SECTION 1 : ERREUR DÉTECTÉE
+======================================== -#}
 
 ⚠️ ATTENTION : Ta traduction précédente était INCOMPLÈTE
 
@@ -13,29 +25,13 @@ Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as
 {{ error_message }}
 
 ---
-
-{# ========================================
-   SECTION 2 : RÈGLES STRICTES
-   ======================================== #}
-
-## ⚠️ RÈGLES STRICTES
-
-**Tu DOIS traduire TOUTES les lignes numérotées `<N/>` ci-dessous.**
-
-Cela inclut **OBLIGATOIREMENT** :
-- ✅ Copyright, mentions légales, newsletters
-- ✅ Crédits (auteur, traducteur, éditeur)
-- ✅ Informations éditoriales (ISBN, publication)
-- ✅ Titres, métadonnées, contenu technique
-- ✅ **TOUT ce qui commence par `<N/>`, même si non narratif**
-
-❌ **INTERDIT** : Sauter/ignorer des lignes, juger qu'elles sont "inutiles"
-
----
-
-{# ========================================
-   SECTION 3 : TRADUCTION CIBLÉE
-   ======================================== #}
+{#- ========================================
+INCLUDE COMMON TRANSLATION RULES
+======================================== -#}
+{%- include 'common_translate_rules.jinja' -%}
+{#- ========================================
+SECTION : TARGETED TRANSLATION SPECIFIC
+======================================== -#}
 
 ## 🎯 TRADUCTION CIBLÉE - LIGNES MANQUANTES UNIQUEMENT
 
@@ -48,10 +44,6 @@ Voici les lignes que tu as OUBLIÉES dans ta réponse précédente :
 ```
 
 ---
-
-{# ========================================
-   SECTION 4 : FORMAT DE SORTIE
-   ======================================== #}
 
 ## 📋 FORMAT DE SORTIE
 
@@ -67,10 +59,6 @@ Tu DOIS produire **EXACTEMENT {{ missing_indices|length }} ligne(s)** en {{ targ
 ```
 
 ---
-
-{# ========================================
-   SECTION 5 : CHECKLIST
-   ======================================== #}
 
 ## ✅ CHECKLIST
 

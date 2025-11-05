@@ -8,20 +8,13 @@ Ce module gère la traduction effective des chunks, incluant :
 - Application des traductions aux pages HTML
 """
 
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from tqdm import tqdm
-
-from ..htmlpage import BilingualFormat
 from ..logger import get_logger
 from .parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
-    from ..llm import LLM
-    from ..segment import Chunk
-    from ..store import Store
-    from ..htmlpage.page import HtmlPage
-    from ..htmlpage.tag_key import TagKey
+    from ..segmentation.segmentator import Chunk
 
 logger = get_logger(__name__)
 

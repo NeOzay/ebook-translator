@@ -61,18 +61,21 @@ def extract_html_items_in_spine_order(
     """
     new_book = epub.EpubBook()
     spine_order = [spine[0] for spine in book.spine]
-    html_items: list[epub.EpubHtml] = []
+    html_items: dict[int, epub.EpubHtml] = {}
 
     for item in book.get_items():
         if item.get_type() == ITEM_DOCUMENT:
             # Insérer à la position correcte selon le spine
             insert_position = spine_order.index(item.id)
-            html_items.insert(insert_position, item)
+            html_items[insert_position] = item
         else:
             # Copier les ressources non-document (images, CSS, etc.)
             new_book.add_item(item)
 
-    return html_items, new_book
+    # Trier les items HTML selon l'ordre du spine
+    sorted_html_items = [html_items[i] for i in sorted(html_items.keys())]
+
+    return sorted_html_items, new_book
 
 
 def reconstruct_html_item(item: "EpubHtml") -> None:

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from ..segment import Chunk
+    from ..segmentation import Chunk, TranslatedChunk
 
 
 @dataclass
@@ -32,6 +32,7 @@ class ValidationItem:
 
     chunk: "Chunk"
     translated_texts: dict[int, str]
+    previous_translated_texts: "TranslatedChunk | None" = None
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""

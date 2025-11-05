@@ -32,7 +32,7 @@ Exports publics :
 """
 
 # Constantes
-from .constants import (
+from ..constants import (
     FRAGMENT_SEPARATOR,
     VALID_ROOT_TAGS,
     IGNORED_TAGS,

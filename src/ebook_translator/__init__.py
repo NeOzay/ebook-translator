@@ -101,8 +101,13 @@ from .llm import LLM
 from .translation.language import Language
 
 # Classes de segmentation et cache
-from .segment import Chunk, Segmentator, DEFAULT_OVERLAP_RATIO, DEFAULT_ENCODING
-from .store import Store
+from .segmentation.segmentator import (
+    Chunk,
+    Segmentator,
+    DEFAULT_OVERLAP_RATIO,
+    DEFAULT_ENCODING,
+)
+from .stores.store import Store
 
 # Classes HTML
 from .htmlpage import (

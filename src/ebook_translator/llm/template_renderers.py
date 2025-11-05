@@ -19,11 +19,12 @@ from .template_params import (
     RetryFragmentsParams,
     RetryFragmentsFlexibleParams,
     RetryPunctuationParams,
+    RetrySentenceParams,
 )
 
+from ..segmentation import Chunk, TranslatedChunk
+
 if TYPE_CHECKING:
-    from .llm import LLM
-    from ..segment import Chunk
     from ..glossary import Glossary
     from ..stores.multi_store import MultiStore
 
@@ -63,7 +64,7 @@ class TemplateRenderer:
     # -----------------------------------
     # 🔹 Rendu du template
     # -----------------------------------
-    def render_prompt(self, template_name: str, **kwargs) -> str:
+    def render_prompt(self, template_name: TemplateNames, **kwargs) -> str:
         """
         Rend un template Jinja2 avec les variables données.
 
@@ -76,21 +77,21 @@ class TemplateRenderer:
             >>> prompt = llm.renderer.render_translate(target_language="fr")
             >>>
             >>> # API legacy (non typée, conservée pour compatibilité)
-            >>> prompt = llm.render_prompt("translate.jinja", target_language="fr")
+            >>> prompt = llm.render_prompt("translate_base.jinja", target_language="fr")
 
         Args:
-            template_name: Nom du fichier template (ex: "translate.jinja")
+            template_name: Nom du fichier template (ex: "translate_base.jinja")
             **kwargs: Variables à passer au template
 
         Returns:
             Prompt rendu
         """
-        template = self.env.get_template(template_name)
+        template = self.env.get_template(template_name.value)
         return template.render(**kwargs)
 
     def render_translate(self, target_language: str) -> str:
         """
-        Rend le template translate.jinja (Phase 1 - Traduction initiale).
+        Rend le template translate_base.jinja (Phase 1 - Traduction initiale).
 
         Ce template est utilisé pour la première passe de traduction avec
         des gros blocs (2000 tokens par défaut).
@@ -152,14 +153,15 @@ class TemplateRenderer:
             ... )
             >>> llm_output = llm.query(prompt, "")  # Tout dans le prompt
         """
-        # 1. Récupérer traduction initiale (Phase 1)
-        initial_translation, has_missing = chunk.get_translation_for_prompt(
-            multi_store.initial_store
-        )
-        if has_missing:
+        # 1. Récupérer traduction initiale (Phase 1 ou Phase 2 si disponible)
+        translated_chunk = TranslatedChunk(chunk, multi_store)
+
+        if translated_chunk.has_missing:
             raise ValueError(
                 f"Chunk {chunk.index}: Traduction initiale manquante (Phase 1 incomplète)"
             )
+
+        initial_translation = str(translated_chunk)
 
         # 2. Extraire texte original (head + body + tail)
         original_text = str(chunk)
@@ -237,7 +239,7 @@ class TemplateRenderer:
         }
 
         return self.render_prompt(
-            TemplateNames.Missing_Lines_Targeted_Template, **params
+            TemplateNames.Retry_Missing_Lines_Targeted_Template, **params
         )
 
     def render_retry_fragments(
@@ -360,4 +362,67 @@ class TemplateRenderer:
             "actual_pairs": actual_pairs,
         }
 
-        return self.render_prompt("retry_punctuation.jinja", **params)
+        return self.render_prompt(TemplateNames.Retry_Punctuation_Template, **params)
+
+    def render_retry_sentence(
+        self,
+        chunk: "Chunk",
+        target_language: str,
+        previous_translation: "TranslatedChunk | None",
+        missing_indices: list[int],
+    ) -> str:
+        """
+        Rend le template retry_sentence.jinja (Correction nombre de phrases).
+
+        Ce template est utilisé pour corriger les traductions avec un nombre
+        incorrect de phrases, typiquement lors du raffinage où le LLM tronque
+        le contenu au lieu de l'améliorer. Il fournit à la fois la traduction
+        initiale (Phase 1) et la traduction raffinée actuelle (Phase 2) pour
+        permettre au LLM de comprendre ce qui a été perdu.
+
+        Args:
+            target_language: Code langue cible ISO 639-1
+            original_text: Texte source original
+            incorrect_translation: Traduction raffinée avec nombre incorrect de phrases
+            previous_translation: Traduction initiale (Phase 1) servant de référence
+            expected_sentences: Nombre de phrases attendu (basé sur original)
+            actual_sentences: Nombre de phrases dans traduction raffinée actuelle
+
+        Returns:
+            Prompt système rendu prêt pour envoi au LLM
+
+        Example:
+            >>> prompt = renderer.render_retry_sentence(
+            ...     target_language="fr",
+            ...     original_text="Sentence 1. Sentence 2. Sentence 3.",
+            ...     incorrect_translation="Phrase 1.",
+            ...     previous_translation="Phrase 1. Phrase 2. Phrase 3.",
+            ...     expected_sentences=3,
+            ...     actual_sentences=1
+            ... )
+            >>> llm_output = llm.query(prompt, "")
+        """
+        # 1. Construire source_content avec numérotation sélective
+        # Seules les lignes manquantes sont marquées <N/>
+        source_content = chunk.mark_lines_to_numbered(missing_indices)
+        previous_content = (
+            previous_translation.mark_lines_to_numbered(missing_indices)
+            if previous_translation
+            else ""
+        )
+
+        # 2. Générer message d'erreur contextuel
+        num_missing = len(missing_indices)
+        indices_preview = ", ".join(f"<{idx}/>" for idx in missing_indices[:5])
+        if num_missing > 5:
+            indices_preview += f" ... (+{num_missing - 5} autres)"
+
+        params: RetrySentenceParams = {
+            "target_language": target_language,
+            "original_text": source_content,
+            "previous_translation": previous_content,
+            "missing_indices": indices_preview,
+            "num_lines": num_missing,
+        }
+
+        return self.render_prompt(TemplateNames.Retry_Sentence_Template, **params)

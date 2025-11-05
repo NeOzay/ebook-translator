@@ -6,12 +6,12 @@ Ce module fournit MultiStore qui gère séparément les traductions initiales
 """
 
 from pathlib import Path
-from typing import Literal, Optional, TYPE_CHECKING, TypedDict
+from typing import Literal, Optional, TYPE_CHECKING, TypedDict, override
 
-from ..store import Store
+from .store import Store
 
 if TYPE_CHECKING:
-    from segment import Chunk
+    from segmentation import Chunk
     from htmlpage import TagKey
 
 PhaseType = Literal["initial", "refined"]
@@ -27,12 +27,11 @@ class MultiStoreStats(TypedDict):
         refined_files: Nombre de fichiers dans refined_store
     """
 
-    active_phase: PhaseType
     initial_files: int
     refined_files: int
 
 
-class MultiStore:
+class MultiStore(Store):
     """
     Gestionnaire de stores pour traductions initial et refined.
 
@@ -75,45 +74,7 @@ class MultiStore:
         self.initial_store = Store(cache_dir / "initial")
         self.refined_store = Store(cache_dir / "refined")
 
-        # Phase active (commence par initial)
-        self.active_phase: PhaseType = "initial"
-
-    def get_active_store(self) -> Store:
-        """
-        Récupère le store actif selon la phase.
-
-        Returns:
-            initial_store ou refined_store selon active_phase
-        """
-        if self.active_phase == "initial":
-            return self.initial_store
-        else:
-            return self.refined_store
-
-    def switch_to_refined(self) -> None:
-        """
-        Passe en Phase 2 (refined).
-
-        Après cet appel, le store actif devient refined_store.
-
-        Example:
-            >>> multi_store.switch_to_refined()
-            >>> assert multi_store.active_phase == "refined"
-        """
-        self.active_phase = "refined"
-
-    def switch_to_initial(self) -> None:
-        """
-        Revient en Phase 1 (initial).
-
-        Utile pour tests ou re-traduction.
-
-        Example:
-            >>> multi_store.switch_to_initial()
-            >>> assert multi_store.active_phase == "initial"
-        """
-        self.active_phase = "initial"
-
+    @override
     def get(
         self,
         source_file: str,
@@ -214,6 +175,7 @@ class MultiStore:
         """
         self.refined_store.save_all(source_file, translations_dict)
 
+    @override
     def get_from_chunk(
         self,
         chunk: "Chunk",
@@ -262,6 +224,7 @@ class MultiStore:
 
         return translations, has_missing
 
+    @override
     def get_all_from_chunk(
         self,
         chunk: "Chunk",
@@ -293,6 +256,7 @@ class MultiStore:
 
         return translations, has_missing
 
+    @override
     def clear_all(self) -> None:
         """
         Supprime tous les caches (initial et refined).
@@ -320,7 +284,6 @@ class MultiStore:
         refined_files = len(list(self.refined_store.cache_dir.glob("*.json")))
 
         return {
-            "active_phase": self.active_phase,
             "initial_files": initial_files,
             "refined_files": refined_files,
         }
@@ -330,7 +293,6 @@ class MultiStore:
         stats = self.get_statistics()
         return (
             f"MultiStore(\n"
-            f"  active_phase={stats['active_phase']},\n"
             f"  initial_files={stats['initial_files']},\n"
             f"  refined_files={stats['refined_files']}\n"
             f")"

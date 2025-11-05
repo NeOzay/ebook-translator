@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
 if TYPE_CHECKING:
     from ..llm import LLM
-    from ..segment import Chunk
+    from ..segmentation import Chunk, TranslatedChunk
 
 
 # =============================================================================
@@ -79,9 +79,30 @@ class PunctuationErrorData(TypedDict):
     errors: list[PunctuationErrorDetail]
 
 
+class SentenceErrorDetail(TypedDict):
+    """Détails d'une erreur de nombre de phrases sur une ligne."""
+
+    line_idx: int
+    original_text: str
+    translated_text: str
+    previous_translated_text: str
+
+
+class SentenceErrorData(TypedDict):
+    """Données d'erreur pour validation du nombre de phrases."""
+
+    errors: list[SentenceErrorDetail]
+
+
 # Type union pour tous les error_data possibles
 # Garde dict pour extensibilité (nouveaux checks futurs)
-ErrorData = LineCountErrorData | FragmentCountErrorData | PunctuationErrorData | dict
+ErrorData = (
+    LineCountErrorData
+    | FragmentCountErrorData
+    | PunctuationErrorData
+    | SentenceErrorData
+    | dict
+)
 
 
 @dataclass
@@ -197,6 +218,7 @@ class ValidationContext:
     target_language: str
     phase: Literal["initial", "refined"]
     max_retries: int = 2
+    previous_translated_texts: "TranslatedChunk | None" = None
     filtered_lines: list[FilteredLine] = field(default_factory=list)
 
 

@@ -50,8 +50,9 @@ def retry_with_reasoning(
 
         # Construire le contexte de log
         llm_context = (
-            f"correction_{context_name}_chunk_{chunk_index:03d}_attempt_{attempt + 1}"
+            f"correction_{context_name}_chunk_{chunk_index:03d}_attempt_{attempt}"
         )
+
         if use_reasoning:
             llm_context += "_reasoning"
 

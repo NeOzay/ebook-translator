@@ -5,7 +5,7 @@ Ce script teste validate_fragment_count() et verifie que les workers
 detectent correctement les erreurs de fragment mismatch.
 """
 
-from src.ebook_translator.translation.parser import validate_fragment_count
+from src.ebook_translator.checks.fragment_count_check import validate_fragment_count
 
 
 def test_validate_fragment_count_valid():

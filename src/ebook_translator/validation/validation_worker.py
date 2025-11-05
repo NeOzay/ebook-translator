@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING, Literal
 
 from ..checks import ValidationContext, ValidationPipeline
 from ..logger import get_logger
-from .validation_queue import ValidationQueue, SaveQueue, SaveItem
+from .validation_queue import ValidationItem, ValidationQueue, SaveQueue, SaveItem
 
 if TYPE_CHECKING:
     from ..llm import LLM
-    from ..segment import Chunk
+    from ..segmentation.segmentator import Chunk
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,7 @@ class ValidationWorker:
 
             # Valider et sauvegarder
             try:
-                self._validate_and_save(item.chunk, item.translated_texts)
+                self._validate_and_save(item)
             except Exception as e:
                 logger.exception(
                     f"[ValidationWorker-{self.worker_id}] Erreur lors de la validation: {e}"
@@ -137,14 +137,18 @@ class ValidationWorker:
             f"(validated={self.validated_count}, rejected={self.rejected_count})"
         )
 
-    def _validate_and_save(self, chunk: "Chunk", translated_texts: dict[int, str]):
+    def _validate_and_save(
+        self,
+        validation_item: ValidationItem,
+    ):
         """
         Valide un chunk et envoie vers SaveQueue si OK.
 
         Args:
-            chunk: Chunk à valider
-            translated_texts: Traductions à valider {line_index: translated_text}
+            validation_item: Item contenant chunk et traductions à valider
         """
+
+        chunk = validation_item.chunk
         # Construire original_texts depuis chunk.fetch()
         original_texts = {
             idx: original_text
@@ -154,7 +158,8 @@ class ValidationWorker:
         # Construire contexte de validation
         context = ValidationContext(
             chunk=chunk,
-            translated_texts=translated_texts,
+            translated_texts=validation_item.translated_texts,
+            previous_translated_texts=validation_item.previous_translated_texts or {},
             original_texts=original_texts,
             llm=self.llm,
             target_language=self.target_language,

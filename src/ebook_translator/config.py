@@ -1,3 +1,4 @@
+from enum import StrEnum
 import logging
 
 
@@ -20,12 +21,16 @@ class ConfigBase:
         super().__setattr__(name, value)
 
 
-class TemplateNames(ConfigBase):
-    First_Pass_Template: str = "translate.jinja"
-    Retry_Fragments_Template: str = "retry_fragments.jinja"
-    Retry_Fragments_Flexible_Template: str = "retry_fragments_flexible.jinja"
-    Missing_Lines_Targeted_Template: str = "retry_missing_lines_targeted.jinja"
-    Refine_Template: str = "refine.jinja"
+class TemplateNames(StrEnum):
+    First_Pass_Template = "translate_base.jinja"
+    Retry_Fragments_Template = "retry_correct_fragments.jinja"
+    Retry_Fragments_Flexible_Template = "retry_correct_fragments_flexible.jinja"
+    Retry_Missing_Lines_Targeted_Template = (
+        "retry_translate_missing_lines_targeted.jinja"
+    )
+    Refine_Template = "translate_refine.jinja"
+    Retry_Sentence_Template = "retry_translate_sentence.jinja"
+    Retry_Punctuation_Template = "retry_correct_punctuation.jinja"
 
 
 class Logger_Level(ConfigBase):
@@ -37,4 +42,3 @@ class Logger_Level(ConfigBase):
 def lock_config():
     """Verrouille la configuration pour empêcher les modifications ultérieures."""
     Logger_Level().lock()
-    TemplateNames().lock()

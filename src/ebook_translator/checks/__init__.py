@@ -18,7 +18,12 @@ from .base import (
 from .pipeline import ValidationPipeline
 from .line_count_check import LineCountCheck
 from .fragment_count_check import FragmentCountCheck
-from .punctuation_check import PunctuationCheck, PunctuationErrorData, PunctuationErrorDetail
+from .punctuation_check import (
+    PunctuationCheck,
+    PunctuationErrorData,
+    PunctuationErrorDetail,
+)
+from .sentence_check import SentenceCheck
 
 __all__ = [
     "Check",
@@ -28,6 +33,7 @@ __all__ = [
     "LineCountCheck",
     "FragmentCountCheck",
     "PunctuationCheck",
+    "SentenceCheck",
     # TypedDicts pour error_data
     "ErrorData",
     "LineCountErrorData",

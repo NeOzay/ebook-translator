@@ -25,6 +25,46 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _count_quote_pairs(text: str) -> int:
+    """
+    Compte le nombre de paires de guillemets dans un texte.
+
+    Supporte :
+    - Guillemets anglais doubles : "..."
+    - Guillemets français : « ... »
+    - Guillemets simples : '...'
+
+    Args:
+        text: Texte à analyser
+
+    Returns:
+        Nombre de paires de guillemets
+
+    Example:
+        >>> self._count_quote_pairs('"Hello" world')
+        1
+        >>> self._count_quote_pairs('"A," he said, "B"')
+        2
+        >>> self._count_quote_pairs('« Bonjour » monde')
+        1
+    """
+    # Compter guillemets anglais doubles
+    # double_quotes = text.count('"')
+    english_quote = text.count("“") + text.count("”")
+
+    # Compter guillemets français
+    french_quote = text.count("«") + text.count("»")
+
+    # Compter guillemets simples
+    # single_quotes = text.count("'")
+    # pairs_single = single_quotes // 2
+
+    # Total des paires
+    total_pairs = (english_quote + french_quote) // 2
+
+    return total_pairs
+
+
 class PunctuationCheck(Check):
     """
     Vérifie que le nombre de paires de guillemets correspond.
@@ -50,45 +90,6 @@ class PunctuationCheck(Check):
     def name(self) -> str:
         """Nom unique du check."""
         return "punctuation"
-
-    def _count_quote_pairs(self, text: str) -> int:
-        """
-        Compte le nombre de paires de guillemets dans un texte.
-
-        Supporte :
-        - Guillemets anglais doubles : "..."
-        - Guillemets français : « ... »
-        - Guillemets simples : '...'
-
-        Args:
-            text: Texte à analyser
-
-        Returns:
-            Nombre de paires de guillemets
-
-        Example:
-            >>> self._count_quote_pairs('"Hello" world')
-            1
-            >>> self._count_quote_pairs('"A," he said, "B"')
-            2
-            >>> self._count_quote_pairs('« Bonjour » monde')
-            1
-        """
-        # Compter guillemets anglais doubles
-        # double_quotes = text.count('"')
-        english_quote = text.count("“") + text.count("”")
-
-        # Compter guillemets français
-        french_quote = text.count("«") + text.count("»")
-
-        # Compter guillemets simples
-        # single_quotes = text.count("'")
-        # pairs_single = single_quotes // 2
-
-        # Total des paires
-        total_pairs = (english_quote + french_quote) // 2
-
-        return total_pairs
 
     def validate(self, context: ValidationContext) -> CheckResult:
         """
@@ -130,8 +131,8 @@ class PunctuationCheck(Check):
             original_text = context.original_texts[line_idx]
 
             # Compter les paires de guillemets
-            expected_pairs = self._count_quote_pairs(original_text)
-            actual_pairs = self._count_quote_pairs(translated_text)
+            expected_pairs = _count_quote_pairs(original_text)
+            actual_pairs = _count_quote_pairs(translated_text)
 
             if expected_pairs != actual_pairs:
                 error_detail: PunctuationErrorDetail = {
@@ -243,7 +244,7 @@ class PunctuationCheck(Check):
                     if 0 not in corrected_line:
                         return False
                     corrected_text = corrected_line[0]
-                    corrected_pairs = self._count_quote_pairs(corrected_text)
+                    corrected_pairs = _count_quote_pairs(corrected_text)
 
                     # Validation : NOMBRE EXACT requis
                     if corrected_pairs == expected_pairs:
@@ -259,7 +260,7 @@ class PunctuationCheck(Check):
                 context=context,
                 render_prompt=render_prompt,
                 validate_result=validate_result,
-                context_name=f"punctuation_line_{line_idx}",
+                context_name=f"punctuation_line_{line_idx}_chunk_{context.chunk.index}",
                 max_attempts=2,
             )
 

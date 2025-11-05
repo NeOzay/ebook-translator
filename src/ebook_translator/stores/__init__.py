@@ -6,5 +6,6 @@ Ce package fournit:
 """
 
 from .multi_store import MultiStore
+from .store import Store
 
-__all__ = ["MultiStore"]
+__all__ = ["MultiStore", "Store"]

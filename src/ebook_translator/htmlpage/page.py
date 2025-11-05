@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 from ebooklib import epub
 
-from .constants import FRAGMENT_SEPARATOR, IGNORED_TAGS
+from ..constants import FRAGMENT_SEPARATOR, IGNORED_TAGS
 from .tag_key import TagKey
 from .bilingual import BilingualFormat
 from .replacement import TextReplacer, find_root_tag

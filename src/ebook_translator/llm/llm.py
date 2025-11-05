@@ -91,10 +91,10 @@ class LLM:
             >>> prompt = llm.renderer.render_translate(target_language="fr")
             >>>
             >>> # API legacy (non typée, conservée pour compatibilité)
-            >>> prompt = llm.render_prompt("translate.jinja", target_language="fr")
+            >>> prompt = llm.render_prompt("translate_base.jinja", target_language="fr")
 
         Args:
-            template_name: Nom du fichier template (ex: "translate.jinja")
+            template_name: Nom du fichier template (ex: "translate_base.jinja")
             **kwargs: Variables à passer au template
 
         Returns:

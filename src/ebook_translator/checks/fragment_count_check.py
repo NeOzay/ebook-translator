@@ -6,7 +6,7 @@ texte original et traduit, et corrige automatiquement en retranslant
 les lignes problématiques avec un prompt strict.
 """
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from ..logger import get_logger
 from .base import (
@@ -17,14 +17,13 @@ from .base import (
     FragmentCountErrorData,
     FragmentErrorDetail,
 )
+
+from ..constants import FRAGMENT_SEPARATOR
+
 from .retry_helper import retry_with_reasoning
 
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
-
-FRAGMENT_SEPARATOR = "</>"
 
 
 class FragmentCountCheck(Check):

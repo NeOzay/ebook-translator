@@ -7,7 +7,7 @@ un EPUB avec validation du glossaire entre Phase 1 et Phase 2.
 
 from pathlib import Path
 from ebook_translator.llm import LLM
-from ebook_translator.pipeline.two_phase_pipeline import TwoPhasePipeline
+from ebook_translator.translation_pipeline import TwoPhasePipeline
 from ebook_translator.translation.language import Language
 
 

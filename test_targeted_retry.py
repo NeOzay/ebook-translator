@@ -1,9 +1,10 @@
 """
-Test du nouveau template retry_missing_lines_targeted.jinja
+Test du nouveau template retry_translate_missing_lines_targeted.jinja
 """
 
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+from src.ebook_translator.config import TemplateNames
 
 # Simuler le cas du log fourni
 missing_indices = [27]
@@ -21,7 +22,7 @@ target_language = "Francais"
 # Charger le template
 template_dir = Path(__file__).parent / "template"
 env = Environment(loader=FileSystemLoader(template_dir))
-template = env.get_template("retry_missing_lines_targeted.jinja")
+template = env.get_template(TemplateNames.Missing_Lines_Targeted_Template)
 
 # Render
 prompt = template.render(

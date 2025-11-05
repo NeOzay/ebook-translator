@@ -120,3 +120,27 @@ class RetryPunctuationParams(TypedDict):
     incorrect_translation: str
     expected_pairs: int
     actual_pairs: int
+
+
+class RetrySentenceParams(TypedDict):
+    """
+    Paramètres pour retry_sentence.jinja (Correction nombre de phrases).
+
+    Utilisé pour corriger les traductions avec un nombre incorrect de phrases,
+    typiquement lors du raffinage où le LLM tronque le contenu au lieu de
+    l'améliorer. Fournit les deux traductions (initiale + raffinée) pour
+    permettre au LLM de comprendre ce qui a été perdu.
+
+    Attributes:
+        target_language: Code langue cible (ex: "fr", "en")
+        original_text: Texte source original avec numérotation sélective
+        previous_translation: Traduction initiale (Phase 1) avec numérotation sélective
+        missing_indices: Liste formatée des indices invalides (ex: "<5/>, <7/>, <12/>")
+        num_lines: Nombre de lignes invalides à corriger
+    """
+
+    target_language: str
+    original_text: str
+    previous_translation: str
+    missing_indices: str
+    num_lines: int

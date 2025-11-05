@@ -156,7 +156,7 @@ class ValidationPipeline:
 
                 else:
                     # Max retries atteint → tenter filtrage si check supporte get_invalid_lines
-                    logger.warning(
+                    logger.error(
                         f"⚠️ {check.name} échoué après {context.max_retries} tentatives "
                         f"(chunk {context.chunk.index}), filtrage des lignes invalides..."
                     )

@@ -9,6 +9,7 @@ Ces tests vérifient :
 
 import pytest
 from ebook_translator.llm import LLM
+from ebook_translator.config import TemplateNames
 
 
 class TestLLMConfiguration:
@@ -54,7 +55,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_style_instructions(self, llm):
         """Vérifie que le prompt contient les instructions de style."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -69,7 +70,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_terminology_consistency(self, llm):
         """Vérifie que le prompt contient les instructions de cohérence terminologique."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -82,7 +83,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_few_shot_examples(self, llm):
         """Vérifie que le prompt contient des exemples few-shot."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -95,7 +96,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_style_preservation_example(self, llm):
         """Vérifie qu'il y a un exemple de préservation du style."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -107,7 +108,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_terminology_consistency_example(self, llm):
         """Vérifie qu'il y a un exemple de cohérence terminologique."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -119,7 +120,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_fragment_separator_example(self, llm):
         """Vérifie qu'il y a un exemple de gestion des séparateurs."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -131,7 +132,7 @@ class TestPromptEnhancements:
     def test_prompt_contains_register_preservation_example(self, llm):
         """Vérifie qu'il y a un exemple de préservation du registre."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -143,7 +144,7 @@ class TestPromptEnhancements:
     def test_prompt_forbids_style_changes(self, llm):
         """Vérifie que le prompt interdit de changer le style."""
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )
@@ -176,7 +177,7 @@ class TestBackwardCompatibility:
         )
 
         prompt = llm.render_prompt(
-            "translate.jinja",
+            TemplateNames.First_Pass_Template,
             target_language="français",
             user_prompt=None,
         )

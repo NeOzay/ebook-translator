@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
-from .constants import FRAGMENT_SEPARATOR, VALID_ROOT_TAGS
+from ..constants import FRAGMENT_SEPARATOR, VALID_ROOT_TAGS
 from .bilingual import BilingualFormat, format_bilingual_inline
 from ..logger import get_logger
 
@@ -59,6 +59,19 @@ class TextReplacer:
 
     Cette classe contient toutes les méthodes liées au remplacement de texte,
     incluant les différents formats bilingues.
+
+    ⚠️ VALIDATION IMPORTANTE:
+    Les méthodes de cette classe SUPPOSENT que les données ont été validées
+    par le système de checks (FragmentCountCheck, LineCountCheck, etc.) AVANT
+    d'être appelées.
+
+    Si une erreur de validation (FragmentMismatchError) est levée ICI, cela
+    indique probablement:
+      • Le système de checks a été bypassé
+      • Un check a été désactivé manuellement
+      • Un bug dans la validation pipeline
+
+    → Ces erreurs doivent être rares et loggées comme anomalies.
     """
 
     def __init__(self, soup: BeautifulSoup) -> None:
@@ -110,82 +123,33 @@ class TextReplacer:
             fragments: Liste des fragments originaux
             translated_text: Texte traduit avec séparateurs '</>
             bilingual_format: Format d'affichage bilingue (None pour remplacement simple)
-            original_text: Texte original complet (pour retry automatique)
+            original_text: Texte original complet (pour contexte d'erreur)
 
         Raises:
-            FragmentMismatchError: Si le nombre de segments ne correspond pas (avec données de retry)
-            ValueError: Fallback si FragmentMismatchError non disponible
+            FragmentMismatchError: Si le nombre de segments ne correspond pas.
+                Cette erreur devrait normalement être détectée par FragmentCountCheck
+                AVANT l'appel à cette méthode. Si elle se produit ici, c'est une anomalie.
         """
         segments = translated_text.split(FRAGMENT_SEPARATOR)
 
         if len(segments) != len(fragments):
-            # AVERTISSEMENT: Cette erreur aurait dû être détectée AVANT la reconstruction
-            # par Phase1Worker ou Phase2Worker. Si elle apparaît ici, c'est que la validation
-            # a échoué ou a été contournée (traduction manuelle, cache corrompu, etc.)
-            logger.error(
-                f"⚠️ FRAGMENT MISMATCH DÉTECTÉ PENDANT LA RECONSTRUCTION!\n"
-                f"  • Cette erreur aurait dû être détectée en Phase 1/2\n"
-                f"  • Expected: {len(fragments)} fragments, Got: {len(segments)}\n"
-                f"  • Original text preview: {original_text[:100]}...\n"
-                f"  • Translated text preview: {translated_text[:100]}...\n"
-                f"\n💡 Cela indique probablement:\n"
-                f"  • Un cache corrompu (traduction sans validation)\n"
-                f"  • Une traduction manuelle insérée dans le store\n"
-                f"  • Un bug dans la validation Phase 1/2"
+            # AVERTISSEMENT: Cette erreur aurait dû être détectée par FragmentCountCheck
+            # AVANT la reconstruction. Si elle apparaît ici, c'est une anomalie.
+            logger.warning(
+                f"⚠️ FragmentMismatchError levée PENDANT reconstruction!\n"
+                f"   Cette erreur aurait dû être détectée par FragmentCountCheck.\n"
+                f"   Expected: {len(fragments)}, Got: {len(segments)}"
             )
 
-            try:
-                from .exceptions import FragmentMismatchError
+            from .exceptions import FragmentMismatchError
 
-                # Extraire les textes des fragments
-                original_fragments = [
-                    frag.strip() for frag in fragments if frag.strip()
-                ]
-                translated_segments = [seg.strip() for seg in segments]
-
-                raise FragmentMismatchError(
-                    original_fragments=original_fragments,
-                    translated_segments=translated_segments,
-                    original_text=original_text,
-                    expected_count=len(fragments),
-                    actual_count=len(segments),
-                )
-            except ImportError:
-                # Fallback : lever ValueError classique avec message détaillé
-                original_texts = [
-                    f'"{frag.strip()}"' for frag in fragments if frag.strip()
-                ]
-                segment_texts = [f'"{seg.strip()}"' for seg in segments if seg.strip()]
-
-                error_msg = (
-                    f"❌ Mismatch in fragment count:\n"
-                    f"  • Expected: {len(fragments)} fragments\n"
-                    f"  • Got: {len(segments)} segments in translation\n"
-                    f"\n📝 Original fragments ({len(original_texts)}):\n"
-                    f"  {', '.join(original_texts[:5])}"
-                )
-                if len(original_texts) > 5:
-                    error_msg += f"... (+{len(original_texts) - 5} more)"
-
-                error_msg += (
-                    f"\n\n🔄 Translation segments ({len(segment_texts)}):\n"
-                    f"  {', '.join(segment_texts[:5])}"
-                )
-                if len(segment_texts) > 5:
-                    error_msg += f"... (+{len(segment_texts) - 5} more)"
-
-                error_msg += (
-                    f"\n\n💡 Causes possibles:\n"
-                    f"  • Le LLM a fusionné ou divisé des fragments\n"
-                    f"  • Des séparateurs '</>' manquants ou en trop\n"
-                    f"  • Le contenu contient des '</>' dans le texte original\n"
-                    f"\n🔧 Solutions:\n"
-                    f"  • Vérifiez les logs LLM pour voir la réponse brute\n"
-                    f"  • Relancez la traduction (retry automatique activé)\n"
-                    f"  • Ajustez le prompt pour mieux expliquer les séparateurs"
-                )
-
-                raise ValueError(error_msg)
+            raise FragmentMismatchError(
+                original_fragments=[frag.strip() for frag in fragments if frag.strip()],
+                translated_segments=[seg.strip() for seg in segments],
+                original_text=original_text,
+                expected_count=len(fragments),
+                actual_count=len(segments),
+            )
 
         # Pour SEPARATE_TAG, créer une seule balise de traduction avec le texte complet
         if bilingual_format == BilingualFormat.SEPARATE_TAG:

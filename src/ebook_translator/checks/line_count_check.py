@@ -6,7 +6,7 @@ et corrige automatiquement en retranslant uniquement les lignes manquantes.
 """
 
 import re
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 from ..logger import get_logger
 from .base import Check, CheckResult, ValidationContext, LineCountErrorData, ErrorData
@@ -36,6 +36,70 @@ def count_expected_lines(content: str) -> int:
     pattern = re.compile(r"^<(\d+)\/>", re.MULTILINE)
     matches = pattern.findall(content)
     return len(matches)
+
+
+def validate_retry_indices(
+    retry_translations: dict[int, str],
+    expected_indices: list[int],
+) -> tuple[bool, Optional[str]]:
+    """
+    Valide que le retry a fourni exactement les indices demandés.
+
+    Vérifie que :
+    - Tous les indices attendus sont présents dans retry_translations
+    - Aucun indice supplémentaire/invalide n'est présent
+
+    Args:
+        retry_translations: Dictionnaire {index: texte_traduit} retourné par le retry
+        expected_indices: Liste des indices qui devaient être traduits
+
+    Returns:
+        Tuple (is_valid, error_message)
+        - is_valid: True si les indices correspondent exactement, False sinon
+        - error_message: Message d'erreur détaillé si invalide, None sinon
+
+    Example:
+        >>> retry_trans = {5: "Hello", 10: "World"}
+        >>> expected = [5, 10]
+        >>> validate_retry_indices(retry_trans, expected)
+        (True, None)
+
+        >>> retry_trans = {5: "Hello", 99: "Invalid"}
+        >>> expected = [5, 10]
+        >>> validate_retry_indices(retry_trans, expected)
+        (False, "❌ Le retry n'a pas fourni les indices corrects...")
+    """
+    expected_set = set(expected_indices)
+    received_set = set(retry_translations.keys())
+
+    missing = expected_set - received_set
+    extra = received_set - expected_set
+
+    if not missing and not extra:
+        return True, None
+
+    # Construire le message d'erreur
+    error_parts = [
+        "❌ Le retry n'a pas fourni les indices corrects:",
+        f"  • Indices demandés: {sorted(expected_set)[:20]}{'...' if len(expected_set) > 20 else ''}",
+        f"  • Indices reçus: {sorted(received_set)[:20]}{'...' if len(received_set) > 20 else ''}",
+    ]
+
+    if missing:
+        missing_preview = sorted(missing)[:10]
+        missing_str = ", ".join(f"<{i}/>" for i in missing_preview)
+        if len(missing) > 10:
+            missing_str += f" ... (+{len(missing) - 10} autres)"
+        error_parts.append(f"  • Toujours manquants: {missing_str}")
+
+    if extra:
+        extra_preview = sorted(extra)[:10]
+        extra_str = ", ".join(f"<{i}/>" for i in extra_preview)
+        if len(extra) > 10:
+            extra_str += f" ... (+{len(extra) - 10} autres)"
+        error_parts.append(f"  • Indices invalides (non demandés): {extra_str}")
+
+    return False, "\n".join(error_parts)
 
 
 class LineCountCheck(Check):
@@ -119,7 +183,7 @@ class LineCountCheck(Check):
         )
 
     def correct(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: LineCountErrorData
     ) -> dict[int, str]:
         """
         Corrige en retranslant uniquement les lignes manquantes.
@@ -144,19 +208,14 @@ class LineCountCheck(Check):
             >>> corrected = check.correct(context, error_data)
             >>> # corrected = {0: "Bonjour", 1: "Monde"}
         """
-        from ..translation.parser import (
-            parse_llm_translation_output,
-            validate_retry_indices,
-        )
+        from ..translation.parser import parse_llm_translation_output
 
         if context.llm is None:
             raise ValueError(
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        # Type narrowing: on sait que error_data est LineCountErrorData
-        typed_error_data = cast(LineCountErrorData, error_data)
-        missing_indices = typed_error_data["missing_indices"]
+        missing_indices = error_data["missing_indices"]
 
         logger.info(
             f"[LineCountCheck] Correction de {len(missing_indices)} lignes "
@@ -206,17 +265,18 @@ class LineCountCheck(Check):
             context=context,
             render_prompt=render_prompt,
             validate_result=validate_result,
-            context_name="missing_lines",
+            context_name=f"missing_lines",
             max_attempts=2,
         )
 
-        if not success:
-            raise ValueError(
-                f"[LineCountCheck] Échec correction après 2 tentatives pour chunk {context.chunk.index}"
-            )
-
         # Merger avec traductions existantes
         result = dict(context.translated_texts)
+        if not success:
+            logger.error(
+                f"[LineCountCheck] ❌ Échec correction après 2 tentatives pour chunk {context.chunk.index}, pour les lignes: {missing_indices}"
+            )
+            return result
+
         result.update(corrected_translations)
 
         logger.info(

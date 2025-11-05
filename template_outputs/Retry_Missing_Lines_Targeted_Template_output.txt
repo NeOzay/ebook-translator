@@ -1,20 +1,14 @@
-{# ========================================
-   SECTION 1 : INTRODUCTION
-   ======================================== #}
+⚠️ ATTENTION : Ta traduction précédente était INCOMPLÈTE
 
-Tu es un traducteur professionnel.
-
-L'utilisateur va te soumettre une partie d'un texte original.
-
-Ta tâche est de traduire **uniquement** les lignes qui commencent par une balise `<N/>`,
-où `N` est un entier (exemples : `<0/>`, `<1/>`, `<25/>`, etc.),
-et de produire une traduction fidèle et de qualité en {{ target_language }}.
+Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as PAS traduit TOUTES les lignes.
 
 ---
 
-{# ========================================
-   SECTION 2 : RÈGLES DE TRADUCTION
-   ======================================== #}
+## ❌ ERREUR DÉTECTÉE
+
+❌ Lignes manquantes: <5/>, <6/>
+
+---
 
 ### ⚠️ Règles de traduction
 
@@ -51,39 +45,27 @@ et de produire une traduction fidèle et de qualité en {{ target_language }}.
 
 ---
 
-{# ========================================
-   SECTION 3 : GESTION DES BALISES
-   ======================================== #}
-
 ### 🧩 Gestion des balises :
 
-- `<N/>` : Balise de **numérotation de ligne**.  
-  Chaque ligne traduite doit **commencer par la même balise `<N/>`** que dans le texte source.  
-  Ne change ni l’ordre ni le nombre de ces lignes.
+- `<N/>` : Balise de **numérotation de ligne**.
+  Chaque ligne traduite doit **commencer par la même balise `<N/>`** que dans le texte source.
+  Ne change ni l'ordre ni le nombre de ces lignes.
 
-- `</>` : Balise de **formatage**.  
-  Tu dois la **conserver exactement** aux mêmes positions dans la traduction.  
-  Ces balises peuvent apparaître isolées ou entourer du texte.  
-  Ne les supprime pas, ne les déplaces pas, et n’en ajoutes pas.
+- `</>` : Balise de **formatage**.
+  Tu dois la **conserver exactement** aux mêmes positions dans la traduction.
+  Ces balises peuvent apparaître isolées ou entourer du texte.
+  Ne les supprime pas, ne les déplaces pas, et n'en ajoutes pas.
 
 ---
 
-{# ========================================
-   SECTION 4 : CONTEXTE
-   ======================================== #}
-
 ### 🧩 Contexte :
 
-Le texte peut contenir des lignes **sans balise `<N/>`**.  
-Ces lignes servent **uniquement à te donner du contexte** pour comprendre la scène, le ton, ou les personnages.  
+Le texte peut contenir des lignes **sans balise `<N/>`**.
+Ces lignes servent **uniquement à te donner du contexte** pour comprendre la scène, le ton, ou les personnages.
 ⚠️ **Ne les traduis pas** et **ne les inclus pas** dans le texte final.
 Elles sont là uniquement pour t'aider à produire une traduction plus précise.
 
 ---
-
-{# ========================================
-   SECTION 5 : EXEMPLES
-   ======================================== #}
 
 ### 💡 Exemple : Métadonnées et mentions légales (À TRADUIRE)
 
@@ -177,13 +159,7 @@ Texte source :
 ```
 → ERREUR : L'interruption narrative `she said` n'est plus encadrée par des guillemets
 
----
-
-{# ========================================
-   SECTION 6 : FORMAT DE SORTIE
-   ======================================== #}
-
-### 🧾 Format de sortie :
+---### 🧾 Format de sortie :
 
 Tu dois produire ta traduction **en texte brut**, sans aucun commentaire, sans balise additionnelle et sans notes.
 À la toute fin de ta traduction, ajoute sur une ligne avec le marqueur `[=[END]=]`
@@ -195,4 +171,48 @@ Utilise strictement la structure suivante :
 <N+1/>Texte traduit avec </>balises</> conservées...
 <N+2/>Texte traduit...
 [=[END]=]
-...
+```
+
+---## 🎯 TRADUCTION CIBLÉE - LIGNES MANQUANTES UNIQUEMENT
+
+**Nombre de lignes à traduire** : 2
+
+Voici les lignes que tu as OUBLIÉES dans ta réponse précédente :
+
+```
+Line 1
+Line 2
+Line 3
+Line 4
+<5/>Line 5
+<6/>Line 6
+```
+
+---
+
+## 📋 FORMAT DE SORTIE
+
+Tu DOIS produire **EXACTEMENT 2 ligne(s)** en français, avec **indices conservés** :
+
+**Exemple** :
+```
+<5/>Texte traduit ligne 5
+<6/>Texte traduit ligne 6
+
+[=[END]=]
+```
+
+---
+
+## ✅ CHECKLIST
+
+- [ ] 2 ligne(s) traduites (ni plus, ni moins)
+- [ ] Indices conservés (<5/>, <6/>)
+- [ ] Métadonnées/copyright traduits si présents
+- [ ] Marqueur `[=[END]=]` présent
+
+Si tu ne respectes pas ces règles, ta réponse sera rejetée.
+
+---
+
+Produis maintenant la traduction de UNIQUEMENT ces 2 ligne(s) manquante(s) :

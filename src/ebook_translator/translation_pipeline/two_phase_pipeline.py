@@ -20,10 +20,11 @@ from ..checks import (
     FragmentCountCheck,
     LineCountCheck,
     PunctuationCheck,
+    SentenceCheck,
 )
 from ..glossary import Glossary
 from ..logger import get_logger
-from ..segment import Segmentator
+from ..segmentation.segmentator import Segmentator
 from ..stores.multi_store import MultiStore
 from ..translation.epub_handler import (
     copy_epub_metadata,
@@ -38,7 +39,7 @@ from .phase2_worker import Phase2Worker
 
 if TYPE_CHECKING:
     from ..llm import LLM
-    from ..segment import Chunk
+    from ..segmentation.segmentator import Chunk
     from ..translation.language import Language
 
 logger = get_logger(__name__)
@@ -260,6 +261,7 @@ class TwoPhasePipeline:
                 LineCountCheck(),
                 PunctuationCheck(),
                 FragmentCountCheck(),
+                SentenceCheck(),
             ]
         )
         self.validation_pool = ValidationWorkerPool(
@@ -359,8 +361,6 @@ class TwoPhasePipeline:
                 )
             )
 
-            # Switch store pour refined
-            self.multi_store.switch_to_refined()
             logger.info("  • MultiStore basculé vers refined_store")
 
             # Recréer ValidationWorkerPool pour Phase 2 (refined_store)

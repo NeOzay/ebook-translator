@@ -25,12 +25,12 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from .logger import get_logger
+from ..logger import get_logger
 
 
 if TYPE_CHECKING:
-    from .segment import Chunk
-    from .htmlpage import TagKey, HtmlPage
+    from ..segmentation.segmentator import Chunk
+    from ..htmlpage import TagKey, HtmlPage
 
 logger = get_logger(__name__)
 

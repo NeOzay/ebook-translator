@@ -11,13 +11,17 @@ from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
+from ebook_translator.segmentation.translated_chunk import TranslatedChunk
+
+from ..validation import ValidationItem
+
 from ..logger import get_logger
 from ..translation.parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ..glossary import Glossary
     from ..llm import LLM
-    from ..segment import Chunk
+    from ..segmentation.segmentator import Chunk
     from ..stores.multi_store import MultiStore
     from ..validation import ValidationWorkerPool
 
@@ -112,7 +116,13 @@ class Phase2Worker:
 
             # 9. Soumettre à ValidationWorkerPool
             # La validation et sauvegarde seront faites en arrière-plan
-            self.validation_pool.submit(chunk, refined_texts)
+            self.validation_pool.submit(
+                ValidationItem(
+                    chunk,
+                    refined_texts,
+                    TranslatedChunk(chunk, self.multi_store.initial_store),
+                )
+            )
 
             self.refined_count += 1
             logger.debug(

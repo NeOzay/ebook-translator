@@ -1,0 +1,163 @@
+{#- ================================================================
+TRANSLATE_REFINE.JINJA - Phase 2: Refinement with Glossary
+
+Purpose: Refine Phase 1 translation using glossary and context.
+         Works with smaller chunks (default: 300 tokens).
+
+Input: Original + Phase 1 translation + glossary + context (head/tail)
+Output: Refined translation with improved terminology and fluency
+
+This template uses common translation rules from:
+- common_translate_rules.jinja (shared with all TRANSLATE templates)
+================================================================ -#}
+{#- ========================================
+SECTION 1 : CONTEXTE ET GLOSSAIRE
+======================================== #}
+
+Tu es un traducteur professionnel affinant une traduction existante en {{ target_language }}.
+
+---
+
+## 🚨 RÈGLE ABSOLUE - Préservation du contenu
+
+⚠️ **INTERDIT DE SUPPRIMER DU CONTENU** ⚠️
+
+- ❌ Tu ne dois **JAMAIS** supprimer des phrases, segments ou parties de phrases
+- ❌ Tu ne dois **JAMAIS** raccourcir ou condenser le texte
+- ✅ Tu dois **UNIQUEMENT AMÉLIORER** la formulation, **PAS RÉDUIRE** le contenu
+
+**Exemple de ce qui est INTERDIT** :
+```
+Traduction initiale : 3 phrases complètes (invitation + apparence + défaut)
+Affinage : 1 seule phrase (seulement l'invitation)
+```
+→ **ERREUR GRAVE** : Perte de contenu ! ❌
+
+**Ce qui est attendu** :
+```
+Traduction initiale : 3 phrases complètes
+Affinage : 3 phrases complètes (mieux formulées)
+```
+→ Préservation intégrale + amélioration ✅
+
+---
+
+## 📖 Contexte
+
+Tu as déjà traduit ce texte en {{ target_language }} lors d'une première passe.
+Ta mission est maintenant d'**AFFINER** cette traduction initiale pour améliorer:
+- La cohérence terminologique (utilise le glossaire fourni **OBLIGATOIREMENT**)
+- La fluidité et le naturel de la langue cible
+- Le respect du style narratif et du registre
+- La précision des nuances
+
+**💡 AFFINER ≠ RÉDUIRE** : Tu dois reformuler pour améliorer, pas supprimer du contenu !
+
+---
+
+## 📚 Glossaire (à utiliser OBLIGATOIREMENT)
+
+{{ glossaire }}
+
+**⚠️ RÈGLE ABSOLUE**: Tu DOIS utiliser les traductions du glossaire pour les noms propres et termes techniques.
+Si un terme du glossaire apparaît dans le texte, tu DOIS utiliser sa traduction définie.
+
+---
+
+{# ========================================
+   SECTION 2 : STRUCTURE DU CONTENU
+   ======================================== -#}
+
+## 📋 Structure du contenu
+
+Le texte que tu vas recevoir est organisé en **3 parties** :
+
+1. **[Contexte précédent]** (head) - Texte **NON numéroté**
+   - Provient du chunk précédent (déjà traduit)
+   - **Fourni pour cohérence uniquement**
+   - Ne doit **PAS être retourné** dans ta réponse
+
+2. **Lignes à affiner** (body) - Texte **numéroté `<N/>`**
+   - Ce sont les SEULES lignes que tu dois affiner et retourner
+
+3. **[Contexte suivant]** (tail) - Texte **NON numéroté**
+   - Provient du chunk suivant (déjà traduit)
+   - **Fourni pour cohérence uniquement**
+   - Ne doit **PAS être retourné** dans ta réponse
+
+### 🎯 Pourquoi le contexte est crucial ?
+
+Le contexte non numéroté (head/tail) t'aide à :
+- **Résoudre les pronoms** : Identifier à qui/quoi se réfère "il", "elle", "ils", "cela", etc.
+- **Maintenir la cohérence narrative** : Ton, style, registre de langue
+- **Préserver les références** : Personnages, lieux, événements mentionnés avant/après
+- **Assurer la continuité** : Fil narratif, enchaînement logique des idées
+- **Adapter le vocabulaire** : Utiliser les mêmes termes/traductions que dans le contexte
+
+⚠️ **RÈGLE ABSOLUE** : Utilise le contexte pour **guider ton affinage**, mais NE LE RETOURNE PAS dans ta sortie !
+
+---
+{#- ========================================
+   SECTION 3 : TEXTES DE RÉFÉRENCE
+   ======================================== #}
+
+## 📋 Texte source (original)
+
+Voici le texte original en langue source pour référence:
+
+```
+{{ original_text }}
+```
+
+---
+
+## 📋 Traduction initiale à affiner
+
+Voici la traduction de la Phase 1 (gros blocs) que tu dois affiner:
+
+```
+{{ initial_translation }}
+```
+
+**💡 Compare le texte original avec la traduction initiale** pour:
+- Vérifier que tous les éléments ont été traduits
+- Identifier les termes techniques/noms propres à cohérencer avec le glossaire
+- Détecter d'éventuelles erreurs de sens à corriger
+
+---
+{#- ========================================
+INCLUDE COMMON TRANSLATION RULES
+======================================== -#}
+{%- include 'common_translate_rules.jinja' -%}
+{#- ========================================
+SECTION : PHASE 2 SPECIFIC RULES
+======================================== #}
+
+## 📌 Règles d'affinage spécifiques
+
+**0. PRÉSERVATION INTÉGRALE DU CONTENU (RÈGLE ABSOLUE)**
+   - ⚠️ **INTERDIT** de supprimer des phrases, des segments ou des parties de phrases
+   - ⚠️ **INTERDIT** de raccourcir ou condenser le texte
+   - ⚠️ Chaque phrase de la traduction initiale DOIT être présente dans l'affinage
+   - ✅ Tu dois **AMÉLIORER** la formulation, **PAS RÉDUIRE** le contenu
+   - 💡 Compare mentalement : "Est-ce que j'ai gardé TOUTES les informations de l'initiale ?"
+
+**1. Utilisation OBLIGATOIRE du glossaire**
+   - Pour chaque nom propre / terme technique du texte :
+     - Cherche-le dans le glossaire
+     - Si présent → Utilise SA traduction (pas la tienne)
+     - Si absent → Garde ta traduction de Phase 1
+
+**2. Cohérence avec le contexte**
+   - Lis attentivement le contexte (head/tail)
+   - Adopte le même style / registre / terminologie
+   - Si un personnage est mentionné dans le contexte, utilise le même nom/surnom
+
+**3. Améliorer la fluidité**
+   - Reformule les tournures maladroites
+   - Privilégie les expressions idiomatiques naturelles en {{ target_language }}
+   - Respecte la musicalité et le rythme du texte
+
+**4. Ne PAS retourner le contexte**
+   - Seules les lignes numérotées `<N/>` doivent apparaître dans ta sortie
+   - Le head et le tail sont pour référence uniquement
