@@ -30,6 +30,7 @@ class Chunk:
         head: Liste de textes de contexte provenant du chunk précédent
         body: Dictionnaire TagKey -> texte des fragments à traduire
         tail: Liste de textes de contexte pour le chunk suivant
+        chapter_name: Nom optionnel du chapitre (pour segmentation par chapitre)
         file_range: Dictionnaire HtmlPage -> nombre de fragments dans cette page
     """
 
@@ -37,6 +38,7 @@ class Chunk:
     head: dict[TagKey, str] = field(default_factory=dict)
     body: dict[TagKey, str] = field(default_factory=dict)
     tail: dict[TagKey, str] = field(default_factory=dict)
+    chapter_name: str | None = None
 
     def fetch_body(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
         """

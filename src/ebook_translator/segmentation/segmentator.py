@@ -332,3 +332,55 @@ class Segmentator:
             f"max_tokens={self.max_tokens}, "
             f"overlap={overlap_str})"
         )
+
+    def get_all_chapters_by_spine(
+        self,
+        llm=None,
+        config=None
+    ) -> Iterator[Chunk]:
+        """
+        Génère chunks par chapitre basé sur analyse de la spine EPUB.
+
+        Plus robuste que get_all_chapters() (balises h1) car :
+        - Utilise structure EPUB (spine + noms de fichiers)
+        - Supporte chapitres multi-fichiers (chapter1 + chapter1_a + insert1)
+        - Patterns avancés : chapter11 = subpart, inserts intercalés
+        - Fallback LLM pour cas ambigus
+
+        Args:
+            llm: Instance LLM optionnelle pour résolution cas ambigus
+            config: ChapterDetectorConfig ou None (utilise config par défaut)
+
+        Yields:
+            Un Chunk par chapitre détecté
+
+        Example:
+            >>> segmentator = Segmentator(epub_htmls, max_tokens=100000)
+            >>> for chapter in segmentator.get_all_chapters_by_spine(llm=llm):
+            ...     analyze_chapter(chapter)
+        """
+        from .chapter_detector import ChapterDetector, ChapterDetectorConfig
+
+        if config is None:
+            config = ChapterDetectorConfig()
+
+        detector = ChapterDetector(self.epub_htmls, llm=llm, config=config)
+
+        for chapter_group in detector.detect_chapters():
+            chunk = self._create_new_chunk(index=chapter_group.chapter_index)
+
+            # Extraire texte de tous les fichiers du chapitre
+            for html_file in chapter_group.html_files:
+                for _, tag_key, text in get_texts([html_file]):
+                    chunk.body[tag_key] = text
+
+            # Métadonnées du chapitre
+            chunk.chapter_name = chapter_group.chapter_name
+
+            logger.debug(
+                f"Chapitre {chunk.index}: {chapter_group.chapter_name} "
+                f"({len(chapter_group.html_files)} fichiers, "
+                f"{len(chunk.body)} fragments)"
+            )
+
+            yield chunk
