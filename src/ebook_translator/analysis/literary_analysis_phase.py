@@ -33,6 +33,7 @@ from ..segmentation.chapter_detector import ChapterDetector, ChapterDetectorConf
 from .block_splitter import BlockSplitter, AnalysisBlock
 from .schema import ChapterAnalysis
 from .validator import AnalysisValidator
+from .analysis_exporter import AnalysisExporter
 
 if TYPE_CHECKING:
     from ..llm import LLM
@@ -107,6 +108,7 @@ class LiteraryAnalysisPhase:
         self.segmentator = Segmentator(html_items)
         self.block_splitter = BlockSplitter(target_tokens=block_tokens)
         self.validator = AnalysisValidator()
+        self.exporter = AnalysisExporter()
 
         logger.info(
             f"LiteraryAnalysisPhase initialisée: "
@@ -306,20 +308,14 @@ class LiteraryAnalysisPhase:
         with json_path.open("w", encoding="utf-8") as f:
             json.dump(analysis, f, ensure_ascii=False, indent=2)
 
-        logger.info(f"Sauvegardé: {json_path}")
+        logger.info(f"Sauvegardé JSON: {json_path}")
 
-        # Sauvegarder Markdown (TODO: implement markdown export in AnalysisExporter)
+        # Sauvegarder Markdown avec AnalysisExporter
         md_path = self.output_dir / f"{safe_name}.md"
-        with md_path.open("w", encoding="utf-8") as f:
-            f.write(f"# {chapter_name}\n\n")
-            f.write("**Status**: " + analysis["status"] + "\n\n")
-            f.write(
-                f"**Blocs analysés**: {analysis['blocks_analyzed']}/{analysis['total_blocks']}\n\n"
-            )
-            f.write("---\n\n")
-            f.write("*Export Markdown automatique à implémenter dans AnalysisExporter*\n")
+        markdown_content = self.exporter.export_to_markdown(analysis)
+        self.exporter.save_markdown(markdown_content, md_path)
 
-        logger.debug(f"Sauvegardé (Markdown placeholder): {md_path}")
+        logger.info(f"Sauvegardé Markdown: {md_path}")
 
         return json_path, md_path
 

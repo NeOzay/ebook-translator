@@ -8,6 +8,7 @@ Composants :
 - BlockSplitter : Découpage chapitres en blocs de ~4000 tokens
 - AnalysisBlock : Bloc d'analyse individuel
 - GlossaryPopulator : Population automatique glossaire depuis analyses
+- AnalysisExporter : Export analyses en Markdown formaté
 """
 
 from .schema import ChapterAnalysis
@@ -15,6 +16,7 @@ from .validator import AnalysisValidator
 from .block_splitter import BlockSplitter, AnalysisBlock
 from .literary_analysis_phase import LiteraryAnalysisPhase
 from .glossary_populator import GlossaryPopulator
+from .analysis_exporter import AnalysisExporter
 
 __all__ = [
     "ChapterAnalysis",
@@ -23,4 +25,5 @@ __all__ = [
     "AnalysisBlock",
     "LiteraryAnalysisPhase",
     "GlossaryPopulator",
+    "AnalysisExporter",
 ]
