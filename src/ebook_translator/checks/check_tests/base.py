@@ -9,8 +9,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
 if TYPE_CHECKING:
-    from ..llm import LLM
-    from ..segmentation import Chunk, TranslatedChunk
+    from ...llm import LLM
+    from ...segmentation import Chunk, TranslatedChunk
+    from ...pipeline.context import ChunkContext
 
 
 # =============================================================================
@@ -216,7 +217,7 @@ class ValidationContext:
     original_texts: dict[int, str]
     llm: "LLM | None"
     target_language: str
-    phase: Literal["initial", "refined"]
+    chunk_info: "ChunkContext"
     max_retries: int = 2
     previous_translated_texts: "TranslatedChunk | None" = None
     filtered_lines: list[FilteredLine] = field(default_factory=list)

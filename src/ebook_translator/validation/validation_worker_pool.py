@@ -105,7 +105,7 @@ class ValidationWorkerPool:
         store: "Store",
         llm: "LLM",
         target_language: str,
-        phase: Literal["initial", "refined"],
+        phase: str,
         max_retries: int = 1,
         on_validated: Callable[["Chunk", dict[int, str]], None] | None = None,
     ):
@@ -248,6 +248,58 @@ class ValidationWorkerPool:
                 logger.warning("SaveWorker n'a pas terminé après timeout")
 
         logger.info("ValidationWorkerPool terminé (validation + sauvegarde)")
+
+    def switch_pipeline(self, pipeline: "ValidationPipeline") -> None:
+        """
+        Change le pipeline de validation pour tous les ValidationWorkers.
+
+        Args:
+            pipeline: Nouveau ValidationPipeline à utiliser
+        """
+        if not self.validation_queue.is_idle():
+            logger.error(
+                "Impossible de changer le pipeline: la validation_queue n'est pas idle"
+            )
+            raise RuntimeError(
+                "Cannot switch pipeline while validation_queue is not idle"
+            )
+
+        for worker in self.workers:
+            worker.pipeline = pipeline
+        logger.debug("Pipeline de validation changé pour tous les workers")
+
+    def switch_store(self, store: "Store") -> None:
+        """
+        Change le store de sauvegarde pour le SaveWorker.
+
+        Args:
+            store: Nouveau Store à utiliser
+        """
+        if not self.save_queue.is_idle():
+            logger.error("Impossible de changer le store: la save_queue n'est pas idle")
+            raise RuntimeError("Cannot switch store while save_queue is not idle")
+
+        self.save_worker.store = store
+        logger.debug("Store de sauvegarde changé pour le SaveWorker")
+
+    def switch_name(self, phase: str) -> None:
+        """
+        Change le nom de la phase pour tous les ValidationWorkers.
+
+        Args:
+            phase: Nouveau nom de phase à utiliser
+        """
+        if not self.validation_queue.is_idle():
+            logger.error(
+                "Impossible de changer le nom de phase: la validation_queue n'est pas idle"
+            )
+            raise RuntimeError(
+                "Cannot switch phase name while validation_queue is not idle"
+            )
+
+        for worker in self.workers:
+            worker.phase = phase
+        logger.debug("Nom de la phase changé pour tous les workers")
 
     def get_statistics(self) -> ValidationPoolStats:
         """

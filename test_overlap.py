@@ -9,7 +9,7 @@ Ce script teste différents ratios d'overlap pour vérifier que :
 """
 
 from ebooklib import epub
-from src.ebook_translator.segment import Segmentator
+from src.ebook_translator import Segmentator
 from src.ebook_translator.htmlpage import HtmlPage
 
 
@@ -18,9 +18,9 @@ def create_mock_epub_html(content: str, file_name: str) -> epub.EpubHtml:
     item = epub.EpubHtml(
         title=file_name,
         file_name=file_name,
-        lang='en',
+        lang="en",
     )
-    item.content = content.encode('utf-8')
+    item.content = content.encode("utf-8")
     return item
 
 
@@ -82,9 +82,15 @@ def test_overlap_ratio(overlap_ratio: float, max_tokens: int = 100):
         print(f"   - Tail items: {len(chunk.tail)}")
 
         # Calculer les tokens approximatifs
-        body_tokens = sum(segmentator.count_tokens(text) for text in chunk.body.values())
-        head_tokens = sum(segmentator.count_tokens(text) for text in chunk.head)
-        tail_tokens = sum(segmentator.count_tokens(text) for text in chunk.tail)
+        body_tokens = sum(
+            segmentator.count_tokens(text) for text in chunk.body.values()
+        )
+        head_tokens = sum(
+            segmentator.count_tokens(text) for text in chunk.head.values()
+        )
+        tail_tokens = sum(
+            segmentator.count_tokens(text) for text in chunk.tail.values()
+        )
 
         print(f"   - Body tokens: ~{body_tokens}")
         print(f"   - Head tokens: ~{head_tokens}")
@@ -102,9 +108,9 @@ def test_overlap_ratio(overlap_ratio: float, max_tokens: int = 100):
 
 def main():
     """Fonction principale pour lancer tous les tests."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TESTS DE VALIDATION DU SYSTÈME D'OVERLAP")
-    print("="*80)
+    print("=" * 80)
 
     # Test 1 : Overlap standard (15%)
     test_overlap_ratio(overlap_ratio=0.15, max_tokens=100)
@@ -124,9 +130,9 @@ def main():
     # Test 6 : Overlap extrême (300%)
     test_overlap_ratio(overlap_ratio=3.0, max_tokens=100)
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TOUS LES TESTS TERMINES")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":

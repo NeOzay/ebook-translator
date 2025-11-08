@@ -26,7 +26,7 @@ from ..segmentation import Chunk, TranslatedChunk
 
 if TYPE_CHECKING:
     from ..glossary import Glossary
-    from ..stores.multi_store import MultiStore
+    from ..stores.multi_store import Store
 
 
 class TemplateRenderer:
@@ -114,7 +114,7 @@ class TemplateRenderer:
     def render_refine(
         self,
         chunk: "Chunk",
-        multi_store: "MultiStore",
+        store: "Store",
         glossary: "Glossary",
         target_language: str,
     ) -> str:
@@ -154,7 +154,7 @@ class TemplateRenderer:
             >>> llm_output = llm.query(prompt, "")  # Tout dans le prompt
         """
         # 1. Récupérer traduction initiale (Phase 1 ou Phase 2 si disponible)
-        translated_chunk = TranslatedChunk(chunk, multi_store)
+        translated_chunk = TranslatedChunk(chunk, store)
 
         if translated_chunk.has_missing:
             raise ValueError(

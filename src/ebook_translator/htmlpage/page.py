@@ -71,6 +71,7 @@ class HtmlPage:
         html_content = epub_html.content.decode("utf-8")
         self.soup = BeautifulSoup(html_content, "html.parser")
         self.to_translate: dict[TagKey, TextFragment] = {}
+        self.texts: dict[TagKey, TextFragment] = {}
         self.all_dump = False
         self._replacer = TextReplacer(self.soup)
 
@@ -90,6 +91,10 @@ class HtmlPage:
             >>> for tag_key, text in page.dump():
             ...     print(f"{tag_key}: {text}")
         """
+        if self.all_dump:
+            yield from self.get_texts()
+            return
+
         body = self.soup.find("body")
         if not body:
             return
@@ -124,6 +129,24 @@ class HtmlPage:
             yield self._store_fragments(index, current_parent, current_fragments)
 
         self.all_dump = True
+
+    def get_texts(
+        self,
+    ) -> Iterator[tuple[TagKey, str]]:
+        """
+        Génère des tuples (TagKey, texte) pour tous les fragments stockés.
+
+        Yields:
+            Tuples (TagKey, texte) pour chaque fragment à traduire
+
+        Example:
+            >>> page = HtmlPage(epub_html)
+            >>> for tag_key, text in page.get_texts():
+            ...     print(f"{tag_key}: {text}")
+        """
+        for tag_key, fragments in self.texts.items():
+            text = self._format_text(fragments)
+            yield tag_key, text
 
     def replace_text(
         self,
@@ -266,6 +289,7 @@ class HtmlPage:
         """
         tag_key = TagKey(index, parent, self)
         self.to_translate[tag_key] = fragments
+        self.texts[tag_key] = fragments
         text = self._format_text(fragments)
         return tag_key, text
 
@@ -329,7 +353,7 @@ class HtmlPage:
         )
 
 
-def get_files(
+def get_texts(
     epub_htmls: list[epub.EpubHtml],
 ) -> Iterator[tuple[HtmlPage, TagKey, str]]:
     """

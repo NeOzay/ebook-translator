@@ -8,7 +8,7 @@ texte original et traduit, garantissant la préservation de la structure narrati
 
 from typing import TYPE_CHECKING, cast
 
-from ..logger import get_logger
+from ...logger import get_logger
 from .base import (
     Check,
     CheckResult,
@@ -17,7 +17,7 @@ from .base import (
     ValidationContext,
     ErrorData,
 )
-from .retry_helper import retry_with_reasoning
+from ..retry_helper import retry_with_reasoning
 
 if TYPE_CHECKING:
     pass
@@ -198,7 +198,7 @@ class PunctuationCheck(Check):
             >>> corrected = check.correct(context, error_data)
             >>> # corrected[0] contiendra maintenant 2 paires de guillemets
         """
-        from ..translation.parser import parse_llm_translation_output
+        from ...translation.parser import parse_llm_translation_output
 
         if context.llm is None:
             raise ValueError(

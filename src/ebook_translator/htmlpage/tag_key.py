@@ -26,7 +26,7 @@ class TagKey:
         page: La page HTML contenant ce tag
     """
 
-    __slots__ = ("tag", "_id", "index", "page")
+    __slots__ = ("tag", "_id", "index", "page", "chapter_name")
 
     def __init__(self, index: int, tag: Tag, page: HtmlPage) -> None:
         """
@@ -45,6 +45,16 @@ class TagKey:
         self._id = id(tag)
         self.index = str(index)  # Toujours string pour cohérence avec Store
         self.page = page
+        self.chapter_name = ""  # Initialisé à une chaîne vide
+
+    def set_chapter(self, chapter_name: str) -> None:
+        """
+        Définit le nom du chapitre pour ce TagKey.
+
+        Args:
+            chapter_name: Le nom du chapitre à associer
+        """
+        self.chapter_name = chapter_name
 
     def __hash__(self) -> int:
         """Retourne le hash basé sur l'identité de l'objet."""
@@ -66,4 +76,4 @@ class TagKey:
 
     def __repr__(self) -> str:
         """Représentation en chaîne pour le debug."""
-        return f"TagKey(index={self.index}, tag={self.tag.name}, page={self.page.epub_html.file_name})"
+        return f"TagKey(index={self.index}, tag={self.tag.name}, page={self.page.epub_html.file_name}, chapter={self.chapter_name})"

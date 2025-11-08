@@ -8,7 +8,7 @@ les lignes problématiques avec un prompt strict.
 
 from typing import cast
 
-from ..logger import get_logger
+from ...logger import get_logger
 from .base import (
     Check,
     CheckResult,
@@ -18,9 +18,9 @@ from .base import (
     FragmentErrorDetail,
 )
 
-from ..constants import FRAGMENT_SEPARATOR
+from ...constants import FRAGMENT_SEPARATOR
 
-from .retry_helper import retry_with_reasoning
+from ..retry_helper import retry_with_reasoning
 
 
 logger = get_logger(__name__)
@@ -164,7 +164,7 @@ class FragmentCountCheck(Check):
             >>> corrected = check.correct(context, error_data)
             >>> # corrected[0] contiendra maintenant un séparateur </>
         """
-        from ..translation.parser import parse_llm_translation_output
+        from ...translation.parser import parse_llm_translation_output
 
         if context.llm is None:
             raise ValueError(

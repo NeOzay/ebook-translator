@@ -56,7 +56,7 @@ class LogSession:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_dir = Path("logs")
         LogSession._session_dir = base_dir / f"run_{timestamp}"
-        LogSession._session_dir.mkdir(parents=True, exist_ok=True)
+        # LogSession._session_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def get_session_dir(cls) -> Path:

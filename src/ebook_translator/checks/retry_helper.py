@@ -1,7 +1,7 @@
 """Helper centralisé pour gérer les retries avec mode raisonnement."""
 
 from typing import Optional, Callable
-from ebook_translator.checks.base import ValidationContext
+from ebook_translator.checks.check_tests.base import ValidationContext
 from ebook_translator.logger import get_logger
 
 logger = get_logger(__name__)

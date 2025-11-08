@@ -41,7 +41,7 @@ from ..constants import (
 # Classes principales
 from .tag_key import TagKey
 from .bilingual import BilingualFormat
-from .page import HtmlPage, get_files
+from .page import HtmlPage, get_texts
 
 # Fonctions utilitaires
 from .replacement import find_root_tag
@@ -56,6 +56,6 @@ __all__ = [
     "TagKey",
     "BilingualFormat",
     # Fonctions
-    "get_files",
+    "get_texts",
     "find_root_tag",
 ]

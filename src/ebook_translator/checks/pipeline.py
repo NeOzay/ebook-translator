@@ -8,7 +8,7 @@ correction inline et retry automatique.
 from typing import TYPE_CHECKING
 
 from ..logger import get_logger
-from .base import Check, CheckResult, ValidationContext, ErrorData
+from .check_tests.base import Check, CheckResult, ValidationContext, ErrorData
 
 if TYPE_CHECKING:
     pass
@@ -276,7 +276,7 @@ class ValidationPipeline:
             >>> self._build_filtered_lines(context, invalid_indices, "line_count", result)
             >>> # context.filtered_lines contient maintenant 3 FilteredLine
         """
-        from .base import FilteredLine
+        from .check_tests.base import FilteredLine
 
         # Énumérer le body pour récupérer les TagKey
         body_items = list(context.chunk.body.items())

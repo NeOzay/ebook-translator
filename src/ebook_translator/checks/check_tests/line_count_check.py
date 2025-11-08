@@ -8,9 +8,9 @@ et corrige automatiquement en retranslant uniquement les lignes manquantes.
 import re
 from typing import TYPE_CHECKING, Optional, cast
 
-from ..logger import get_logger
+from ...logger import get_logger
 from .base import Check, CheckResult, ValidationContext, LineCountErrorData, ErrorData
-from .retry_helper import retry_with_reasoning
+from ..retry_helper import retry_with_reasoning
 
 if TYPE_CHECKING:
     pass
@@ -208,7 +208,7 @@ class LineCountCheck(Check):
             >>> corrected = check.correct(context, error_data)
             >>> # corrected = {0: "Bonjour", 1: "Monde"}
         """
-        from ..translation.parser import parse_llm_translation_output
+        from ...translation.parser import parse_llm_translation_output
 
         if context.llm is None:
             raise ValueError(

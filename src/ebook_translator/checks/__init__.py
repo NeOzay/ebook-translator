@@ -5,7 +5,7 @@ Ce module fournit un pipeline composable de checks pour valider
 et corriger automatiquement les traductions avant sauvegarde.
 """
 
-from .base import (
+from .check_tests.base import (
     Check,
     CheckResult,
     ValidationContext,
@@ -16,14 +16,14 @@ from .base import (
     FilteredLine,
 )
 from .pipeline import ValidationPipeline
-from .line_count_check import LineCountCheck
-from .fragment_count_check import FragmentCountCheck
-from .punctuation_check import (
+from .check_tests.line_count_check import LineCountCheck
+from .check_tests.fragment_count_check import FragmentCountCheck
+from .check_tests.punctuation_check import (
     PunctuationCheck,
     PunctuationErrorData,
     PunctuationErrorDetail,
 )
-from .sentence_check import SentenceCheck
+from .check_tests.sentence_check import SentenceCheck
 
 __all__ = [
     "Check",

@@ -63,7 +63,7 @@ class ValidationWorker:
         pipeline: ValidationPipeline,
         llm: "LLM",
         target_language: str,
-        phase: Literal["initial", "refined"],
+        phase: str,
         stop_event: threading.Event,
         max_retries: int = 1,
     ):
@@ -86,7 +86,7 @@ class ValidationWorker:
         self.pipeline = pipeline
         self.llm = llm
         self.target_language = target_language
-        self.phase: Literal["initial", "refined"] = phase
+        self.phase = phase
         self.stop_event = stop_event
         self.max_retries = max_retries
 
@@ -159,11 +159,11 @@ class ValidationWorker:
         context = ValidationContext(
             chunk=chunk,
             translated_texts=validation_item.translated_texts,
-            previous_translated_texts=validation_item.previous_translated_texts or {},
+            previous_translated_texts=validation_item.previous_translated_texts,
             original_texts=original_texts,
             llm=self.llm,
             target_language=self.target_language,
-            phase=self.phase,
+            chunk_info=validation_item.chunk_info,
             max_retries=self.max_retries,
         )
 

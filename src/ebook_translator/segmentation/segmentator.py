@@ -12,7 +12,7 @@ import tiktoken
 
 from .chunk import Chunk
 
-from ..htmlpage import TagKey, get_files, HtmlPage
+from ..htmlpage import TagKey, get_texts, HtmlPage
 from ..logger import get_logger
 from ebooklib import epub
 
@@ -136,23 +136,35 @@ class Segmentator:
         # overlap_token_budget = self._calculate_overlap_tokens()
         chunk_index = 0
 
-        for page, tag_key, text in get_files(self.epub_htmls):
+        previous_chapter_name: str | None = None
+        current_chapter_name = ""
+
+        for page, tag_key, text in get_texts(self.epub_htmls):
             token_count = self.count_tokens(text)
 
+            if self._is_chapter_delimiter(tag_key):
+                current_chapter_name = text.strip()
+                if not previous_chapter_name:
+                    previous_chapter_name = current_chapter_name
+            tag_key.set_chapter(current_chapter_name)
             # Vérifier si on dépasse la limite de tokens
-            if current_token_count + token_count > self.max_tokens:
+            if (
+                current_token_count + token_count > self.max_tokens
+                or current_chapter_name != previous_chapter_name
+            ):
                 # Chunk plein : préparer le suivant
                 chunk_queue[current_chunk] = self._calculate_overlap_tokens()
 
                 chunk_index += 1
                 current_chunk = self._create_new_chunk(index=chunk_index)
-                self._add_fragment_to_body(current_chunk, page, tag_key, text)
+                self._add_fragment_to_body(current_chunk, tag_key, text)
                 self._fill_head_from_previous(chunk_queue, current_chunk)
 
                 current_token_count = token_count
+                previous_chapter_name = current_chapter_name
             else:
                 # Ajouter au chunk actuel
-                self._add_fragment_to_body(current_chunk, page, tag_key, text)
+                self._add_fragment_to_body(current_chunk, tag_key, text)
                 current_token_count += token_count
 
                 # Gérer le tail des chunks précédents
@@ -176,6 +188,51 @@ class Segmentator:
         if current_chunk not in chunk_queue:
             yield current_chunk
 
+    def get_all_chapters(self) -> Iterator[Chunk]:
+        """
+        Génère tous les chunks en segmentant le contenu de l'EPUB par chapitres.
+
+        Cette méthode parcourt tous les fragments de texte des pages HTML
+        et les regroupe en chunks utilisant la balise de chapitre comme délimiteur.
+
+        Yields:
+            Un chunk par chapitre avec son contenu.
+        """
+        chunk_index = 0
+        current_chunk = self._create_new_chunk(index=chunk_index)
+        current_chapter_name = ""
+
+        for page, tag_key, text in get_texts(self.epub_htmls):
+            # Vérifier si le fragment est un délimiteur de chapitre
+            if self._is_chapter_delimiter(
+                tag_key
+            ):  # Supposons que <h1> délimite les chapitres
+                # Si le chunk actuel a du contenu, yield-le
+                current_chapter_name = text.strip()
+                if current_chunk.body:
+                    yield current_chunk
+                    chunk_index += 1
+                    current_chunk = self._create_new_chunk(index=chunk_index)
+
+            # Ajouter le fragment au chunk actuel
+            self._add_fragment_to_body(current_chunk, tag_key, text)
+
+        # Yield le dernier chunk s'il a du contenu
+        if current_chunk.body:
+            yield current_chunk
+
+    def _is_chapter_delimiter(self, tag_key: TagKey) -> bool:
+        """
+        Vérifie si un TagKey est un délimiteur de chapitre.
+
+        Args:
+            tag_key: Le TagKey à vérifier
+
+        Returns:
+            True si le tag est un délimiteur de chapitre
+        """
+        return tag_key.tag.name == "h1"  # Supposons que <h1> délimite les chapitres
+
     def _create_new_chunk(self, index: int) -> Chunk:
         """
         Crée un nouveau chunk vide.
@@ -197,9 +254,7 @@ class Segmentator:
         """
         return int(self.max_tokens * self.overlap_ratio)
 
-    def _add_fragment_to_body(
-        self, chunk: Chunk, page: HtmlPage, tag_key: TagKey, text: str
-    ) -> None:
+    def _add_fragment_to_body(self, chunk: Chunk, tag_key: TagKey, text: str) -> None:
         """
         Ajoute un fragment de texte au body d'un chunk.
 

@@ -1,10 +1,10 @@
 from typing import override
 
-from ..checks.line_count_check import validate_retry_indices
+from .line_count_check import validate_retry_indices
 
-from ..checks.retry_helper import retry_with_reasoning
+from ..retry_helper import retry_with_reasoning
 from .base import Check, CheckResult, SentenceErrorData, SentenceErrorDetail
-from ..logger import get_logger
+from ...logger import get_logger
 
 
 logger = get_logger(__name__)
@@ -288,7 +288,7 @@ class SentenceCheck(Check):
                 True si la sortie est valide et parsée avec succès, False sinon
             """
             try:
-                from ..translation.parser import parse_llm_translation_output
+                from ...translation.parser import parse_llm_translation_output
 
                 # Parser la sortie LLM
                 parsed = parse_llm_translation_output(llm_output)

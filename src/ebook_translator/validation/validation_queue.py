@@ -10,8 +10,10 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+
 if TYPE_CHECKING:
     from ..segmentation import Chunk, TranslatedChunk
+    from ..pipeline.context import ChunkContext
 
 
 @dataclass
@@ -31,6 +33,7 @@ class ValidationItem:
     """
 
     chunk: "Chunk"
+    chunk_info: "ChunkContext"
     translated_texts: dict[int, str]
     previous_translated_texts: "TranslatedChunk | None" = None
 
