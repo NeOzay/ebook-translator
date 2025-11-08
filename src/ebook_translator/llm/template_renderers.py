@@ -426,3 +426,147 @@ class TemplateRenderer:
         }
 
         return self.render_prompt(TemplateNames.Retry_Sentence_Template, **params)
+
+    # -----------------------------------
+    # 🔹 Phase 0 : Analyse littéraire
+    # -----------------------------------
+
+    def render_analyze_initial(
+        self,
+        chapter_name: str,
+        total_blocks: int,
+        block_text: str,
+        genre: str = "fiction",
+    ) -> str:
+        """
+        Rend le template analyze_chapter_initial.jinja (Phase 0 - Premier bloc d'analyse).
+
+        Ce template est utilisé pour initialiser l'analyse littéraire d'un chapitre
+        lors du traitement du premier bloc (~4000 tokens).
+
+        Génère une structure JSON complète avec status="in_progress" et blocks_analyzed=1.
+
+        Args:
+            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
+            total_blocks: Nombre total de blocs pour ce chapitre
+            block_text: Contenu textuel du premier bloc (~4000 tokens)
+            genre: Genre littéraire du livre (défaut: "fiction")
+
+        Returns:
+            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
+
+        Example:
+            >>> prompt = renderer.render_analyze_initial(
+            ...     chapter_name="Chapter 1",
+            ...     total_blocks=3,
+            ...     block_text="It was a dark and stormy night...",
+            ...     genre="fiction"
+            ... )
+            >>> json_output = llm.query(prompt, "", use_json_mode=True)
+        """
+        return self.render_prompt(
+            TemplateNames.Analyze_Initial,
+            chapter_name=chapter_name,
+            total_blocks=total_blocks,
+            block_text=block_text,
+            genre=genre,
+        )
+
+    def render_analyze_incremental(
+        self,
+        chapter_name: str,
+        current_block: int,
+        total_blocks: int,
+        partial_analysis_json: str,
+        block_text: str,
+        is_last_block: bool,
+        genre: str = "fiction",
+    ) -> str:
+        """
+        Rend le template analyze_chapter_incremental.jinja (Phase 0 - Blocs 2, 3, ..., N).
+
+        Ce template est utilisé pour enrichir progressivement l'analyse littéraire
+        d'un chapitre en traitant les blocs suivants (~4000 tokens chacun).
+
+        Met à jour la structure JSON existante en ajoutant de nouvelles informations
+        sans jamais supprimer les données précédentes (approche cumulative).
+
+        Args:
+            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
+            current_block: Numéro du bloc actuel (2, 3, ..., N)
+            total_blocks: Nombre total de blocs pour ce chapitre
+            partial_analysis_json: JSON stringifié de l'analyse partielle (blocs 1...current_block-1)
+            block_text: Contenu textuel du bloc actuel (~4000 tokens)
+            is_last_block: True si c'est le dernier bloc (active status="complete")
+            genre: Genre littéraire du livre (défaut: "fiction")
+
+        Returns:
+            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
+
+        Example:
+            >>> # Bloc 2/3
+            >>> prompt = renderer.render_analyze_incremental(
+            ...     chapter_name="Chapter 1",
+            ...     current_block=2,
+            ...     total_blocks=3,
+            ...     partial_analysis_json='{"chapter_name": "Chapter 1", ...}',
+            ...     block_text="The next morning...",
+            ...     is_last_block=False,
+            ...     genre="fiction"
+            ... )
+            >>> json_output = llm.query(prompt, "", use_json_mode=True)
+            >>>
+            >>> # Dernier bloc 3/3
+            >>> prompt = renderer.render_analyze_incremental(
+            ...     chapter_name="Chapter 1",
+            ...     current_block=3,
+            ...     total_blocks=3,
+            ...     partial_analysis_json='{"chapter_name": "Chapter 1", ...}',
+            ...     block_text="And they lived happily ever after.",
+            ...     is_last_block=True,  # Activera status="complete"
+            ...     genre="fiction"
+            ... )
+        """
+        return self.render_prompt(
+            TemplateNames.Analyze_Incremental,
+            chapter_name=chapter_name,
+            current_block=current_block,
+            total_blocks=total_blocks,
+            partial_analysis_json=partial_analysis_json,
+            block_text=block_text,
+            is_last_block=is_last_block,
+            genre=genre,
+        )
+
+    def render_chapter_grouping(self, filenames: list[str]) -> str:
+        """
+        Rend le template chapter_grouping.jinja (Détection de chapitres - Fallback LLM).
+
+        Ce template est utilisé comme fallback lorsque la détection automatique
+        basée sur les patterns regex produit des résultats ambigus. Le LLM analyse
+        les noms de fichiers de la spine EPUB et groupe logiquement les fichiers
+        en chapitres.
+
+        Args:
+            filenames: Liste des noms de fichiers HTML dans l'ordre de la spine EPUB
+
+        Returns:
+            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
+
+        Example:
+            >>> prompt = renderer.render_chapter_grouping(
+            ...     filenames=[
+            ...         "prologue.xhtml",
+            ...         "chapter1.xhtml",
+            ...         "chapter1_a.xhtml",
+            ...         "insert1.xhtml",
+            ...         "chapter2.xhtml",
+            ...     ]
+            ... )
+            >>> json_output = llm.query(prompt, "", use_json_mode=True)
+            >>> # Attendu: {"chapters": [{"chapter_name": "Prologue", "files": [...]}]}
+        """
+        return self.render_prompt(
+            TemplateNames.Chapter_Grouping,
+            filenames=filenames,
+        )

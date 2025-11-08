@@ -1,0 +1,162 @@
+{# ================================================================
+ANALYZE_CHAPTER_INITIAL.JINJA - Phase 0: Literary Analysis (First Block)
+
+Purpose: Initialize the literary analysis sheet for a chapter.
+         This is used ONLY for the first block of each chapter.
+
+Input:
+  - chapter_name: Name of the chapter
+  - total_blocks: Total number of blocks in this chapter
+  - block_text: First block of chapter text (~4000 tokens)
+  - genre: Genre of the book (default: "fiction")
+
+Output: Initial JSON analysis sheet
+================================================================ #}
+
+You are a literary analysis expert specializing in {{ genre }}.
+
+Your task is to analyze the following text block, which is the **FIRST PART** of a chapter titled "{{ chapter_name }}".
+
+This chapter contains approximately **{{ total_blocks }} blocks** of text. You are analyzing **Block 1/{{ total_blocks }}**.
+
+## 📋 Analysis Sheet Structure
+
+Create a JSON analysis sheet with the following structure:
+
+```json
+{
+  "chapter_name": "{{ chapter_name }}",
+  "analysis_version": "1.0",
+  "blocks_analyzed": 1,
+  "total_blocks": {{ total_blocks }},
+  "status": "in_progress",
+
+  "characters": {
+    "present": [
+      {
+        "name": "Character Name",
+        "role": "protagonist|antagonist|supporting",
+        "first_appearance_block": 1,
+        "description": "Brief physical/personality description",
+        "relationships": ["Character X", "Character Y"],
+        "development_notes": "Character development observations in this block"
+      }
+    ],
+    "mentioned": ["Character referenced but not present"]
+  },
+
+  "locations": {
+    "primary": {
+      "name": "Location Name",
+      "description": "Setting description",
+      "atmosphere": "Mood/tone of the setting"
+    },
+    "secondary": []
+  },
+
+  "plot_elements": {
+    "main_events": [
+      "Event 1 summary",
+      "Event 2 summary"
+    ],
+    "conflicts": [
+      {
+        "type": "internal|external|interpersonal",
+        "description": "Conflict description",
+        "parties_involved": ["Character A", "Character B"]
+      }
+    ],
+    "foreshadowing": [],
+    "revelations": []
+  },
+
+  "themes": {
+    "identified": [
+      {
+        "theme": "Theme name",
+        "evidence": ["Quote or example from text"],
+        "development": "How this theme is presented in this block"
+      }
+    ]
+  },
+
+  "narrative_techniques": {
+    "pov": "first-person|third-person-limited|omniscient",
+    "tense": "past|present|mixed",
+    "tone": "Tone description (serious, humorous, dramatic, etc.)",
+    "narrative_devices": ["flashback", "inner monologue", "etc."]
+  },
+
+  "terminology": {
+    "specialized_terms": [
+      {
+        "term": "Term in source language",
+        "context": "How it's used",
+        "category": "magic|technology|cultural|medical|legal|other",
+        "translation_notes": "Considerations for translation"
+      }
+    ],
+    "proper_nouns": {
+      "names": ["Name1", "Name2"],
+      "places": ["Place1", "Place2"],
+      "organizations": ["Org1", "Org2"]
+    }
+  },
+
+  "stylistic_notes": {
+    "writing_style": "Observations about author's style in this block",
+    "recurring_motifs": [],
+    "symbolic_elements": [],
+    "cultural_references": []
+  },
+
+  "translation_considerations": {
+    "challenges": [
+      "Wordplay requiring adaptation",
+      "Cultural references needing explanation",
+      "Ambiguous passages"
+    ],
+    "consistency_requirements": [
+      "Term X should be translated as Y throughout"
+    ]
+  }
+}
+```
+
+## 📝 Instructions
+
+1. **Read the text carefully**: This is the BEGINNING of the chapter.
+
+2. **Fill the analysis sheet**:
+   - Be thorough but concise
+   - Mark uncertain elements with "TENTATIVE:" prefix if unsure
+   - Leave arrays empty [] if not applicable yet
+   - Focus on what's PRESENT in this block, not speculation
+
+3. **Important notes**:
+   - This is block 1/{{ total_blocks }}, so the analysis is INITIAL
+   - You will refine and enrich this analysis as more blocks are processed
+   - Status must be "in_progress" (not "complete")
+   - blocks_analyzed must be 1
+
+4. **Output format**:
+   - Return ONLY valid JSON
+   - No markdown code blocks (```)
+   - No explanatory text before or after
+   - Start with { and end with }
+
+---
+
+## 📖 Text Block to Analyze (Block 1/{{ total_blocks }})
+
+{{ block_text }}
+
+---
+
+## ⚠️ Critical Requirements
+
+- Output ONLY valid JSON (no markdown, no commentary)
+- Use null for truly unknown values
+- Use empty arrays [] for lists with no items yet
+- This analysis will be enriched with subsequent blocks
+- Focus on what's OBSERVABLE in this block

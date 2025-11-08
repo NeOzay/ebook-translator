@@ -1,0 +1,86 @@
+{# ================================================================
+CHAPTER_GROUPING.JINJA - Chapter Detection LLM Fallback
+
+Purpose: Validate and correct chapter grouping when automatic detection
+         produces ambiguous results.
+
+Input:
+  - filenames: List of HTML filenames in spine order
+
+Output: Validated/corrected chapter grouping as JSON
+================================================================ #}
+
+You are analyzing the structure of an EPUB book.
+
+The book contains these HTML files in spine order (reading order):
+
+{% for filename in filenames %}
+{{ loop.index }}. {{ filename }}
+{% endfor %}
+
+---
+
+## 🎯 Your Task
+
+Group these files into logical chapters.
+
+## 📏 Rules
+
+1. **Sequential numbering**: Files like `chapter1.html`, `chapter2.html` are **separate chapters**
+
+2. **Sub-parts belong together**: Files like these belong to the **SAME chapter**:
+   - `chapter1.html`, `chapter1_a.html`, `chapter1_b.html`
+   - `chapter1.html`, `chapter11.html`, `chapter12.html`
+   - `ch1.html`, `ch1_part2.html`
+
+3. **Inserts belong to previous chapter**: If you see:
+   - `chapter1.html`, `insert1.html`, `chapter11.html`
+   - All three belong to **Chapter 1**
+
+4. **Pattern recognition**:
+   - `chapter001`, `chapter002` → **separate chapters** (1, 2)
+   - `chapter1_1`, `chapter1_2` → **same chapter** (parts 1, 2)
+   - `ch01`, `ch02` → **separate chapters** (1, 2)
+   - `part1`, `part2` → **separate chapters** (1, 2)
+
+5. **Special files** are usually **separate chapters**:
+   - `prologue.html` → "Prologue"
+   - `epilogue.html`, `epilogue1.html` → "Epilogue" (multi-file)
+   - `appendix.html` → "Appendix"
+
+6. **Unknown files**: If a file doesn't match any pattern, treat it as a **separate chapter**
+
+---
+
+## 📤 Output Format
+
+Return ONLY valid JSON (no markdown code blocks, no explanation):
+
+```json
+{
+  "chapters": [
+    {
+      "chapter_name": "Prologue",
+      "files": ["prologue.html"]
+    },
+    {
+      "chapter_name": "Chapter 1",
+      "files": ["chapter1.html", "insert1.html", "chapter1_a.html"]
+    },
+    {
+      "chapter_name": "Chapter 2",
+      "files": ["chapter2.html"]
+    }
+  ]
+}
+```
+
+---
+
+## ⚠️ Important
+
+- **Preserve spine order** (keep files in the order listed above)
+- **Be consistent** with numbering (Chapter 1, Chapter 2, not Ch1, Ch2)
+- **Use clear chapter names**: "Chapter 1", "Prologue", "Epilogue"
+- **Group intelligently**: Multi-file chapters are common in EPUBs
+- Output ONLY valid JSON (start with {, end with })

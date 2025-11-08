@@ -1,0 +1,121 @@
+{# ================================================================
+ANALYZE_CHAPTER_INCREMENTAL.JINJA - Phase 0: Literary Analysis (Incremental)
+
+Purpose: UPDATE and ENRICH the existing literary analysis sheet.
+         This is used for blocks 2, 3, 4... of each chapter.
+
+Input:
+  - chapter_name: Name of the chapter
+  - current_block: Current block number being analyzed
+  - total_blocks: Total number of blocks in this chapter
+  - partial_analysis_json: JSON string of analysis from previous blocks
+  - block_text: Current block text (~4000 tokens)
+  - is_last_block: True if this is the final block
+  - genre: Genre of the book (default: "fiction")
+
+Output: Updated JSON analysis sheet
+================================================================ #}
+
+You are a literary analysis expert specializing in {{ genre }}.
+
+Your task is to **UPDATE and ENRICH** the existing literary analysis for the chapter "{{ chapter_name }}".
+
+You are processing **Block {{ current_block }}/{{ total_blocks }}**{% if is_last_block %} **(FINAL BLOCK)**{% endif %}.
+
+## 📋 Current Analysis Sheet
+
+Here is the analysis built from previous blocks:
+
+```json
+{{ partial_analysis_json }}
+```
+
+## 📖 New Text Block to Analyze (Block {{ current_block }}/{{ total_blocks }})
+
+{{ block_text }}
+
+---
+
+## 📝 Instructions
+
+1. **Read the new text block carefully**.
+
+2. **Update the analysis sheet** by following these rules:
+
+   ### ✅ DO:
+   - **ADD** new characters, locations, events, themes, terms to existing lists
+   - **ENRICH** existing entries with new information from this block
+   - **UPDATE** development_notes with character evolution
+   - **EXTEND** evidence lists for themes with new quotes/examples
+   - **INCREMENT** `blocks_analyzed` counter (from {{ current_block - 1 }} to {{ current_block }})
+   - **PRESERVE** all previous information (never remove anything)
+
+   ### ❌ DON'T:
+   - **NEVER** remove or delete existing entries
+   - **NEVER** overwrite existing data (only enrich/extend)
+   - **NEVER** change character names already established
+   - **NEVER** reduce the amount of information
+
+3. **Special attention to**:
+   - **Character development**: How characters evolve across blocks
+   - **Plot progression**: New events, conflict escalation
+   - **Theme development**: New evidence for existing themes, new themes emerging
+   - **Terminology**: New terms to add to glossary
+
+4. **Status field**:
+{% if is_last_block %}
+   - ⚠️ **IMPORTANT**: Set `"status": "complete"` (this is the LAST block)
+   - Ensure `blocks_analyzed` equals `total_blocks` ({{ total_blocks }})
+{% else %}
+   - Keep `"status": "in_progress"`
+   - Set `blocks_analyzed` to {{ current_block }}
+{% endif %}
+
+5. **Output format**:
+   - Return ONLY the UPDATED JSON
+   - No markdown code blocks (```)
+   - No explanatory text
+   - Start with { and end with }
+
+---
+
+## 💡 Examples of Proper Updates
+
+### ❌ WRONG (overwriting):
+```json
+"characters": {
+  "present": [
+    {"name": "Alice", "development_notes": "Brave in this block"}
+  ]
+}
+```
+
+### ✅ CORRECT (enriching):
+```json
+"characters": {
+  "present": [
+    {
+      "name": "Alice",
+      "development_notes": "Initially curious (block 1) → becomes brave when facing challenges (block 2)"
+    },
+    {
+      "name": "White Rabbit",
+      "first_appearance_block": 2,
+      "description": "Anxious, always rushing"
+    }
+  ]
+}
+```
+
+---
+
+## ⚠️ Critical Requirements
+
+- **PRESERVE** all existing data (cumulative analysis)
+- **ADD** new findings from current block
+- **ENRICH** existing entries (don't replace, extend)
+- **BE CONSISTENT**: Use same character names, terminology as before
+- Output ONLY valid JSON (no markdown, no commentary)
+{% if is_last_block %}
+- **SET STATUS TO "complete"** (this is block {{ current_block }}/{{ total_blocks }})
+{% endif %}
