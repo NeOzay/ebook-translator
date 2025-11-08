@@ -163,6 +163,7 @@ class LLM:
         content: str,
         context: Optional[str] = None,
         use_reasoning_mode: bool = False,
+        use_json_mode: bool = False,
     ) -> str:
         """
         Envoie une requête au LLM avec gestion d'erreurs spécifiques et retry automatique.
@@ -174,6 +175,8 @@ class LLM:
                     (ex: "chunk_042", "retry_phase1", "validation")
             use_reasoning_mode: Si True, utilise deepseek-reasoner au lieu de deepseek-chat.
                                Le modèle génère alors un reasoning_content explicite.
+            use_json_mode: Si True, force le LLM à retourner du JSON valide.
+                          Utilise response_format={'type': 'json_object'} de l'API DeepSeek.
 
         Returns:
             La réponse du LLM ou un message d'erreur entre crochets
@@ -187,6 +190,9 @@ class LLM:
             En mode raisonnement (use_reasoning_mode=True), le modèle deepseek-reasoner
             génère un processus de pensée explicite (reasoning_content) qui est loggé
             séparément pour faciliter le debugging des corrections complexes.
+
+            En mode JSON (use_json_mode=True), le LLM est contraint de retourner du JSON
+            valide. Le prompt doit contenir le mot "json" pour que cela fonctionne correctement.
         """
         log_path = self._create_log(system_prompt, content, context)
         last_error: Optional[Exception] = None
@@ -204,11 +210,18 @@ class LLM:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": content},
                 ]
+
+                # Préparer response_format si JSON mode activé
+                response_format = None
+                if use_json_mode:
+                    response_format = {'type': 'json_object'}
+
                 resp = self.client.chat.completions.create(
                     model=model_name,
                     messages=messages,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
+                    response_format=response_format,  # type: ignore
                 )
                 result = resp.choices[0].message.content
                 response_text = result.strip() if result is not None else "Result Empty"
