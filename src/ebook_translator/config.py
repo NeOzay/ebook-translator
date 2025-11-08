@@ -22,14 +22,22 @@ class ConfigBase:
 
 
 class TemplateNames(StrEnum):
+    # Phase 0: Analyse littéraire
+    Analyze_Initial = "analyze_chapter_initial.jinja"
+    Analyze_Incremental = "analyze_chapter_incremental.jinja"
+    Chapter_Grouping = "chapter_grouping.jinja"
+
+    # Phase 1: Traduction initiale
     First_Pass_Template = "translate_base.jinja"
     Retry_Fragments_Template = "retry_correct_fragments.jinja"
     Retry_Fragments_Flexible_Template = "retry_correct_fragments_flexible.jinja"
     Retry_Missing_Lines_Targeted_Template = (
         "retry_translate_missing_lines_targeted.jinja"
     )
-    Refine_Template = "translate_refine.jinja"
     Retry_Sentence_Template = "retry_translate_sentence.jinja"
+
+    # Phase 2: Raffinement
+    Refine_Template = "translate_refine.jinja"
     Retry_Punctuation_Template = "retry_correct_punctuation.jinja"
 
 
