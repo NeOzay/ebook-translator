@@ -12,10 +12,12 @@ Composants :
 from .schema import ChapterAnalysis
 from .validator import AnalysisValidator
 from .block_splitter import BlockSplitter, AnalysisBlock
+from .literary_analysis_phase import LiteraryAnalysisPhase
 
 __all__ = [
     "ChapterAnalysis",
     "AnalysisValidator",
     "BlockSplitter",
     "AnalysisBlock",
+    "LiteraryAnalysisPhase",
 ]
