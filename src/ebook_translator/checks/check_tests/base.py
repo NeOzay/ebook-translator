@@ -5,13 +5,14 @@ Ce module définit les protocoles et dataclasses utilisés par tous les checks
 de validation et le pipeline de correction.
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
     from ...llm import LLM
-    from ...segmentation import Chunk, TranslatedChunk
     from ...pipeline.context import ChunkContext
+    from ...segmentation import Chunk, TranslatedChunk
 
 
 # =============================================================================
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
-class LineCountErrorData(TypedDict):
+@dataclass(kw_only=True)
+class LineCountErrorData:
     """
     Structure error_data pour LineCountCheck.
 
@@ -29,6 +31,7 @@ class LineCountErrorData(TypedDict):
         actual_count: Nombre total de lignes reçu
     """
 
+    name: Literal["line_count"] = "line_count"
     missing_indices: list[int]
     expected_count: int
     actual_count: int
@@ -53,7 +56,8 @@ class FragmentErrorDetail(TypedDict):
     actual_fragments: int
 
 
-class FragmentCountErrorData(TypedDict):
+@dataclass(kw_only=True)
+class FragmentCountErrorData:
     """
     Structure error_data pour FragmentCountCheck.
 
@@ -61,6 +65,7 @@ class FragmentCountErrorData(TypedDict):
         errors: Liste des lignes avec mauvais nombre de fragments
     """
 
+    name: Literal["fragment_count"] = "fragment_count"
     errors: list[FragmentErrorDetail]
 
 
@@ -74,9 +79,11 @@ class PunctuationErrorDetail(TypedDict):
     actual_pairs: int
 
 
-class PunctuationErrorData(TypedDict):
+@dataclass(kw_only=True)
+class PunctuationErrorData:
     """Données d'erreur pour validation de ponctuation."""
 
+    name: Literal["punctuation"] = "punctuation"
     errors: list[PunctuationErrorDetail]
 
 
@@ -89,10 +96,22 @@ class SentenceErrorDetail(TypedDict):
     previous_translated_text: str
 
 
-class SentenceErrorData(TypedDict):
+@dataclass(kw_only=True)
+class SentenceErrorData:
     """Données d'erreur pour validation du nombre de phrases."""
 
+    name: Literal["sentence"] = "sentence"
     errors: list[SentenceErrorDetail]
+
+
+@dataclass(kw_only=True)
+class AnalysisErrorData:
+    """Données d'erreur pour validation de l'analyse littéraire."""
+
+    name: Literal["analysis"] = "analysis"
+    missing_sections: list[str]
+    invalid_json: bool
+    json_error_message: str = ""
 
 
 # Type union pour tous les error_data possibles
@@ -102,7 +121,7 @@ ErrorData = (
     | FragmentCountErrorData
     | PunctuationErrorData
     | SentenceErrorData
-    | dict
+    | AnalysisErrorData
 )
 
 
@@ -146,8 +165,34 @@ class FilteredLine:
     translated_text: str
 
 
-@dataclass
-class CheckResult:
+@dataclass(kw_only=True)
+class SuccessResult:
+    """
+    Résultat de validation réussi.
+
+    Attributes:
+        is_valid: Toujours True pour ce type
+        check_name: Nom unique du check (ex: "line_count", "fragment_count")
+
+    Example:
+        >>> result = CheckResult(
+        ...     is_valid=True,
+        ...     check_name="line_count",
+        ... )
+        >>> print(result)
+        ✅ line_count: OK
+    """
+
+    status: Literal["success"] = "success"
+    check_name: str
+
+    def __repr__(self) -> str:
+        """Représentation pour le debug."""
+        return f"✅ {self.check_name}: OK"
+
+
+@dataclass(kw_only=True)
+class FailedResult[E: ErrorData]:
     """
     Résultat d'un check de validation.
 
@@ -169,17 +214,22 @@ class CheckResult:
         ❌ line_count: 3 lignes manquantes
     """
 
-    is_valid: bool
+    status: Literal["failed"] = "failed"
     check_name: str
     error_message: str | None = None
-    error_data: ErrorData = field(default_factory=dict)
+    error_data: E
     severity: Literal["error", "warning"] = "error"
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
-        if self.is_valid:
-            return f"✅ {self.check_name}: OK"
         return f"❌ {self.check_name}: {self.error_message}"
+
+    def __str__(self):
+        """Représentation utilisateur."""
+        return f"Check '{self.check_name}' failed: {self.error_message}"
+
+
+type CheckResult[E: ErrorData] = FailedResult[E] | SuccessResult
 
 
 @dataclass
@@ -220,10 +270,10 @@ class ValidationContext:
     chunk_info: "ChunkContext"
     max_retries: int = 2
     previous_translated_texts: "TranslatedChunk | None" = None
-    filtered_lines: list[FilteredLine] = field(default_factory=list)
+    filtered_lines: list[FilteredLine] = field(default_factory=list[FilteredLine])
 
 
-class Check(Protocol):
+class Check[T: ErrorData](ABC):
     """
     Interface (Protocol) pour tous les checks de validation.
 
@@ -248,6 +298,7 @@ class Check(Protocol):
     """
 
     @property
+    @abstractmethod
     def name(self) -> str:
         """
         Nom unique du check.
@@ -257,7 +308,8 @@ class Check(Protocol):
         """
         ...
 
-    def validate(self, context: ValidationContext) -> CheckResult:
+    @abstractmethod
+    def validate(self, context: ValidationContext) -> CheckResult[T]:
         """
         Valide les traductions dans le contexte.
 
@@ -272,11 +324,10 @@ class Check(Protocol):
             >>> if not result.is_valid:
             ...     print(f"Erreur: {result.error_message}")
         """
-        ...
+        pass
 
-    def correct(
-        self, context: ValidationContext, error_data: ErrorData
-    ) -> dict[int, str]:
+    @abstractmethod
+    def correct(self, context: ValidationContext, error_data: T) -> dict[int, str]:
         """
         Corrige les traductions invalides.
 
@@ -304,9 +355,8 @@ class Check(Protocol):
         """
         ...
 
-    def get_invalid_lines(
-        self, context: ValidationContext, error_data: ErrorData
-    ) -> set[int]:
+    @abstractmethod
+    def get_invalid_lines(self, context: ValidationContext, error_data: T) -> set[int]:
         """
         Identifie les lignes invalides à filtrer après échec de correction.
 
@@ -332,7 +382,7 @@ class Check(Protocol):
         """
         ...
 
-    def build_filter_reason(self, line_idx: int, error_data: ErrorData) -> str:
+    def build_filter_reason(self, line_idx: int, error_data: T) -> str:
         """
         Construit un message descriptif pour la raison du filtrage.
 

@@ -3,16 +3,16 @@ Exécuteur de phases.
 """
 
 import time
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
 from ebook_translator.logger import get_logger
-from ebook_translator.translation.parser import parse_llm_translation_output
-from ebook_translator.segmentation.segmentator import Segmentator, Chunk
 from ebook_translator.pipeline.base import ExecutionMode
-from ebook_translator.pipeline.context import PhaseContext, ChunkContext, PhaseStats
+from ebook_translator.pipeline.context import ChunkContext, PhaseContext, PhaseStats
+from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.validation.validation_queue import ValidationItem
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class PhaseExecutor:
         stats = executor.run()
     """
 
-    def __init__(self, phase: type["PhaseBase"], context: PhaseContext):
+    def __init__(self, phase: "PhaseBase", context: PhaseContext):
         """
         Initialise l'exécuteur.
 
@@ -68,15 +68,10 @@ class PhaseExecutor:
         )
 
         # 1. Hook before_phase
-        self.phase.before_phase(self.context)
+        self.phase.before_phase()
 
         # 2. Segmentation
-        segmentator = Segmentator(
-            self.context.html_items,
-            max_tokens=self.phase.max_tokens,
-            overlap_ratio=self.phase.overlap_ratio,
-        )
-        chunks = list(segmentator.get_all_segments())
+        chunks = self.phase.get_chunks()
         self.stats.chunks_total = len(chunks)
 
         logger.info(f"Segmentation: {self.stats.chunks_total} chunks generated")
@@ -85,7 +80,10 @@ class PhaseExecutor:
         self._configure_validation_pool()
 
         # 4. Exécution selon mode
-        if self.phase.execution_mode == ExecutionMode.PARALLEL:
+        if (
+            self.phase.execution_mode == ExecutionMode.PARALLEL
+            or self.phase.get_worker_count() > 1
+        ):
             self._run_parallel(chunks)
         else:
             self._run_sequential(chunks)
@@ -96,7 +94,7 @@ class PhaseExecutor:
 
         # 6. Hook after_phase
         self.stats.duration_seconds = time.time() - start_time
-        self.phase.after_phase(self.stats, self.context)
+        self.phase.after_phase(self.stats)
 
         logger.info(
             f"=== Phase {self.phase.name} completed in {self.stats.duration_seconds:.1f}s ==="
@@ -107,16 +105,11 @@ class PhaseExecutor:
 
     def _configure_validation_pool(self) -> None:
         """Configure le ValidationWorkerPool pour cette phase."""
-        # Switch vers le pipeline de validation de cette phase
-        pipeline = self.phase.validation_pipeline()
-        self.context.validation_pool.switch_pipeline(pipeline)
 
         # Switch vers le store de cette phase
         store = self.context.store_manager.get_store(self.phase.store_key())
-        self.context.validation_pool.switch_store(store)
-
         # Update phase name dans le pool
-        self.context.validation_pool.switch_name(self.phase.name)
+        self.context.validation_pool.switch_phase(self.phase, store)
 
     def _process_chunk(self, chunk: Chunk) -> bool:
         """
@@ -130,9 +123,7 @@ class PhaseExecutor:
         """
         try:
             # 1. Check cache
-            cached = self.context.store_manager.get_translate(
-                self.phase.store_key(), chunk
-            )
+            cached_result, has_missing = self.phase.get_translation_cache(chunk)
 
             # 2. Hook before_chunk
             chunk_context = ChunkContext(
@@ -144,12 +135,12 @@ class PhaseExecutor:
                 chunk_index=chunk.index,
             )
 
-            if cached is not None:
+            if not has_missing:
                 # Chunk déjà en cache, on le soumet quand même pour validation
                 # (peut avoir été invalidé ou nécessiter re-validation)
                 self.stats.chunks_from_cache += 1
                 self.context.validation_pool.submit(
-                    ValidationItem(chunk, chunk_context, cached)
+                    ValidationItem(chunk, chunk_context, cached_result)
                 )
                 logger.debug(
                     f"✓ Chunk {chunk.index} loaded from cache ({self.phase.name})"
@@ -163,13 +154,16 @@ class PhaseExecutor:
 
             # 4. LLM query
             context_str = f"{self.phase.name}_chunk_{chunk.index:03d}"
-            source_content = str(chunk)  # Convertir le chunk en string
+            source_content = self.phase.source_content(chunk, chunk_context)
+            llm_config = self.phase.llm_config(chunk, chunk_context)
             llm_output = self.context.llm.query(
-                prompt, source_content, context=context_str
+                prompt, source_content, log_name=context_str, config=llm_config
             )
 
             # 5. Parse
-            translated_texts = parse_llm_translation_output(llm_output)
+            translated_texts = self.phase.process_llm_response(
+                chunk, llm_output, chunk_context
+            )
 
             # 6. Hook after_chunk
             self.phase.after_chunk(chunk, translated_texts, chunk_context)
@@ -191,7 +185,7 @@ class PhaseExecutor:
             )
             return False
 
-    def _run_parallel(self, chunks: list[Chunk]) -> None:
+    def _run_parallel(self, chunks: Sequence[Chunk]) -> None:
         """
         Exécution parallèle avec ThreadPoolExecutor.
 
@@ -202,41 +196,40 @@ class PhaseExecutor:
 
         logger.info(f"Running in PARALLEL mode with {max_workers} workers")
 
-        with tqdm(
-            total=len(chunks),
-            desc=f"Phase {self.phase.name} (parallel)",
-            unit="chunk",
-            ncols=100,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-        ) as pbar:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Soumettre toutes les tâches
-                futures = {
-                    executor.submit(self._process_chunk, chunk): chunk
-                    for chunk in chunks
-                }
+        with (
+            tqdm(
+                total=len(chunks),
+                desc=f"Phase {self.phase.name} (parallel)",
+                unit="chunk",
+                ncols=100,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+            ) as pbar,
+            ThreadPoolExecutor(max_workers=max_workers) as executor,
+        ):
+            # Soumettre toutes les tâches
+            futures = {
+                executor.submit(self._process_chunk, chunk): chunk for chunk in chunks
+            }
 
-                # Attendre completion
-                for future in as_completed(futures):
-                    chunk = futures[future]
-                    try:
-                        success = future.result()
-                        if success:
-                            self.stats.chunks_processed += 1
-                        else:
-                            pbar.write(f"⚠️ Chunk {chunk.index}: Processing failed")
-                    except KeyboardInterrupt:
-                        pbar.write(f"\n❌ Phase {self.phase.name} interrupted by user")
-                        raise
-                    except Exception as e:
-                        logger.exception(
-                            f"Unexpected error for chunk {chunk.index}: {e}"
-                        )
-                        pbar.write(f"❌ Chunk {chunk.index}: Unexpected error")
+            # Attendre completion
+            for future in as_completed(futures):
+                chunk = futures[future]
+                try:
+                    success = future.result()
+                    if success:
+                        self.stats.chunks_processed += 1
+                    else:
+                        pbar.write(f"⚠️ Chunk {chunk.index}: Processing failed")
+                except KeyboardInterrupt:
+                    pbar.write(f"\n❌ Phase {self.phase.name} interrupted by user")
+                    raise
+                except Exception as e:
+                    logger.exception(f"Unexpected error for chunk {chunk.index}: {e}")
+                    pbar.write(f"❌ Chunk {chunk.index}: Unexpected error")
 
-                    pbar.update(1)
+                pbar.update(1)
 
-    def _run_sequential(self, chunks: list[Chunk]) -> None:
+    def _run_sequential(self, chunks: Sequence[Chunk]) -> None:
         """
         Exécution séquentielle (chunk par chunk).
 
@@ -255,6 +248,7 @@ class PhaseExecutor:
             for chunk in chunks:
                 try:
                     success = self._process_chunk(chunk)
+                    self.context.validation_pool.wait_completion()
                     if success:
                         self.stats.chunks_processed += 1
                     else:

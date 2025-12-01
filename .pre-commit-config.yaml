@@ -1,0 +1,93 @@
+# Configuration Pre-commit pour ebook-translator
+# Installation : poetry run pre-commit install
+# Exécution manuelle : poetry run pre-commit run --all-files
+
+repos:
+  # Black - Formatage automatique du code Python
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        name: Black - Formatage du code
+        language_version: python3.12
+
+  # Isort - Tri et organisation des imports
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: Isort - Tri des imports
+        args: ["--profile", "black"]
+
+  # Ruff - Linting moderne (remplace flake8/pylint)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: Ruff - Linting du code
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: Ruff - Formatage (backup de black)
+
+  # Pyright - Vérification des types (mode strict)
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.390
+    hooks:
+      - id: pyright
+        name: Pyright - Vérification des types (strict)
+        additional_dependencies: []
+        # Note: Pyright utilise la config de pyproject.toml (mode strict)
+
+  # Hooks standards pour qualité générale
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Suppression espaces en fin de ligne
+      - id: end-of-file-fixer
+        name: Ajout saut de ligne en fin de fichier
+      - id: check-yaml
+        name: Validation des fichiers YAML
+      - id: check-toml
+        name: Validation des fichiers TOML
+      - id: check-json
+        name: Validation des fichiers JSON
+      - id: check-added-large-files
+        name: Détection de fichiers volumineux
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+        name: Détection de marqueurs de conflit
+      - id: debug-statements
+        name: Détection de debug statements (pdb, breakpoint)
+      - id: mixed-line-ending
+        name: Détection de fins de ligne mixtes
+        args: ['--fix=lf']
+
+  # Pytest - Tests rapides (optionnel, peut ralentir les commits)
+  # Décommentez si vous voulez exécuter les tests à chaque commit
+  # - repo: local
+  #   hooks:
+  #     - id: pytest-check
+  #       name: Pytest - Tests unitaires
+  #       entry: poetry run pytest
+  #       language: system
+  #       pass_filenames: false
+  #       always_run: true
+
+# Configuration globale
+default_language_version:
+  python: python3.12
+
+# Stages d'exécution (pre-commit par défaut)
+default_stages: [pre-commit]
+
+# Échec rapide : s'arrête au premier échec
+fail_fast: false
+
+# Repos locaux pour checks customs si nécessaire
+# - repo: local
+#   hooks:
+#     - id: custom-check
+#       name: Custom Check
+#       entry: ./scripts/custom_check.sh
+#       language: script

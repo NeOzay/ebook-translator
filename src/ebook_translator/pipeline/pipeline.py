@@ -6,24 +6,25 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ebooklib import epub
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
 
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import PhaseBase
 from ebook_translator.pipeline.context import PhaseContext, PhaseStats
-from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.pipeline.executor import PhaseExecutor
+from ebook_translator.pipeline.phases.dummy_phase import DummyPhase
+from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.transition.base import TransitionBase, TransitionContext
-from ebook_translator.validation import ValidationWorkerPool
 from ebook_translator.translation.epub_handler import (
     copy_epub_metadata,
     extract_html_items_in_spine_order,
     reconstruct_html_item,
 )
+from ebook_translator.validation import ValidationWorkerPool
 
 if TYPE_CHECKING:
-    from ebook_translator.llm import LLM
     from ebook_translator.glossary import Glossary
+    from ebook_translator.llm import LLM
 
 logger = get_logger(__name__)
 
@@ -72,8 +73,8 @@ class Pipeline:
         self,
         llm: "LLM",
         epub_path: str | Path,
-        cache_dir: str | Path,
-        phases: list[type[PhaseBase]],
+        phases: list[PhaseBase],
+        cache_dir: str | Path | None = None,
         transitions: dict[tuple[str, str], type[TransitionBase]] | None = None,
         num_validation_workers: int = 2,
     ):
@@ -92,14 +93,18 @@ class Pipeline:
         """
         self.llm = llm
         self.epub_path = epub_path if isinstance(epub_path, Path) else Path(epub_path)
-        self.cache_dir = cache_dir if isinstance(cache_dir, Path) else Path(cache_dir)
-        self.phases = phases
-        self.transitions = transitions or {}
-        self.num_validation_workers = num_validation_workers
-
         # Valider que l'EPUB existe
         if not self.epub_path.exists():
             raise FileNotFoundError(f"EPUB source introuvable : {self.epub_path}")
+        if cache_dir is None:
+            self.cache_dir = self.epub_path.parent / f".{self.epub_path.stem}_cache"
+        else:
+            self.cache_dir = (
+                cache_dir if isinstance(cache_dir, Path) else Path(cache_dir)
+            )
+        self.phases = phases
+        self.transitions = transitions or {}
+        self.num_validation_workers = num_validation_workers
 
         # Créer cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +115,7 @@ class Pipeline:
         # Infrastructure (créée au démarrage)
         self.store_manager: StoreManager | None = None
         self.validation_pool: ValidationWorkerPool | None = None
-        self.glossary: "Glossary | None" = None
+        self.glossary: Glossary | None = None
 
     def _validate_dependencies(self) -> None:
         """
@@ -135,8 +140,8 @@ class Pipeline:
 
     def _execute_transition(
         self,
-        prev_phase_class: type[PhaseBase],
-        phase_class: type[PhaseBase],
+        prev_phase_class: PhaseBase,
+        phase_class: PhaseBase,
         stats: dict[str, PhaseStats],
     ) -> None:
         """
@@ -211,7 +216,9 @@ class Pipeline:
         """
         start_time = time.time()
 
-        output_epub = output_epub if isinstance(output_epub, Path) else Path(output_epub)
+        output_epub = (
+            output_epub if isinstance(output_epub, Path) else Path(output_epub)
+        )
 
         logger.info("=" * 70)
         logger.info("🚀 PIPELINE DE TRADUCTION MODULAIRE")
@@ -228,7 +235,7 @@ class Pipeline:
             # CHARGEMENT EPUB
             # =================================================================
             logger.info("\n📖 Chargement de l'EPUB source...")
-            source_book = epub.read_epub(self.epub_path)
+            source_book = epub.read_epub(self.epub_path)  # type: ignore
             html_items, target_book = extract_html_items_in_spine_order(source_book)
             copy_epub_metadata(source_book, target_book, target_language)
             logger.info(f"  • {len(html_items)} chapitres extraits")
@@ -249,11 +256,12 @@ class Pipeline:
                 self.glossary = Glossary(cache_path=self.cache_dir / "glossary.json")
             else:
                 self.glossary = glossary
-            logger.info(f"  • Glossaire: {self.cache_dir / 'glossary.json'}")
+            logger.info(f"  • Glossaire Path: {self.glossary.cache_path}")
 
             # ValidationWorkerPool (sera reconfiguré par chaque phase)
             # Créer un pipeline/store dummy pour initialisation (sera remplacé par PhaseExecutor)
             from ebook_translator.checks import ValidationPipeline
+
             dummy_pipeline = ValidationPipeline([])
             dummy_store = self.store_manager.get_store(self.phases[0].name)
 
@@ -263,20 +271,24 @@ class Pipeline:
                 store=dummy_store,  # Sera switch par PhaseExecutor
                 llm=self.llm,
                 target_language=target_language,
-                phase="initial",  # Sera switch par PhaseExecutor
+                phase=DummyPhase(),  # Sera switch par PhaseExecutor
                 max_retries=max_retries,
             )
             self.validation_pool.start()
-            logger.info(f"  • ValidationWorkerPool démarré ({self.num_validation_workers} workers)")
+            logger.info(
+                f"  • ValidationWorkerPool démarré ({self.num_validation_workers} workers)"
+            )
 
             # =================================================================
             # EXÉCUTION DES PHASES
             # =================================================================
             stats: dict[str, PhaseStats] = {}
 
-            for i, phase_class in enumerate(self.phases):
+            for i, phase_object in enumerate(self.phases):
                 logger.info("\n" + "=" * 70)
-                logger.info(f"📝 PHASE {i + 1}/{len(self.phases)}: {phase_class.name.upper()}")
+                logger.info(
+                    f"📝 PHASE {i + 1}/{len(self.phases)}: {phase_object.name.upper()}"
+                )
                 logger.info("=" * 70)
 
                 # -------------------------------------------------------------
@@ -284,7 +296,7 @@ class Pipeline:
                 # -------------------------------------------------------------
                 if i > 0:
                     prev_phase_class = self.phases[i - 1]
-                    self._execute_transition(prev_phase_class, phase_class, stats)
+                    self._execute_transition(prev_phase_class, phase_object, stats)
 
                 # -------------------------------------------------------------
                 # Créer contexte de phase
@@ -299,12 +311,14 @@ class Pipeline:
                     previous_phases=stats.copy(),
                 )
 
+                phase_object.put_context(context)
+
                 # -------------------------------------------------------------
                 # Exécuter phase
                 # -------------------------------------------------------------
-                executor = PhaseExecutor(phase_class, context)
+                executor = PhaseExecutor(phase_object, context)
                 phase_stats = executor.run()
-                stats[phase_class.name] = phase_stats
+                stats[phase_object.name] = phase_stats
 
             # =================================================================
             # FINALISATION
@@ -315,12 +329,14 @@ class Pipeline:
 
             # Attendre la fin de toutes les validations
             logger.info("  • Arrêt du ValidationWorkerPool...")
-            self.validation_pool.wait_completion()
+            self.validation_pool.stop()
 
             # Sauvegarder glossaire
             if self.glossary:
                 self.glossary.save()
-                logger.info(f"  • Glossaire sauvegardé: {self.cache_dir / 'glossary.json'}")
+                logger.info(
+                    f"  • Glossaire sauvegardé: {self.cache_dir / 'glossary.json'}"
+                )
 
             # =================================================================
             # RECONSTRUCTION EPUB
@@ -332,14 +348,14 @@ class Pipeline:
             logger.info("  • Reconstruction des pages HTML...")
             for item in html_items:
                 reconstruct_html_item(item)
-                target_book.add_item(item)
+                target_book.add_item(item)  # type: ignore
 
             # Sauvegarder EPUB traduit
             logger.info(f"  • Sauvegarde EPUB traduit: {output_epub}")
             if not output_epub.parent.exists():
                 output_epub.parent.mkdir(parents=True, exist_ok=True)
 
-            epub.write_epub(output_epub, target_book)
+            epub.write_epub(output_epub, target_book)  # type: ignore
 
             # =================================================================
             # STATISTIQUES FINALES
@@ -365,7 +381,7 @@ class Pipeline:
             # Glossaire
             if self.glossary:
                 glossary_stats = self.glossary.get_statistics()
-                logger.info(f"\n📚 GLOSSAIRE:")
+                logger.info("\n📚 GLOSSAIRE:")
                 logger.info(f"  • Termes: {glossary_stats['total_terms']}")
                 logger.info(f"  • Validés: {glossary_stats['validated_terms']}")
 
@@ -377,13 +393,13 @@ class Pipeline:
         except KeyboardInterrupt:
             logger.error("\n❌ Pipeline interrompu par l'utilisateur")
             if self.validation_pool:
-                self.validation_pool.wait_completion()
+                self.validation_pool.stop()
             raise
 
         except Exception as e:
             logger.exception(f"\n❌ Erreur fatale dans le pipeline: {e}")
             if self.validation_pool:
-                self.validation_pool.wait_completion()
+                self.validation_pool.stop()
             raise
 
     def clear_caches(self) -> None:

@@ -6,6 +6,7 @@ un EPUB avec des phases configurables et des transitions entre phases.
 """
 
 from pathlib import Path
+
 from ebook_translator.llm import LLM
 from ebook_translator.pipeline import Pipeline
 from ebook_translator.pipeline.phases import InitialTranslationPhase, RefinementPhase
@@ -24,6 +25,7 @@ def main():
     # Créer instance LLM
     llm = LLM(
         model_name="deepseek-chat",
+        reasoning_name="deepseek-reasoner",
         url="https://api.deepseek.com",
         temperature=0.5,  # Cohérence optimale
     )
@@ -33,12 +35,12 @@ def main():
         llm=llm,
         epub_path=source_epub,
         cache_dir=Path("cache"),
-        phases=[
-            InitialTranslationPhase,  # Phase 1: Traduction initiale
-            RefinementPhase,          # Phase 2: Raffinage avec glossaire
-        ],
+        phases=[InitialTranslationPhase(), RefinementPhase()],
         transitions={
-            ("initial", "refined"): GlossaryValidationTransition,  # Validation glossaire entre phases
+            (
+                "initial",
+                "refined",
+            ): GlossaryValidationTransition,  # Validation glossaire entre phases
         },
         num_validation_workers=2,  # Nombre de workers pour validation
     )
@@ -58,7 +60,9 @@ def main():
 
         for phase_name, phase_stats in stats.items():
             print(f"\n{phase_name.upper()}:")
-            print(f"  • Chunks: {phase_stats.chunks_processed}/{phase_stats.chunks_total}")
+            print(
+                f"  • Chunks: {phase_stats.chunks_processed}/{phase_stats.chunks_total}"
+            )
             print(f"  • Cache hits: {phase_stats.chunks_from_cache}")
             print(f"  • Traduits: {phase_stats.chunks_translated}")
             print(f"  • Validés: {phase_stats.chunks_validated}")
@@ -82,13 +86,17 @@ def example_clear_caches():
     epub_path = Path("input/book.epub")
     cache_dir = Path("cache")
 
-    llm = LLM(model_name="deepseek-chat", url="https://api.deepseek.com")
+    llm = LLM(
+        model_name="deepseek-chat",
+        reasoning_name="deepseek-reasoner",
+        url="https://api.deepseek.com",
+    )
 
     pipeline = Pipeline(
         llm=llm,
         epub_path=epub_path,
         cache_dir=cache_dir,
-        phases=[InitialTranslationPhase, RefinementPhase],
+        phases=[InitialTranslationPhase(), RefinementPhase()],
     )
 
     # Supprimer tous les caches (initial, refined, glossaire)
@@ -103,14 +111,14 @@ def example_three_phases():
     Note: QualityReviewPhase n'existe pas encore, cet exemple
     montre simplement comment ajouter une 3ème phase facilement.
     """
-    from pathlib import Path
 
     # Pour ajouter une 3ème phase, il suffit de:
     # 1. Créer une classe QualityReviewPhase héritant de PhaseBase
     # 2. L'ajouter à la liste des phases
     # 3. Optionnellement ajouter une transition
 
-    print("""
+    print(
+        """
 Pour ajouter une 3ème phase (ex: QualityReview), créer:
 
 # pipeline/phases/quality_review.py
@@ -148,7 +156,8 @@ pipeline = Pipeline(
 )
 
 Total: ~50-80 lignes de code pour ajouter une phase complète!
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

@@ -37,7 +37,6 @@ Usage :
 
 # Fonctions principales
 from .engine import build_translation_map
-from .parser import parse_llm_translation_output
 
 # Fonctions EPUB
 from .epub_handler import (
@@ -45,6 +44,7 @@ from .epub_handler import (
     extract_html_items_in_spine_order,
     reconstruct_html_item,
 )
+from .parser import parse_llm_translation_output
 
 __all__ = [
     # Fonctions principales

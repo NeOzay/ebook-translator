@@ -2,18 +2,14 @@
 Méthodes pour remplacer le texte original par sa traduction dans le DOM.
 """
 
-from typing import TYPE_CHECKING
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
 from ..constants import FRAGMENT_SEPARATOR, VALID_ROOT_TAGS
-from .bilingual import BilingualFormat, format_bilingual_inline
 from ..logger import get_logger
+from .bilingual import BilingualFormat, format_bilingual_inline
 
-if TYPE_CHECKING:
-    from typing import Union
-
-    TextFragment = Union[NavigableString, list[NavigableString]]
+TextFragment = NavigableString | list[NavigableString]
 
 
 logger = get_logger(__name__)
@@ -164,11 +160,13 @@ class TextReplacer:
                 self.create_translation_tag_after(root_tag, translated_text)
             else:
                 # Fallback : remplacer chaque fragment individuellement
-                for fragment, translated_segment in zip(fragments, segments):
+                for fragment, translated_segment in zip(
+                    fragments, segments, strict=True
+                ):
                     fragment.replace_with(translated_segment)
         else:
             # Pour les autres formats, remplacer chaque fragment individuellement
-            for fragment, translated_segment in zip(fragments, segments):
+            for fragment, translated_segment in zip(fragments, segments, strict=True):
                 if fragment:
                     if bilingual_format == BilingualFormat.INLINE:
                         # Format inline

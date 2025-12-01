@@ -2,21 +2,23 @@
 Classe principale HtmlPage pour parser et manipuler les pages HTML des EPUB.
 """
 
-from typing import TYPE_CHECKING, Iterator, Union
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, cast
+
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
-from ebooklib import epub
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
 
 from ..constants import FRAGMENT_SEPARATOR, IGNORED_TAGS
-from .tag_key import TagKey
 from .bilingual import BilingualFormat
 from .replacement import TextReplacer, find_root_tag
+from .tag_key import TagKey
 
 if TYPE_CHECKING:
-    from typing import Self
+    pass
 
 # Type alias pour améliorer la lisibilité
-TextFragment = Union[NavigableString, list[NavigableString]]
+TextFragment = NavigableString | list[NavigableString]
 
 
 class HtmlPage:
@@ -68,7 +70,12 @@ class HtmlPage:
             return
 
         self.epub_html = epub_html
-        html_content = epub_html.content.decode("utf-8")
+        html_content: str = cast(
+            str,
+            epub_html.content.decode(  # pyright: ignore[reportUnknownMemberType]
+                "utf-8"
+            ),
+        )
         self.soup = BeautifulSoup(html_content, "html.parser")
         self.to_translate: dict[TagKey, TextFragment] = {}
         self.texts: dict[TagKey, TextFragment] = {}
@@ -226,10 +233,7 @@ class HtmlPage:
             return True
 
         parent = fragment.parent
-        if parent and parent.name in IGNORED_TAGS:
-            return True
-
-        return False
+        return bool(parent and parent.name in IGNORED_TAGS)
 
     def _has_same_parent(
         self, fragment: NavigableString, last_parent: Tag | None
@@ -308,7 +312,7 @@ class HtmlPage:
         """
         if isinstance(fragments, list):
             # Préserver les espaces de bordure
-            formatted = []
+            formatted: list[str] = []
             for fragment in fragments:
                 text = str(fragment)
                 # Détecter les espaces de bordure
@@ -340,7 +344,9 @@ class HtmlPage:
 
     def _save_content(self) -> None:
         """Sauvegarde le contenu HTML modifié dans l'EpubHtml."""
-        self.epub_html.set_content(self.soup.encode("utf-8"))
+        self.epub_html.set_content(  # pyright: ignore[reportUnknownMemberType]
+            self.soup.encode("utf-8")
+        )
 
     def __str__(self) -> str:
         """Retourne le nom du fichier pour l'affichage."""
@@ -355,7 +361,7 @@ class HtmlPage:
 
 def get_texts(
     epub_htmls: list[epub.EpubHtml],
-) -> Iterator[tuple[HtmlPage, TagKey, str]]:
+) -> Iterator[tuple[TagKey, str]]:
     """
     Génère des tuples (page, tag_key, texte) pour tous les fichiers EPUB.
 
@@ -375,5 +381,4 @@ def get_texts(
     """
     for epub_html in epub_htmls:
         page = HtmlPage(epub_html)
-        for tag_key, text in page.dump():
-            yield page, tag_key, text
+        yield from page.dump()

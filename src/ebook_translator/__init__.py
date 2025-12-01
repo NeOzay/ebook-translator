@@ -97,27 +97,17 @@ License: à définir
 """
 
 # Classes LLM et traduction
-from .llm import LLM
-from .translation.language import Language
-
-# Classes de segmentation et cache
-from .segmentation.segmentator import (
-    Chunk,
-    Segmentator,
-    DEFAULT_OVERLAP_RATIO,
-    DEFAULT_ENCODING,
-)
-from .stores.store import Store
-
 # Classes HTML
-from .htmlpage import (
-    HtmlPage,
-    BilingualFormat,
-    TagKey,
-    FRAGMENT_SEPARATOR,
-    VALID_ROOT_TAGS,
-    IGNORED_TAGS,
+from .htmlpage import BilingualFormat
+from .llm import LLM
+from .pipeline import Pipeline
+from .pipeline.phases import (
+    DummyPhase,
+    InitialTranslationPhase,
+    LiteraryAnalysisPhase,
+    RefinementPhase,
 )
+from .translation.language import Language
 
 # Version du package
 __version__ = "0.1.0"
@@ -128,19 +118,15 @@ __all__ = [
     "__version__",
     # Classes principales
     "LLM",
-    # Segmentation et cache
-    "Chunk",
-    "Segmentator",
-    "Store",
     # Classes HTML
-    "HtmlPage",
     "BilingualFormat",
-    "TagKey",
     # Constantes
-    "FRAGMENT_SEPARATOR",
-    "VALID_ROOT_TAGS",
-    "IGNORED_TAGS",
-    "DEFAULT_OVERLAP_RATIO",
-    "DEFAULT_ENCODING",
     "Language",
+    # Pipeline
+    "Pipeline",
+    # Phases
+    "LiteraryAnalysisPhase",
+    "DummyPhase",
+    "InitialTranslationPhase",
+    "RefinementPhase",
 ]

@@ -5,12 +5,12 @@ Contextes de données pour le système de phases.
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+
 from ebook_translator.glossary import Glossary
 from ebook_translator.llm import LLM
 from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.segmentation import Chunk
-from ebooklib import epub
-
 from ebook_translator.validation import ValidationWorkerPool
 
 
@@ -98,7 +98,9 @@ class PhaseContext:
     glossary: "Glossary"
     """Glossaire optionnel pour cohérence terminologique"""
 
-    previous_phases: dict[str, PhaseStats] = field(default_factory=dict)
+    previous_phases: dict[str, PhaseStats] = field(
+        default_factory=dict[str, PhaseStats]
+    )
     """Statistiques des phases précédentes (clé: nom de phase)"""
 
     def get_previous_stats(self, phase_name: str) -> PhaseStats | None:
@@ -146,7 +148,7 @@ class ChunkContext:
         self,
         chunk: Chunk,
         phase_name: str,
-    ) -> dict[int, str] | None:
+    ) -> tuple[dict[int, str], bool]:
         """
         Helper: récupère la traduction d'un chunk depuis une phase précédente.
 
@@ -155,12 +157,14 @@ class ChunkContext:
             phase_name: Nom de la phase source (ex: 'initial')
 
         Returns:
-            Mapping line_index -> translated_text, ou None si pas trouvé
+            Tuple (traductions, has_missing) où:
+            - traductions: Mapping line_index -> translated_text (ou chaîne vide si manquante)
+            - has_missing: True si au moins une traduction est manquante, False sinon
 
         Example:
             # Dans RefinementPhase.render_prompt()
-            initial_translation = context.get_previous_translation(chunk, "initial")
-            if initial_translation:
+            initial_translation, has_missing = context.get_previous_translation(chunk, "initial")
+            if not has_missing:
                 return render_refine(chunk, initial_translation, ...)
         """
         return self.store_manager.get_translate(phase_name, chunk)
@@ -175,9 +179,6 @@ class ChunkContext:
         Returns:
             True si exporté avec succès, False sinon
         """
-        if self.glossary is None:
-            return False
-
         try:
             # self.glossary.export_to_file(path)
             return True

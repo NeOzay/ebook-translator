@@ -1,11 +1,10 @@
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Iterator
 
-from ..stores import Store
-from ..htmlpage import (
-    TagKey,
-    HtmlPage,
-)
+from ebook_translator.config import Config
+from ebook_translator.segmentation.helper import turn_resource_to_chunks
+
+from ..htmlpage import HtmlPage, TagKey
 
 
 @dataclass
@@ -35,10 +34,11 @@ class Chunk:
     """
 
     index: int
-    head: dict[TagKey, str] = field(default_factory=dict)
-    body: dict[TagKey, str] = field(default_factory=dict)
-    tail: dict[TagKey, str] = field(default_factory=dict)
-    chapter_name: str | None = None
+    head: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
+    body: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
+    tail: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
+    token_count: int = 0
+    token_encoding: str = field(default=Config.DEFAULT_ENCODING)
 
     def fetch_body(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
         """
@@ -173,6 +173,14 @@ class Chunk:
             parts.extend(self.tail.values())
 
         return "\n\n".join(parts)
+
+    def split_chunk(self, max_tokens: int, overlap_ratio: float) -> Iterator["Chunk"]:
+        yield from turn_resource_to_chunks(
+            iter(self.body.items()),
+            max_tokens,
+            overlap_ratio,
+            self.token_encoding,
+        )
 
     def get_body_size(self) -> int:
         """Retourne le nombre de fragments dans le body du chunk."""

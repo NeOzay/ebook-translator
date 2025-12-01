@@ -5,31 +5,32 @@ Ce module teste le nouveau comportement du pipeline de validation qui filtre
 les lignes invalides au lieu de rejeter tout le chunk.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock
 from dataclasses import dataclass
+from unittest.mock import Mock
 
+import pytest
 from src.ebook_translator.checks import (
+    FragmentCountCheck,
+    LineCountCheck,
+    PunctuationCheck,
     ValidationContext,
     ValidationPipeline,
-    LineCountCheck,
-    FragmentCountCheck,
-    PunctuationCheck,
-    FilteredLine,
 )
-from src.ebook_translator.segment import Chunk
 from src.ebook_translator.htmlpage import TagKey
+from src.ebook_translator.segmentation import Chunk
 
 
 @dataclass
 class MockEpubHtml:
     """Mock pour EpubHtml."""
+
     file_name: str
 
 
 @dataclass
 class MockPage:
     """Mock pour HtmlPage."""
+
     epub_html: MockEpubHtml
 
 
@@ -50,7 +51,6 @@ def create_mock_chunk(index: int, num_lines: int) -> Chunk:
     mock_page = MockPage(epub_html=MockEpubHtml(file_name="test.xhtml"))
 
     for i in range(num_lines):
-        mock_tag = Mock()
         tag_key = Mock(spec=TagKey)
         tag_key.index = str(i * 10)  # Indices simulés : 0, 10, 20, ...
         tag_key.page = mock_page
@@ -67,7 +67,7 @@ def create_mock_llm():
     return llm
 
 
-def test_line_count_filtering():
+def test_line_count_filtering(val_context: ValidationContext):
     """
     Test : LineCountCheck filtre les lignes manquantes après échec correction.
 
@@ -88,43 +88,41 @@ def test_line_count_filtering():
     original_texts = {i: f"Original {i}" for i in range(10)}
     translated_texts = {i: f"Traduit {i}" for i in range(10) if i not in {3, 7}}
 
-    llm = create_mock_llm()
-
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=llm,
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
-    )
+    val_context.llm = create_mock_llm()
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
+    val_context.chunk = chunk
 
     pipeline = ValidationPipeline([LineCountCheck()])
 
     # Act
-    success, final_translations, results = pipeline.validate_and_correct(context)
+    success, final_translations, _results = pipeline.validate_and_correct(val_context)
 
     # Assert
     assert success, "Pipeline devrait réussir avec filtrage"
     assert len(final_translations) == 8, "8 lignes valides devraient être conservées"
     assert 3 not in final_translations, "Ligne 3 devrait être filtrée"
     assert 7 not in final_translations, "Ligne 7 devrait être filtrée"
-    assert len(context.filtered_lines) == 2, f"2 lignes devraient être filtrées, got {len(context.filtered_lines)}"
+    assert (
+        len(val_context.filtered_lines) == 2
+    ), f"2 lignes devraient être filtrées, got {len(val_context.filtered_lines)}"
 
     # Vérifier FilteredLine
-    filtered_indices = {fl.chunk_line for fl in context.filtered_lines}
-    assert filtered_indices == {3, 7}, "Lignes 3 et 7 devraient être dans filtered_lines"
+    filtered_indices = {fl.chunk_line for fl in val_context.filtered_lines}
+    assert filtered_indices == {
+        3,
+        7,
+    }, "Lignes 3 et 7 devraient être dans filtered_lines"
 
     # Vérifier métadonnées
-    for filtered in context.filtered_lines:
+    for filtered in val_context.filtered_lines:
         assert filtered.file_name == "test.xhtml"
         assert filtered.chunk_index == 0
         assert filtered.check_name == "line_count"
         assert "manquante" in filtered.reason.lower()
 
 
-def test_fragment_count_filtering():
+def test_fragment_count_filtering(val_context: ValidationContext):
     """
     Test : FragmentCountCheck filtre les lignes avec mauvais fragments.
 
@@ -138,37 +136,31 @@ def test_fragment_count_filtering():
     chunk = create_mock_chunk(index=1, num_lines=10)
 
     original_texts = {
-        i: f"Text{i}</>Part" if i in {2, 5} else f"Text{i}"
-        for i in range(10)
+        i: f"Text{i}</>Part" if i in {2, 5} else f"Text{i}" for i in range(10)
     }
 
     translated_texts = {
-        i: f"Texte{i}" for i in range(10)  # Pas de </> → mauvais pour 2 et 5
+        i: f"Texte{i}"
+        for i in range(10)  # Pas de </> → mauvais pour 2 et 5
     }
 
-    llm = create_mock_llm()
+    val_context.llm = create_mock_llm()
 
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=llm,
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
-    )
+    val_context.chunk = chunk
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
 
     pipeline = ValidationPipeline([FragmentCountCheck()])
 
     # Act
-    success, final_translations, results = pipeline.validate_and_correct(context)
+    success, final_translations, _results = pipeline.validate_and_correct(val_context)
 
     # Assert
     assert success, "Pipeline devrait réussir avec filtrage"
     assert len(final_translations) == 8, "8 lignes valides conservées"
     assert 2 not in final_translations, "Ligne 2 filtrée"
     assert 5 not in final_translations, "Ligne 5 filtrée"
-    assert len(context.filtered_lines) == 2
+    assert len(val_context.filtered_lines) == 2
 
 
 def test_punctuation_filtering():
@@ -181,7 +173,7 @@ def test_punctuation_filtering():
     pass
 
 
-def test_multiple_checks_filtering():
+def test_multiple_checks_filtering(val_context: ValidationContext):
     """
     Test : Plusieurs checks filtrent des lignes différentes.
 
@@ -195,51 +187,57 @@ def test_multiple_checks_filtering():
 
     # 10 lignes originales attendues
     # Ligne 2 a un fragment (mauvais nombre)
-    original_texts = {
-        i: f"Text{i}</>Part" if i == 2 else f"Text{i}"
-        for i in range(10)
-    }
+    original_texts = {i: f"Text{i}</>Part" if i == 2 else f"Text{i}" for i in range(10)}
 
     # Traductions: manque 3 et 7, et ligne 2 n'a pas le séparateur
     translated_texts = {
-        i: f"Texte{i}" for i in range(10)
+        i: f"Texte{i}"
+        for i in range(10)
         if i not in {3, 7}  # Pas de traduction pour 3 et 7
     }
 
-    llm = create_mock_llm()
+    val_context.llm = create_mock_llm()
 
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=llm,
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
+    val_context.chunk = chunk
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
+
+    pipeline = ValidationPipeline(
+        [
+            LineCountCheck(),
+            FragmentCountCheck(),
+        ]
     )
 
-    pipeline = ValidationPipeline([
-        LineCountCheck(),
-        FragmentCountCheck(),
-    ])
-
     # Act
-    success, final_translations, results = pipeline.validate_and_correct(context)
+    success, final_translations, _results = pipeline.validate_and_correct(val_context)
 
     # Assert
     assert success, "Pipeline devrait réussir"
-    assert len(final_translations) == 7, f"7 lignes valides conservées, got {len(final_translations)}"
-    assert len(context.filtered_lines) == 3, f"3 lignes filtrées au total, got {len(context.filtered_lines)}: {context.filtered_lines}"
+    assert (
+        len(final_translations) == 7
+    ), f"7 lignes valides conservées, got {len(final_translations)}"
+    assert (
+        len(val_context.filtered_lines) == 3
+    ), f"3 lignes filtrées au total, got {len(val_context.filtered_lines)}: {val_context.filtered_lines}"
 
     # Vérifier quels checks ont filtré quoi
-    line_count_filtered = [fl for fl in context.filtered_lines if fl.check_name == "line_count"]
-    fragment_filtered = [fl for fl in context.filtered_lines if fl.check_name == "fragment_count"]
+    line_count_filtered = [
+        fl for fl in val_context.filtered_lines if fl.check_name == "line_count"
+    ]
+    fragment_filtered = [
+        fl for fl in val_context.filtered_lines if fl.check_name == "fragment_count"
+    ]
 
-    assert len(line_count_filtered) == 2, f"LineCountCheck a filtré 2 lignes, got {len(line_count_filtered)}"
-    assert len(fragment_filtered) == 1, f"FragmentCountCheck a filtré 1 ligne, got {len(fragment_filtered)}"
+    assert (
+        len(line_count_filtered) == 2
+    ), f"LineCountCheck a filtré 2 lignes, got {len(line_count_filtered)}"
+    assert (
+        len(fragment_filtered) == 1
+    ), f"FragmentCountCheck a filtré 1 ligne, got {len(fragment_filtered)}"
 
 
-def test_filtered_line_metadata():
+def test_filtered_line_metadata(val_context: ValidationContext):
     """
     Test : FilteredLine contient toutes les métadonnées correctes.
     """
@@ -251,28 +249,24 @@ def test_filtered_line_metadata():
     original_texts = {i: f"Text {i}" for i in range(5)}
     translated_texts = {0: "Texte 0", 1: "Texte 1", 2: "Texte 2"}  # Manque 3, 4
 
-    llm = create_mock_llm()
+    val_context.llm = create_mock_llm()
 
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=llm,
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
-    )
+    val_context.chunk = chunk
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
 
     pipeline = ValidationPipeline([LineCountCheck()])
 
     # Act
-    success, final_translations, results = pipeline.validate_and_correct(context)
+    success, _final_translations, _results = pipeline.validate_and_correct(val_context)
 
     # Assert
     assert success, "Pipeline devrait réussir avec filtrage"
-    assert len(context.filtered_lines) == 2, f"Expected 2 filtered lines, got {len(context.filtered_lines)}"
+    assert (
+        len(val_context.filtered_lines) == 2
+    ), f"Expected 2 filtered lines, got {len(val_context.filtered_lines)}"
 
-    for filtered in context.filtered_lines:
+    for filtered in val_context.filtered_lines:
         # Vérifier tous les champs
         assert filtered.file_name == "test.xhtml"
         assert filtered.file_line in {"30", "40"}  # Indices 3 et 4 → 30, 40
@@ -283,7 +277,7 @@ def test_filtered_line_metadata():
         assert "Line" in filtered.original_text  # Texte original présent
 
 
-def test_no_filtering_when_all_valid():
+def test_no_filtering_when_all_valid(val_context: ValidationContext):
     """
     Test : Pas de filtrage si toutes les lignes sont valides.
     """
@@ -293,32 +287,29 @@ def test_no_filtering_when_all_valid():
     original_texts = {i: f"Text {i}" for i in range(5)}
     translated_texts = {i: f"Texte {i}" for i in range(5)}  # Toutes présentes
 
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=None,  # Pas besoin de LLM si tout est valide
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
+    val_context.chunk = chunk
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
+    val_context.llm = None  # Pas besoin de LLM si tout est valide
+
+    pipeline = ValidationPipeline(
+        [
+            LineCountCheck(),
+            FragmentCountCheck(),
+            PunctuationCheck(),
+        ]
     )
 
-    pipeline = ValidationPipeline([
-        LineCountCheck(),
-        FragmentCountCheck(),
-        PunctuationCheck(),
-    ])
-
     # Act
-    success, final_translations, results = pipeline.validate_and_correct(context)
+    success, final_translations, _results = pipeline.validate_and_correct(val_context)
 
     # Assert
     assert success
     assert len(final_translations) == 5, "Toutes les lignes conservées"
-    assert len(context.filtered_lines) == 0, "Aucune ligne filtrée"
+    assert len(val_context.filtered_lines) == 0, "Aucune ligne filtrée"
 
 
-def test_filter_reason_messages():
+def test_filter_reason_messages(val_context: ValidationContext):
     """
     Test : Messages de raison de filtrage sont descriptifs et corrects.
     """
@@ -327,21 +318,16 @@ def test_filter_reason_messages():
     original_texts = {0: "Text 0"}  # Manque 1, 2
     translated_texts = {0: "Texte 0"}
 
-    context = ValidationContext(
-        chunk=chunk,
-        translated_texts=translated_texts,
-        original_texts=original_texts,
-        llm=create_mock_llm(),
-        target_language="fr",
-        phase="initial",
-        max_retries=1,
-    )
+    val_context.chunk = chunk
+    val_context.translated_texts = translated_texts
+    val_context.original_texts = original_texts
+    val_context.llm = create_mock_llm()
 
     pipeline = ValidationPipeline([LineCountCheck()])
-    success, _, _ = pipeline.validate_and_correct(context)
+    success, _, _ = pipeline.validate_and_correct(val_context)
 
     assert success
-    for filtered in context.filtered_lines:
+    for filtered in val_context.filtered_lines:
         assert "manquante" in filtered.reason.lower()
 
     # Test FragmentCountCheck
@@ -354,9 +340,9 @@ def test_filter_reason_messages():
         translated_texts=translated_texts2,
         original_texts=original_texts2,
         llm=create_mock_llm(),
+        chunk_info=Mock(),
         target_language="fr",
-        phase="initial",
-        max_retries=1,
+        max_retries=2,
     )
 
     pipeline2 = ValidationPipeline([FragmentCountCheck()])

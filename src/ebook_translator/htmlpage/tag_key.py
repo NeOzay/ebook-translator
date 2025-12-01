@@ -3,6 +3,7 @@ Wrapper pour utiliser des Tags BeautifulSoup comme clés de dictionnaire.
 """
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from bs4.element import Tag
@@ -72,7 +73,11 @@ class TagKey:
         """
         if not isinstance(other, TagKey):
             return False
-        return self.tag is other.tag
+        return (
+            self.tag is other.tag
+            and self.page is other.page
+            and self.index == other.index
+        )
 
     def __repr__(self) -> str:
         """Représentation en chaîne pour le debug."""

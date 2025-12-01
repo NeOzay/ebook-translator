@@ -2,10 +2,14 @@
 Phases concrètes de traduction.
 """
 
-from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
-from ebook_translator.pipeline.phases.refinement import RefinementPhase
+from .dummy_phase import DummyPhase
+from .initial_translation import InitialTranslationPhase
+from .literary_analysis import LiteraryAnalysisPhase
+from .refinement import RefinementPhase
 
 __all__ = [
     "InitialTranslationPhase",
     "RefinementPhase",
+    "LiteraryAnalysisPhase",
+    "DummyPhase",
 ]

@@ -11,7 +11,6 @@ Ce module gère la traduction effective des chunks, incluant :
 from typing import TYPE_CHECKING
 
 from ..logger import get_logger
-from .parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ..segmentation.segmentator import Chunk
@@ -43,7 +42,7 @@ def build_translation_map(
     """
     translation_map: dict[str, dict[str, str]] = {}
 
-    for i, (current_file, tag_key, original_text) in enumerate(chunk.fetch_body()):
+    for i, (current_file, tag_key, _original_text) in enumerate(chunk.fetch_body()):
         # Obtenir la traduction
         if i not in translated_texts:
             continue

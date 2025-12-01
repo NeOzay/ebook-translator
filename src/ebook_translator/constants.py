@@ -14,5 +14,9 @@ IGNORED_TAGS = {"script", "style"}
 # Ratio par défaut du chevauchement entre chunks (15%)
 DEFAULT_OVERLAP_RATIO = 0.15
 
-# Encodage par défaut pour le comptage de tokens (OpenAI o200k_base)
-DEFAULT_ENCODING = "o200k_base"
+
+# Patterns flexibles (support séparateurs _ - espace)
+# CHAPTER_KEYWORDS = r"(chapter|chap|ch|part|section)"
+SKIP_KEYWORDS = r"^(cover|toc|copyright|signup|colophon|titlepage)"
+FRONT_MATTER_KEYWORDS = r"^(frontmatter|preface|foreword|acknowledgments?|dedication)"
+BACK_MATTER_KEYWORDS = r"^(afterword|appendix|about|also_by|newsletter)"

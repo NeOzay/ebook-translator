@@ -13,8 +13,8 @@ Fonctionnalités :
 
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from .config import Logger_Level
@@ -24,7 +24,7 @@ try:
 
     TQDM_AVAILABLE = True
 except ImportError:
-    TQDM_AVAILABLE = False
+    TQDM_AVAILABLE = False  # type: ignore
 
 
 # ============================================================
@@ -40,7 +40,7 @@ class LogSession:
     """
 
     _instance: Optional["LogSession"] = None
-    _session_dir: Optional[Path] = None
+    _session_dir: Path | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -86,14 +86,14 @@ class TqdmLoggingHandler(logging.Handler):
     les barres de progression.
     """
 
-    def __init__(self, level=logging.NOTSET):
+    def __init__(self, level: int = logging.NOTSET):
         super().__init__(level)
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord):
         try:
             msg = self.format(record)
             if TQDM_AVAILABLE:
-                tqdm.write(msg, file=sys.stderr)
+                tqdm.write(msg, file=sys.stderr)  # type: ignore
             else:
                 # Fallback si tqdm non disponible
                 sys.stderr.write(msg + "\n")
@@ -121,7 +121,7 @@ class LazyFileHandler(logging.Handler):
         self.filename = filename
         self.mode = mode
         self.encoding = encoding
-        self._handler: Optional[logging.FileHandler] = None
+        self._handler: logging.FileHandler | None = None
 
     def _ensure_handler(self):
         """Crée le FileHandler sous-jacent si pas encore fait."""
@@ -138,7 +138,7 @@ class LazyFileHandler(logging.Handler):
             if self.formatter:
                 self._handler.setFormatter(self.formatter)
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord):
         """Émit un log, en créant le fichier si nécessaire."""
         try:
             self._ensure_handler()
@@ -160,8 +160,8 @@ class LazyFileHandler(logging.Handler):
 
 
 def setup_logger(
-    name: str,
-    log_dir: Optional[str] = None,
+    logger: logging.Logger,
+    log_dir: str | None = None,
     level: int = Logger_Level.level,
     console_level: int = Logger_Level.console_level,
     file_level: int = Logger_Level.file_level,
@@ -190,7 +190,6 @@ def setup_logger(
         Les logs sont regroupés par session dans logs/run_YYYYMMDD_HHMMSS/
         Le fichier est créé seulement au premier log (LazyFileHandler)
     """
-    logger = logging.getLogger(name)
     logger.setLevel(level)
 
     # Éviter d'ajouter des handlers multiples si déjà configuré
@@ -231,7 +230,7 @@ def setup_logger(
     return logger
 
 
-def get_logger(name: str, log_filename: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str, log_filename: str | None = None) -> logging.Logger:
     """
     Récupère un logger existant ou en crée un nouveau avec la configuration par défaut.
 
@@ -255,7 +254,7 @@ def get_logger(name: str, log_filename: Optional[str] = None) -> logging.Logger:
     # Si le logger n'a pas de handlers, le configurer
     if not logger.handlers:
         filename = log_filename or "translation.log"
-        return setup_logger(name, log_filename=filename)
+        return setup_logger(logger, log_filename=filename)
 
     return logger
 

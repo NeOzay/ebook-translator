@@ -4,7 +4,9 @@
       "Bash(poetry run pytest:*)",
       "Bash(git log:*)",
       "Bash(poetry run python:*)",
-      "Bash(iconv:*)"
+      "Bash(iconv:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

@@ -9,6 +9,6 @@
     "include": [
         "src"
     ],
-    "typeCheckingMode": "basic",
+    "typeCheckingMode": "strict",
     "useLibraryCodeForTypes": true
 }

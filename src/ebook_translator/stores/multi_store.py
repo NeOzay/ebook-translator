@@ -6,13 +6,13 @@ Ce module fournit MultiStore qui gère séparément les traductions initiales
 """
 
 from pathlib import Path
-from typing import Literal, Optional, TYPE_CHECKING, TypedDict, override
+from typing import TYPE_CHECKING, Literal, TypedDict, override
 
 from .store import Store
 
 if TYPE_CHECKING:
-    from segmentation import Chunk
-    from htmlpage import TagKey
+    from ..htmlpage import TagKey
+    from ..segmentation import Chunk
 
 PhaseType = Literal["initial", "refined"]
 
@@ -79,8 +79,8 @@ class MultiStore(Store):
         self,
         source_file: str,
         line_index: str,
-        phase: Optional[PhaseType] = None,
-    ) -> Optional[str]:
+        phase: PhaseType | None = None,
+    ) -> str | None:
         """
         Récupère une traduction avec fallback automatique.
 
@@ -179,7 +179,7 @@ class MultiStore(Store):
     def get_from_chunk(
         self,
         chunk: "Chunk",
-        phase: Optional[PhaseType] = None,
+        phase: PhaseType | None = None,
     ) -> tuple[dict[int, str], bool]:
         """
         Récupère les traductions pour un chunk avec fallback.
@@ -211,11 +211,11 @@ class MultiStore(Store):
         if has_missing:
             # Compléter avec initial
             initial_translations, _ = self.initial_store.get_from_chunk(chunk)
-            merged = {}
+            merged: dict[int, str] = {}
             # Fusionner: priorité à refined, fallback sur initial
             for idx in set(translations.keys()) | set(initial_translations.keys()):
                 refined_val = translations.get(idx)
-                initial_val = initial_translations.get(idx)
+                initial_val = initial_translations.get(idx, "")
                 merged[idx] = refined_val if refined_val else initial_val
 
             # Re-vérifier s'il manque encore quelque chose
@@ -228,7 +228,7 @@ class MultiStore(Store):
     def get_all_from_chunk(
         self,
         chunk: "Chunk",
-        phase: Optional[PhaseType] = None,
+        phase: PhaseType | None = None,
     ) -> tuple[dict["TagKey", str], bool]:
         if phase:
             # Phase spécifique

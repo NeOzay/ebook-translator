@@ -15,9 +15,8 @@ Utilisé à la fois pour :
 
 import json
 import re
-from pathlib import Path
-from typing import Optional
 from collections import defaultdict
+from pathlib import Path
 
 
 class Glossary:
@@ -49,7 +48,7 @@ class Glossary:
         >>> # 'Matrix → Matrice, Sakamoto → Sakamoto'
     """
 
-    def __init__(self, cache_path: Optional[Path] = None):
+    def __init__(self, cache_path: Path | None = None):
         """
         Initialise le glossaire.
 
@@ -105,7 +104,7 @@ class Glossary:
         self,
         source_term: str,
         min_confidence: float = 0.5,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Récupère la traduction recommandée d'un terme.
 
@@ -139,7 +138,7 @@ class Glossary:
 
         # Trouver la traduction la plus fréquente
         total = sum(translations.values())
-        most_frequent = max(translations, key=translations.get)  # type: ignore
+        most_frequent = max(translations, key=lambda t: translations[t])
         frequency = translations[most_frequent]
         confidence = frequency / total
 
@@ -276,7 +275,7 @@ class Glossary:
         candidate_terms: list[str],
         original_text: str,
         translated_text: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Trouve la meilleure correspondance pour un terme original.
 
@@ -428,7 +427,7 @@ class Glossary:
             >>> high_conf = glossary.get_high_confidence_terms(min_confidence=0.9)
             >>> # Seulement les termes traduits de manière très cohérente
         """
-        result = {}
+        result: dict[str, str] = {}
         for source_term in self._glossary:
             translation = self.get_translation(
                 source_term, min_confidence=min_confidence
@@ -516,9 +515,7 @@ class Glossary:
         from .glossary_filters import should_exclude_from_glossary
 
         terms_to_remove = [
-            term
-            for term in self._glossary.keys()
-            if should_exclude_from_glossary(term)
+            term for term in self._glossary if should_exclude_from_glossary(term)
         ]
 
         for term in terms_to_remove:
@@ -543,7 +540,7 @@ class Glossary:
             >>> removed_count = glossary.remove_low_confidence_terms(min_occurrences=2)
             >>> print(f"{removed_count} termes à faible confiance supprimés")
         """
-        terms_to_remove = []
+        terms_to_remove: list[str] = []
 
         for source_term, translations in self._glossary.items():
             total_occurrences = sum(translations.values())
@@ -614,7 +611,7 @@ class Glossary:
     # Persistance
     # =========================================================================
 
-    def save(self, path: Optional[Path] = None) -> None:
+    def save(self, path: Path | None = None) -> None:
         """
         Sauvegarde le glossaire sur disque.
 
@@ -647,7 +644,7 @@ class Glossary:
             return
 
         try:
-            with open(self.cache_path, "r", encoding="utf-8") as f:
+            with open(self.cache_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             # Reconstruire les defaultdicts

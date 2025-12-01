@@ -27,13 +27,12 @@ Note: Store.py a ses propres verrous par fichier pour gérer la concurrence,
 
 import queue
 import threading
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING
 
 from ..logger import get_logger
-from .validation_queue import SaveQueue, SaveItem
+from .validation_queue import SaveItem, SaveQueue
 
 if TYPE_CHECKING:
-    from ..segmentation.segmentator import Chunk
     from ..stores.store import Store
 
 logger = get_logger(__name__)
@@ -78,7 +77,6 @@ class SaveWorker:
         self,
         save_queue: SaveQueue,
         store: "Store",
-        on_validated: Optional[Callable[["Chunk", dict[int, str]], None]] = None,
         stop_event: threading.Event | None = None,
     ):
         """
@@ -95,7 +93,6 @@ class SaveWorker:
         """
         self.save_queue = save_queue
         self.store = store
-        self.on_validated = on_validated
         self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.saved_count = 0
         self.error_count = 0
@@ -183,13 +180,13 @@ class SaveWorker:
 
         logger.debug(
             f"💾 Chunk {item.chunk.index} sauvegardé "
-            f"({len(item.source_files)} fichier(s), {len(item.final_translations)} ligne(s))"
+            f"({len(item.source_files)} fichier(s), {len(item.final_result)} ligne(s))"
         )
 
         # 3. Callback optionnel (ex: apprentissage glossaire)
-        if self.on_validated:
+        if item.on_save:
             try:
-                self.on_validated(item.chunk, item.final_translations)
+                item.on_save(item)
             except Exception as e:
                 # Ne pas crasher si le callback échoue
                 logger.warning(

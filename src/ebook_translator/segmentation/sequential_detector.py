@@ -13,11 +13,19 @@ Architecture:
   Chaque fichier est analysé EN TENANT COMPTE des fichiers précédents.
 """
 
+import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Iterator, Optional
-import re
-from ebooklib import epub
+from typing import TYPE_CHECKING
+
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+
+from ebook_translator.constants import (
+    BACK_MATTER_KEYWORDS,
+    FRONT_MATTER_KEYWORDS,
+    SKIP_KEYWORDS,
+)
 
 from ..logger import get_logger
 
@@ -29,14 +37,13 @@ logger = get_logger(__name__)
 
 class FileType(Enum):
     """Types de fichiers détectés pendant le parcours."""
-    MAIN_CHAPTER = auto()       # Chapitre principal (chapter1, chapter2, ...)
-    SUBPART = auto()            # Sous-partie (chapter11 après chapter1)
-    INSERT = auto()             # Insert/interlude entre chapitres
-    PROLOGUE = auto()           # Prologue
-    EPILOGUE = auto()           # Epilogue
-    FRONT_MATTER = auto()       # Front matter (preface, dedication, ...)
-    BACK_MATTER = auto()        # Back matter (afterword, appendix, ...)
-    SKIP = auto()               # À ignorer (cover, toc, copyright, ...)
+
+    MAIN_CHAPTER = auto()  # Chapitre principal (chapter1, chapter2, ...)
+    SUBPART = auto()  # Sous-partie (chapter11 après chapter1)
+    INSERT = auto()  # Insert/interlude entre chapitres
+    FRONT_MATTER = auto()  # Front matter (preface, dedication, ...)
+    BACK_MATTER = auto()  # Back matter (afterword, appendix, ...)
+    SKIP = auto()  # À ignorer (cover, toc, copyright, ...)
 
 
 @dataclass
@@ -46,18 +53,30 @@ class ChapterContext:
 
     Ce contexte permet de prendre des décisions basées sur l'HISTORIQUE
     au lieu de règles regex rigides.
+
+    Utilise un système de tracking générique par nom pour supporter
+    des types de chapitres découverts dynamiquement (chapter, intermission,
+    interlude, prologue, epilogue, etc.) avec numérotation indépendante.
     """
+
     current_chapter_num: int | None = None
     """Numéro du chapitre actuel"""
 
     current_chapter_name: str = ""
     """Nom du chapitre actuel (ex: 'Chapter 1', 'Prologue')"""
 
-    current_files: list[epub.EpubHtml] = field(default_factory=list)
+    current_files: list[epub.EpubHtml] = field(default_factory=list[epub.EpubHtml])
     """Fichiers HTML du chapitre actuel"""
 
-    last_main_chapter_num: int | None = None
-    """Dernier numéro de chapitre PRINCIPAL vu (clé pour résoudre ambiguïtés)"""
+    chapters_by_name: dict[str, int] = field(default_factory=dict[str, int])
+    """
+    Tracking générique du dernier numéro vu par type de nom.
+
+    Exemples:
+      {"chapter": 5, "intermission": 2, "interlude": 1, "prologue": 1}
+
+    Permet numérotation indépendante: chapter5, intermission2, chapter6, intermission3
+    """
 
     chapter_index: int = 0
     """Index global du chapitre (0, 1, 2, ...)"""
@@ -71,8 +90,11 @@ class FileAnalysis:
     Contient la décision prise (type, nouveau chapitre ou non)
     et la justification pour debugging.
     """
+
     file_type: FileType
     """Type de fichier détecté"""
+
+    name: str
 
     chapter_num: int | None = None
     """Numéro de chapitre extrait (si applicable)"""
@@ -92,6 +114,7 @@ class ChapterGroup:
     Compatible avec l'ancien ChapterGroup de chapter_detector.py
     pour assurer rétrocompatibilité.
     """
+
     chapter_index: int
     chapter_name: str
     html_files: list[epub.EpubHtml]
@@ -138,16 +161,10 @@ class SequentialChapterDetector:
         ...     print(f"{chapter_group.chapter_name}: {len(chapter_group.html_files)} fichiers")
     """
 
-    # Patterns flexibles (support séparateurs _ - espace)
-    CHAPTER_KEYWORDS = r'(chapter|chap|ch|part|section)'
-    SKIP_KEYWORDS = r'^(cover|toc|copyright|signup|colophon|titlepage)'
-    FRONT_MATTER_KEYWORDS = r'^(frontmatter|preface|foreword|acknowledgments?|dedication|introduction)'
-    BACK_MATTER_KEYWORDS = r'^(afterword|bonus|appendix|about|also_by|newsletter)'
-
     def __init__(
         self,
         epub_htmls: list[epub.EpubHtml],
-        config: Optional[SequentialDetectorConfig] = None,
+        config: SequentialDetectorConfig | None = None,
     ):
         """
         Initialise le détecteur séquentiel.
@@ -159,6 +176,7 @@ class SequentialChapterDetector:
         self.epub_htmls = epub_htmls
         self.config = config or SequentialDetectorConfig()
         self.context = ChapterContext()
+        self.empty_name_index = 0
 
     def detect_chapters(self) -> Iterator[ChapterGroup]:
         """
@@ -188,10 +206,6 @@ class SequentialChapterDetector:
                 self.context.current_chapter_name = self._make_chapter_name(analysis)
                 self.context.current_files = [html]
 
-                # Mettre à jour last_main_chapter_num si c'est un MAIN_CHAPTER
-                if analysis.file_type == FileType.MAIN_CHAPTER:
-                    self.context.last_main_chapter_num = analysis.chapter_num
-
                 logger.debug(
                     f"Nouveau chapitre : {self.context.current_chapter_name} "
                     f"({filename}) - {analysis.reason}"
@@ -212,7 +226,9 @@ class SequentialChapterDetector:
                         f"traité comme nouveau chapitre"
                     )
                     self.context.current_chapter_num = analysis.chapter_num
-                    self.context.current_chapter_name = self._make_chapter_name(analysis)
+                    self.context.current_chapter_name = self._make_chapter_name(
+                        analysis
+                    )
                     self.context.current_files = [html]
 
             elif analysis.file_type == FileType.SKIP:
@@ -225,9 +241,7 @@ class SequentialChapterDetector:
 
         logger.info(f"✅ {self.context.chapter_index} chapitres détectés")
 
-    def _analyze_with_context(
-        self, filename: str, spine_index: int
-    ) -> FileAnalysis:
+    def _analyze_with_context(self, filename: str, spine_index: int) -> FileAnalysis:
         """
         Analyse un fichier EN TENANT COMPTE DU CONTEXTE.
 
@@ -241,157 +255,180 @@ class SequentialChapterDetector:
         Returns:
             FileAnalysis avec décision et justification
         """
+        name, chapter_num = self._extract_filename_and_chapter_number(filename)
+
         # Priorité 1 : SKIP (cover, toc, copyright)
-        if re.search(self.SKIP_KEYWORDS, filename):
-            return FileAnalysis(FileType.SKIP, reason="Fichier système")
+        if re.search(SKIP_KEYWORDS, name):
+            return FileAnalysis(FileType.SKIP, name=filename, reason="Fichier système")
 
         # Priorité 2 : FRONT_MATTER
-        if re.search(self.FRONT_MATTER_KEYWORDS, filename):
+        if re.search(FRONT_MATTER_KEYWORDS, name):
             if self.config.include_front_matter:
                 return FileAnalysis(
                     FileType.FRONT_MATTER,
+                    name=name,
                     chapter_num=0,
                     is_new_chapter=True,
-                    reason="Front matter"
+                    reason="Front matter",
                 )
             else:
-                return FileAnalysis(FileType.SKIP, reason="Front matter (ignoré)")
+                return FileAnalysis(
+                    FileType.SKIP, name=filename, reason="Front matter (ignoré)"
+                )
 
         # Priorité 3 : BACK_MATTER
-        if re.search(self.BACK_MATTER_KEYWORDS, filename):
+        if re.search(BACK_MATTER_KEYWORDS, name):
             if self.config.include_back_matter:
                 return FileAnalysis(
                     FileType.BACK_MATTER,
+                    name=name,
                     chapter_num=999,
                     is_new_chapter=True,
-                    reason="Back matter"
+                    reason="Back matter",
                 )
             else:
-                return FileAnalysis(FileType.SKIP, reason="Back matter (ignoré)")
+                return FileAnalysis(
+                    FileType.SKIP, name=name, reason="Back matter (ignoré)"
+                )
 
-        # Priorité 4 : PROLOGUE
-        if filename.startswith("prologue"):
-            return FileAnalysis(
-                FileType.PROLOGUE,
-                chapter_num=0,
-                is_new_chapter=True,
-                reason="Prologue détecté"
-            )
-
-        # Priorité 5 : EPILOGUE
-        if filename.startswith("epilogue"):
-            return FileAnalysis(
-                FileType.EPILOGUE,
-                chapter_num=999,
-                is_new_chapter=True,
-                reason="Epilogue détecté"
-            )
-
-        # Priorité 6 : INSERT (interlude, insert)
-        if re.search(r'(insert|interlude)', filename):
+        # Priorité 4 : INSERT (insert)
+        if re.search(r"(insert)", name):
             return FileAnalysis(
                 FileType.INSERT,
+                name=name,
                 is_new_chapter=False,
-                reason="Insert/interlude détecté"
+                reason="Insert/interlude détecté",
             )
 
-        # Priorité 7 : CHAPITRE numéroté
-        chapter_num = self._extract_chapter_number(filename)
-        if chapter_num is None:
-            # Pas de numéro détecté
-            return FileAnalysis(FileType.SKIP, reason="Pas de numéro de chapitre")
+        # Priorité 5 : CHAPITRE numéroté (décision contextuelle)
+        return self._decide_with_context(name, chapter_num)
 
-        # DÉCISION CONTEXTUELLE (cœur de l'algorithme)
-        return self._decide_with_context(filename, chapter_num)
-
-    def _decide_with_context(self, filename: str, num: int) -> FileAnalysis:
+    def _decide_with_context(self, name: str, num: int | None) -> FileAnalysis:
         """
         Décide si un fichier démarre un nouveau chapitre ou est une subpart.
 
-        UTILISE LE CONTEXTE (last_main_chapter_num) pour résoudre les ambiguïtés.
+        UTILISE LE CONTEXTE (chapters_by_name) pour résoudre les ambiguïtés
+        avec tracking générique par nom (chapter, intermission, interlude, etc.).
 
         Exemples :
         - chapter11 après chapter10 → CHAPITRE 11 (séquence naturelle)
         - chapter11 après chapter1  → CHAPITRE 1 PARTIE 1 (subpart)
         - chapter1_a après chapter1 → SUBPART (même numéro)
+        - intermission2 après intermission1 → INTERMISSION 2 (séquence indépendante)
+        - interlude1 après chapter5 → INTERLUDE 1 (nouveau type, numérotation indépendante)
 
         Args:
-            filename: Nom de fichier normalisé
-            num: Numéro de chapitre extrait
+            name: Nom de base extrait (ex: "chapter", "intermission", "interlude")
+            num: Numéro extrait ou None si absent
 
         Returns:
             FileAnalysis avec décision contextuelle
         """
-        last = self.context.last_main_chapter_num
+        last_index = self.context.chapters_by_name.get(name)
+        last_name = self.context.current_chapter_name
 
-        # Cas 1 : Premier chapitre rencontré
-        if last is None:
+        # Cas spécial : Pas de numéro détecté (ex: "intermission" sans numéro)
+        if num is None:
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
+                name=name,
+                is_new_chapter=True,
+                reason=f"Nouveau chapitre '{name}' sans numéro",
+            )
+
+        # Cas où le même nom de chapitre sans numéro est répété
+        if last_name == name and not last_index:
+            return FileAnalysis(
+                FileType.SUBPART,
+                name=name,
+                chapter_num=None,
+                is_new_chapter=False,
+                reason=f"Sous-partie répétée '{name}' sans numéro",
+            )
+
+        # Cas 1 : Premier chapitre de ce type (ex: premier "intermission")
+        if last_index is None:
+            self.context.chapters_by_name[name] = num
+            return FileAnalysis(
+                FileType.MAIN_CHAPTER,
+                name=name,
                 chapter_num=num,
                 is_new_chapter=True,
-                reason="Premier chapitre"
+                reason=f"Premier '{name}' (numérotation indépendante)",
             )
 
         # Cas 2 : Séquence naturelle (last=10, num=11)
-        if num == last + 1:
+        if num == last_index + 1:
+            self.context.chapters_by_name[name] = num
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
+                name=name,
                 chapter_num=num,
                 is_new_chapter=True,
-                reason=f"Séquence naturelle ({last} → {num})"
+                reason=f"Séquence naturelle '{name}' ({last_index} → {num})",
             )
 
         # Cas 3 : Même numéro (last=1, num=1) → SUBPART
-        if num == last:
+        if num == last_index:
             return FileAnalysis(
                 FileType.SUBPART,
-                chapter_num=last,
+                name=name,
+                chapter_num=last_index,
                 is_new_chapter=False,
-                reason=f"Même chapitre ({num})"
+                reason=f"Sous-partie '{name} {num}'",
             )
 
         # Cas 4 : Numéro commence par last (last=1, num=11/12/13)
         # → Potentiellement subpart si num est "trop loin" de last+1
-        if str(num).startswith(str(last)) and len(str(num)) > len(str(last)):
+        if (
+            str(num).startswith(str(last_index))
+            and len(str(num)) > len(str(last_index))
+            and num > last_index + self.config.subpart_threshold
+        ):
             # Heuristique : Si num > last + threshold, c'est probablement une subpart
             # Ex: last=1, num=11 → 11 > 1+5 → subpart probable
-            if num > last + self.config.subpart_threshold:
-                subpart_num = int(str(num)[len(str(last)):])
-                return FileAnalysis(
-                    FileType.SUBPART,
-                    chapter_num=last,
-                    is_new_chapter=False,
-                    reason=f"Subpart détectée (chapitre {last} partie {subpart_num})"
-                )
+            subpart_num = int(str(num)[len(str(last_index)) :])
+            return FileAnalysis(
+                FileType.SUBPART,
+                name=name,
+                chapter_num=last_index,
+                is_new_chapter=False,
+                reason=f"Subpart détectée '{name}' ({last_index} partie {subpart_num})",
+            )
 
         # Cas 5 : Saut dans numérotation (last=1, num=5)
         # → Nouveau chapitre (numérotation non séquentielle)
-        if num > last + 1:
+        if num > last_index + 1:
             logger.warning(
-                f"⚠️  Saut dans numérotation : chapter {last} → {num} "
-                f"(chapitres intermédiaires manquants ?)"
+                f"⚠️  Saut dans numérotation '{name}' : {last_index} → {num} "
+                f"(éléments intermédiaires manquants ?)"
             )
+            self.context.chapters_by_name[name] = num
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
+                name=name,
                 chapter_num=num,
                 is_new_chapter=True,
-                reason=f"Saut numérotation ({last} → {num})"
+                reason=f"Saut numérotation '{name}' ({last_index} → {num})",
             )
 
         # Cas 6 : Retour en arrière (last=5, num=1)
         # → Probablement erreur, mais traiter comme nouveau chapitre
         logger.warning(
-            f"⚠️  Retour arrière dans numérotation : chapter {last} → {num}"
+            f"⚠️  Retour arrière dans numérotation '{name}' : {last_index} → {num}"
         )
+        self.context.chapters_by_name[name] = num
         return FileAnalysis(
             FileType.MAIN_CHAPTER,
+            name=name,
             chapter_num=num,
             is_new_chapter=True,
-            reason=f"Retour arrière ({last} → {num})"
+            reason=f"Retour arrière '{name}' ({last_index} → {num})",
         )
 
-    def _extract_chapter_number(self, filename: str) -> Optional[int]:
+    def _extract_filename_and_chapter_number(
+        self, filename: str
+    ) -> tuple[str, int | None]:
         """
         Extrait le numéro de chapitre d'un nom de fichier.
 
@@ -408,19 +445,27 @@ class SequentialChapterDetector:
         """
         # Pattern 1 : Mot-clé + séparateur optionnel + numéro
         # Ex: chapter1, chapter_1, chapter-01, ch_001
-        pattern1 = rf'{self.CHAPTER_KEYWORDS}[\s_-]*(\d+)'
+        # Supporte aussi : intermission, interlude, prologue, epilogue (découverte dynamique)
+        pattern1 = r"([a-zA-Z]+)[\s_-]*(\d*)"
         match = re.search(pattern1, filename, re.IGNORECASE)
         if match:
-            return int(match.group(2))
+            base_name = match.group(1)
+            number_str = match.group(2)
+            return (
+                base_name,
+                int(number_str) if number_str.isdigit() else None,
+            )
 
         # Pattern 2 : Numéros purs (≥2 chiffres pour éviter faux positifs)
         # Ex: 001.html, 002.html
-        pattern2 = r'(\d{2,})'
+        pattern2 = r"(\d{2,})"
         match = re.search(pattern2, filename)
         if match:
-            return int(match.group(1))
+            empty_name = f"empty_chapter_{self.empty_name_index}"
+            self.empty_name_index += 1
+            return (empty_name, int(match.group(1)))
 
-        return None
+        return filename, None
 
     def _normalize_filename(self, filename: str) -> str:
         """
@@ -450,16 +495,12 @@ class SequentialChapterDetector:
         Returns:
             Nom de chapitre formaté (ex: "Chapter 1", "Prologue")
         """
-        if analysis.file_type == FileType.PROLOGUE:
-            return "Prologue"
-        elif analysis.file_type == FileType.EPILOGUE:
-            return "Epilogue"
-        elif analysis.file_type == FileType.FRONT_MATTER:
+        if analysis.file_type == FileType.FRONT_MATTER:
             return "Front Matter"
         elif analysis.file_type == FileType.BACK_MATTER:
             return "Back Matter"
         else:
-            return f"Chapter {analysis.chapter_num}"
+            return f"{analysis.name} {analysis.chapter_num if analysis.chapter_num is not None else ''}".strip()
 
     def _create_chapter_group(self) -> ChapterGroup:
         """

@@ -1,36 +1,283 @@
 """
-Exporteur d'analyses littéraires au format Markdown.
+Exporteur Phase 0: Analyse littéraire → Markdown lisible.
 
-Ce module transforme les fiches d'analyse JSON (format machine)
-en documents Markdown formatés pour lecture humaine.
+Ce module transforme une fiche d'analyse JSON (schéma ContexteTraduction)
+en document Markdown structuré et lisible pour la revue humaine.
 
-Formats de sortie:
-- JSON: Format brut pour parsing programmatique
-- Markdown: Format lisible pour revue manuelle, rapports, documentation
+Sorties supportées:
+- JSON (source, non modifié) : parsing programmatique en amont
+- Markdown (cible) : titres H1/H2, listes, table glossaire
 
 Structure Markdown générée:
-1. En-tête (metadata)
-2. Personnages (tableau avec rôles, relations)
-3. Lieux (primaire + secondaires)
-4. Intrigue (événements, conflits, révélations)
-5. Thèmes et symboles
-6. Techniques narratives (POV, ton, dispositifs)
-7. Terminologie (termes spécialisés + noms propres)
-8. Notes stylistiques
-9. Considérations pour la traduction
+1. Titre H1 (chapitre)
+2. Sommaire (optionnel)
+3. Sections H2 pour l'analyse littéraire (6 clés)
+    - Résumé narratif
+    - Tonalité et ambiance
+    - Style d'écriture
+    - Thèmes et images clés
+    - Références culturelles
+    - Pistes de traduction (liste à puces)
+4. Glossaire (table Markdown triée)
+5. Métadonnées (version schéma)
 """
 
+import json
 import logging
+import re
+import unicodedata
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from .schema import ChapterAnalysis
+from .translation_context import ContexteTraduction, TermeGlossaire
 
 if TYPE_CHECKING:
     pass
 
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------
+# Constantes et configuration
+# ------------------------------
+
+MISSING = "—"
+
+# Libellés humains pour clés d'analyse
+FIELD_LABELS: dict[str, str] = {
+    "resume_narratif": "Résumé narratif",
+    "tonalite_ambiance": "Tonalité et ambiance",
+    "style_ecriture": "Style d'écriture",
+    "themes_images_cles": "Thèmes et images clés",
+    "references_culturelles": "Références culturelles",
+    "pistes_traduction": "Pistes de traduction",
+}
+
+# Ordre stable des sections pour diff déterministe
+ANALYSE_ORDER: list[str] = [
+    "resume_narratif",
+    "tonalite_ambiance",
+    "style_ecriture",
+    "themes_images_cles",
+    "references_culturelles",
+    "pistes_traduction",
+]
+
+
+def save_markdown(markdown_content: str, output_path: Path | str) -> None:
+    """
+    Sauvegarde le contenu Markdown dans un fichier.
+
+    Args:
+        markdown_content: Contenu Markdown à sauvegarder
+        output_path: Chemin du fichier de sortie
+
+    Example:
+        >>> md = export_to_markdown(raw_json)
+        >>> save_markdown(md, "cache/analysis/Chapter_1.md")
+    """
+    output_path = Path(output_path) if isinstance(output_path, str) else output_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8") as f:
+        f.write(markdown_content)
+
+    logger.info(f"Exporté Markdown: {output_path}")
+
+
+# ------------------------------
+# Helpers internes
+# ------------------------------
+
+
+def _normalize_text(text: str) -> str:
+    """
+    Nettoie un texte pour rendu Markdown.
+
+    - Supprime espaces en tête/queue
+    - Remplace séquences d'espaces par un seul espace
+
+    Args:
+        text: Texte d'entrée
+
+    Returns:
+        Texte normalisé
+    """
+    s = text.strip()
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _slugify(label: str) -> str:
+    """
+    Convertit un label en slug Markdown (ancres H2 compatibles GitHub).
+
+    Args:
+        label: Libellé humain
+
+    Returns:
+        Slug en minuscules, sans accents, séparé par des tirets
+    """
+    s = unicodedata.normalize("NFKD", label)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9\s-]", "", s)
+    s = re.sub(r"[\s-]+", "-", s).strip("-")
+    return s
+
+
+def _expand_sexe(code: str) -> str:
+    """Convertit le code de sexe en libellé lisible."""
+    match code:
+        case "m":
+            return "Masculin"
+        case "f":
+            return "Féminin"
+        case _:
+            return MISSING
+
+
+def _format_pistes(pistes: list[str]) -> list[str]:
+    """
+    Formate les pistes de traduction en liste à puces.
+
+    Args:
+        pistes: Liste de pistes
+
+    Returns:
+        Lignes Markdown (chaque piste en puce)
+    """
+    items: list[str] = []
+    for p in pistes:
+        p_norm = _normalize_text(p)
+        if p_norm:
+            items.append(f"- {p_norm}")
+    if not items:
+        items.append("> Aucune piste fournie.")
+    return items
+
+
+def _escape_table_cell(s: str) -> str:
+    """Échappe caractères problématiques pour cellules de table Markdown."""
+    s = s.replace("|", "\\|")
+    s = s.replace("\n", " ")
+    return s
+
+
+def _format_glossaire_table(entries: list[TermeGlossaire]) -> list[str]:
+    """
+    Génère la table Markdown du glossaire.
+
+    Colonnes: Terme | Type | Sexe | Rôle | Notes | Proposition
+    Tri: par type puis terme (alpha insensible à la casse)
+
+    Args:
+        entries: Entrées de glossaire
+
+    Returns:
+        Lignes Markdown constituant la table
+    """
+    if not entries:
+        return ["> Aucun terme pertinent identifié."]
+
+    sorted_entries: list[TermeGlossaire] = sorted(
+        entries, key=lambda e: (e["type"], e["terme"].lower())
+    )
+
+    lines: list[str] = []
+    # En-têtes
+    lines.append("| Terme | Type | Sexe | Rôle | Notes | Proposition |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+
+    for e in sorted_entries:
+        terme = _escape_table_cell(e.get("terme", MISSING)) or MISSING
+        type_ = _escape_table_cell(e.get("type", MISSING)) or MISSING
+        sexe = _expand_sexe(e.get("sexe", "nc"))
+        role = _escape_table_cell(e.get("description_role", MISSING)) or MISSING
+        notes_raw = e.get("notes_traduction", MISSING)
+        notes = _escape_table_cell(notes_raw) if notes_raw else MISSING
+        proposition_raw = e.get("proposition_traduction", MISSING)
+        proposition = (
+            _escape_table_cell(proposition_raw) if proposition_raw else MISSING
+        )
+
+        # Mise en forme légère: notes en italique, proposition en gras
+        notes_fmt = f"_{notes}_" if notes != MISSING else notes
+        proposition_fmt = (
+            f"**{proposition}**" if proposition != MISSING else proposition
+        )
+
+        lines.append(
+            f"| {terme} | {type_} | {sexe} | {role} | {notes_fmt} | {proposition_fmt} |"
+        )
+
+    return lines
+
+
+def export_to_markdown(
+    raw_analysis: str,
+    toc_threshold: int = 5,
+) -> str:
+    """
+    Transforme une analyse (JSON ContexteTraduction) en Markdown lisible.
+
+    Args:
+        raw_analysis: Chaîne JSON de l'analyse
+        wrap_width: Largeur de wrapping pour les paragraphes (>0 pour activer)
+        toc_threshold: Nombre minimal de sections H2 pour inclure un sommaire
+
+    Returns:
+        Document Markdown complet prêt à être sauvegardé
+
+    Raises:
+        json.JSONDecodeError: Si le JSON est invalide
+        SchemaError: Si le schéma ne respecte pas ContexteTraduction
+    """
+    analysis: ContexteTraduction = json.loads(raw_analysis)
+
+    lines: list[str] = []
+
+    # Titre H1
+    chapitre = _normalize_text(analysis["chapitre"]) or MISSING
+    lines.append(f"# {chapitre}\n")
+
+    # Préparation des sections H2
+    h2_titles: list[str] = []
+    for key in ANALYSE_ORDER:
+        label = FIELD_LABELS.get(key, key)
+        h2_titles.append(label)
+        lines.append(f"## {label}")
+
+        value = analysis["analyse"].get(key)
+        if key == "pistes_traduction":
+            # Liste à puces
+            pistes_lines = _format_pistes(cast(list[str], value))
+            lines.extend(pistes_lines)
+        else:
+            text = _normalize_text(value) if isinstance(value, str) else MISSING
+            lines.append(text)
+
+        lines.append("")  # Ligne vide après chaque section
+
+    # Sommaire (optionnel)
+    if len(h2_titles) >= toc_threshold:
+        toc: list[str] = ["## Sommaire"]
+        for title in h2_titles:
+            slug = _slugify(title)
+            toc.append(f"- [{title}](#{slug})")
+        toc.append("")
+        # Insérer sommaire après le H1
+        # On recompose pour placer le TOC entre H1 et premières sections
+        lines = [lines[0], "", *toc, *lines[1:]]
+
+    # Glossaire
+    lines.append("## Glossaire")
+    gloss_lines = _format_glossaire_table(analysis["glossaire"])
+    lines.extend(gloss_lines)
+    lines.append("")
+
+    # Fin de document (newline finale)
+    return "\n".join(lines).rstrip() + "\n"
 
 
 class AnalysisExporter:
@@ -46,312 +293,24 @@ class AnalysisExporter:
         >>> exporter.save_markdown(markdown, "Chapter_1.md")
     """
 
-    def __init__(self):
-        """Initialise l'exporteur."""
-        pass
-
-    def export_to_markdown(self, analysis: ChapterAnalysis) -> str:
+    @staticmethod
+    def export(
+        raw_analysis: str,
+        output_path: Path | str,
+        toc_threshold: int = 5,
+    ) -> None:
         """
-        Exporte une analyse au format Markdown.
-
-        Génère un document structuré avec sections, tableaux et listes
-        pour faciliter la lecture humaine.
+        Exporte une analyse au format Markdown et sauvegarde dans un fichier.
 
         Args:
-            analysis: Analyse à exporter
-
-        Returns:
-            Contenu Markdown formaté
-
-        Example:
-            >>> md = exporter.export_to_markdown(analysis)
-            >>> print(md[:100])
-            # Chapter 1
-
-            **Status**: complete
-            ...
-        """
-        parts: list[str] = []
-
-        # 1. En-tête
-        parts.append(f"# {analysis['chapter_name']}\n")
-        parts.append(f"**Status**: {analysis['status']}\n")
-        parts.append(
-            f"**Blocs analysés**: {analysis['blocks_analyzed']}/{analysis['total_blocks']}\n"
-        )
-        parts.append(f"**Version**: {analysis['analysis_version']}\n")
-        parts.append("\n---\n")
-
-        # 2. Personnages
-        parts.append("\n## 👤 Personnages\n")
-        characters = analysis.get("characters", {})
-
-        present = characters.get("present", [])
-        if present:
-            parts.append("\n### Présents dans ce chapitre\n")
-            for char in present:
-                name = char.get("name", "Inconnu")
-                role = char.get("role", "N/A")
-                desc = char.get("description", "")
-                dev_notes = char.get("development_notes", "")
-
-                parts.append(f"\n**{name}** ({role})")
-                if desc:
-                    parts.append(f"\n- Description: {desc}")
-                if dev_notes:
-                    parts.append(f"\n- Développement: {dev_notes}")
-
-                relationships = char.get("relationships", [])
-                if relationships:
-                    parts.append(f"\n- Relations: {', '.join(relationships)}")
-
-                parts.append("\n")
-
-        mentioned = characters.get("mentioned", [])
-        if mentioned:
-            parts.append("\n### Mentionnés\n")
-            parts.append(", ".join(mentioned))
-            parts.append("\n")
-
-        # 3. Lieux
-        parts.append("\n## 📍 Lieux\n")
-        locations = analysis.get("locations", {})
-
-        primary = locations.get("primary", {})
-        if primary and isinstance(primary, dict):
-            name = primary.get("name", "")
-            if name:
-                parts.append(f"\n### Lieu principal: {name}\n")
-                desc = primary.get("description", "")
-                if desc:
-                    parts.append(f"- Description: {desc}\n")
-                atmosphere = primary.get("atmosphere", "")
-                if atmosphere:
-                    parts.append(f"- Atmosphère: {atmosphere}\n")
-
-        secondary = locations.get("secondary", [])
-        if secondary:
-            parts.append("\n### Lieux secondaires\n")
-            for loc in secondary:
-                if isinstance(loc, dict):
-                    loc_name = loc.get("name", "")
-                elif isinstance(loc, str):
-                    loc_name = loc
-                else:
-                    loc_name = ""
-
-                if loc_name:
-                    parts.append(f"- {loc_name}\n")
-
-        # 4. Intrigue
-        parts.append("\n## 📖 Intrigue\n")
-        plot = analysis.get("plot_elements", {})
-
-        main_events = plot.get("main_events", [])
-        if main_events:
-            parts.append("\n### Événements principaux\n")
-            for event in main_events:
-                parts.append(f"- {event}\n")
-
-        conflicts = plot.get("conflicts", [])
-        if conflicts:
-            parts.append("\n### Conflits\n")
-            for conflict in conflicts:
-                conflict_type = conflict.get("type", "N/A")
-                desc = conflict.get("description", "")
-                parties = conflict.get("parties_involved", [])
-                parts.append(f"\n**Type**: {conflict_type}\n")
-                if desc:
-                    parts.append(f"- {desc}\n")
-                if parties:
-                    parts.append(f"- Parties impliquées: {', '.join(parties)}\n")
-
-        foreshadowing = plot.get("foreshadowing", [])
-        if foreshadowing:
-            parts.append("\n### Foreshadowing\n")
-            for item in foreshadowing:
-                parts.append(f"- {item}\n")
-
-        revelations = plot.get("revelations", [])
-        if revelations:
-            parts.append("\n### Révélations\n")
-            for rev in revelations:
-                parts.append(f"- {rev}\n")
-
-        # 5. Thèmes
-        parts.append("\n## 🎭 Thèmes\n")
-        themes = analysis.get("themes", {})
-
-        identified = themes.get("identified", [])
-        if identified:
-            for theme_entry in identified:
-                theme_name = theme_entry.get("theme", "")
-                development = theme_entry.get("development", "")
-                evidence = theme_entry.get("evidence", [])
-
-                parts.append(f"\n### {theme_name}\n")
-                if development:
-                    parts.append(f"{development}\n")
-                if evidence:
-                    parts.append("\n**Éléments de preuve**:\n")
-                    for ev in evidence:
-                        parts.append(f"- {ev}\n")
-
-        # 6. Techniques narratives
-        parts.append("\n## ✍️ Techniques narratives\n")
-        narrative = analysis.get("narrative_techniques", {})
-
-        pov = narrative.get("pov", "")
-        if pov:
-            parts.append(f"- **Point de vue**: {pov}\n")
-
-        tense = narrative.get("tense", "")
-        if tense:
-            parts.append(f"- **Temps**: {tense}\n")
-
-        tone = narrative.get("tone", "")
-        if tone:
-            parts.append(f"- **Ton**: {tone}\n")
-
-        devices = narrative.get("narrative_devices", [])
-        if devices:
-            parts.append(f"- **Dispositifs**: {', '.join(devices)}\n")
-
-        # 7. Terminologie
-        parts.append("\n## 📚 Terminologie\n")
-        terminology = analysis.get("terminology", {})
-
-        specialized = terminology.get("specialized_terms", [])
-        if specialized:
-            parts.append("\n### Termes spécialisés\n")
-            for term_entry in specialized:
-                term = term_entry.get("term", "")
-                context = term_entry.get("context", "")
-                category = term_entry.get("category", "")
-                translation_notes = term_entry.get("translation_notes", "")
-
-                parts.append(f"\n**{term}** ({category})")
-                if context:
-                    parts.append(f"\n- Contexte: {context}")
-                if translation_notes:
-                    parts.append(f"\n- Notes traduction: {translation_notes}")
-                parts.append("\n")
-
-        proper_nouns = terminology.get("proper_nouns", {})
-        if any(proper_nouns.values()):
-            parts.append("\n### Noms propres\n")
-
-            names = proper_nouns.get("names", [])
-            if names:
-                parts.append(f"- **Noms**: {', '.join(names)}\n")
-
-            places = proper_nouns.get("places", [])
-            if places:
-                parts.append(f"- **Lieux**: {', '.join(places)}\n")
-
-            organizations = proper_nouns.get("organizations", [])
-            if organizations:
-                parts.append(f"- **Organisations**: {', '.join(organizations)}\n")
-
-        # 8. Notes stylistiques
-        parts.append("\n## 🎨 Style\n")
-        style = analysis.get("stylistic_notes", {})
-
-        writing_style = style.get("writing_style", "")
-        if writing_style:
-            parts.append(f"**Style d'écriture**: {writing_style}\n\n")
-
-        motifs = style.get("recurring_motifs", [])
-        if motifs:
-            parts.append("**Motifs récurrents**:\n")
-            for motif in motifs:
-                parts.append(f"- {motif}\n")
-
-        symbolic = style.get("symbolic_elements", [])
-        if symbolic:
-            parts.append("\n**Éléments symboliques**:\n")
-            for symbol in symbolic:
-                parts.append(f"- {symbol}\n")
-
-        cultural = style.get("cultural_references", [])
-        if cultural:
-            parts.append("\n**Références culturelles**:\n")
-            for ref in cultural:
-                parts.append(f"- {ref}\n")
-
-        # 9. Considérations pour la traduction
-        parts.append("\n## 🔄 Considérations pour la traduction\n")
-        translation_notes = analysis.get("translation_considerations", {})
-
-        challenges = translation_notes.get("challenges", [])
-        if challenges:
-            parts.append("\n### Défis\n")
-            for challenge in challenges:
-                parts.append(f"- {challenge}\n")
-
-        consistency_reqs = translation_notes.get("consistency_requirements", [])
-        if consistency_reqs:
-            parts.append("\n### Exigences de cohérence\n")
-            for req in consistency_reqs:
-                parts.append(f"- {req}\n")
-
-        return "".join(parts)
-
-    def save_markdown(self, markdown_content: str, output_path: Path | str) -> None:
-        """
-        Sauvegarde le contenu Markdown dans un fichier.
-
-        Args:
-            markdown_content: Contenu Markdown à sauvegarder
+            raw_analysis: Chaîne JSON de l'analyse
             output_path: Chemin du fichier de sortie
+            wrap_width: Largeur de wrapping pour les paragraphes
+            toc_threshold: Nombre minimal de sections H2 pour inclure un sommaire
 
         Example:
-            >>> md = exporter.export_to_markdown(analysis)
-            >>> exporter.save_markdown(md, "cache/analysis/Chapter_1.md")
+            >>> exporter = AnalysisExporter()
+            >>> exporter.export(raw_json, "cache/analysis/Chapter_1.md")
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with output_path.open("w", encoding="utf-8") as f:
-            f.write(markdown_content)
-
-        logger.info(f"Exporté Markdown: {output_path}")
-
-    def export_all_to_markdown(
-        self,
-        analyses: dict[str, ChapterAnalysis],
-        output_dir: Path | str,
-    ) -> dict[str, Path]:
-        """
-        Exporte toutes les analyses au format Markdown.
-
-        Args:
-            analyses: Dictionnaire {chapter_name: ChapterAnalysis}
-            output_dir: Répertoire de sortie
-
-        Returns:
-            Dictionnaire {chapter_name: Path du fichier Markdown}
-
-        Example:
-            >>> paths = exporter.export_all_to_markdown(analyses, "cache/analysis")
-            >>> for chapter, path in paths.items():
-            ...     print(f"{chapter}: {path}")
-        """
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        result: dict[str, Path] = {}
-
-        for chapter_name, analysis in analyses.items():
-            # Nettoyer le nom de fichier
-            safe_name = chapter_name.replace("/", "_").replace("\\", "_").replace(":", "_")
-            md_path = output_dir / f"{safe_name}.md"
-
-            # Exporter
-            markdown = self.export_to_markdown(analysis)
-            self.save_markdown(markdown, md_path)
-
-            result[chapter_name] = md_path
-
-        logger.info(f"Exporté {len(result)} analyses au format Markdown")
-        return result
+        markdown = export_to_markdown(raw_analysis, toc_threshold=toc_threshold)
+        save_markdown(markdown, output_path)

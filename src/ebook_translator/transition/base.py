@@ -4,13 +4,14 @@ Classes de base pour les transitions entre phases.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from ebook_translator.glossary import Glossary
 
 if TYPE_CHECKING:
-    from ebook_translator.pipeline.store_manager import StoreManager
     from ebook_translator.pipeline.context import PhaseStats
+    from ebook_translator.pipeline.store_manager import StoreManager
     from ebook_translator.validation import ValidationWorkerPool
-    from ebook_translator.quality import Glossary
 
 
 @dataclass
@@ -96,12 +97,14 @@ class TransitionBase(ABC):
 
     # === Validation de configuration ===
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any):
         """Valide que tous les champs obligatoires sont définis."""
         super().__init_subclass__(**kwargs)
 
         if not hasattr(cls, "name"):
-            raise TypeError(f"Transition '{cls.__name__}' must define class attribute 'name'")
+            raise TypeError(
+                f"Transition '{cls.__name__}' must define class attribute 'name'"
+            )
 
     # === Méthodes abstraites ===
 

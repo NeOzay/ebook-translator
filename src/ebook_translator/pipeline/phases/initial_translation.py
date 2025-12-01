@@ -2,18 +2,20 @@
 Phase 1: Traduction initiale avec gros blocs.
 """
 
-from ebook_translator.pipeline.base import PhaseBase, ExecutionMode
-from ebook_translator.pipeline.context import ChunkContext
-from ebook_translator.segmentation.segmentator import Chunk
-from ebook_translator.config import TemplateNames
+from dataclasses import dataclass, field
+
 from ebook_translator.checks import (
-    LineCountCheck,
     FragmentCountCheck,
+    LineCountCheck,
     PunctuationCheck,
     SentenceCheck,
 )
+from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
+from ebook_translator.pipeline.context import ChunkContext
+from ebook_translator.segmentation.segmentator import Chunk
 
 
+@dataclass
 class InitialTranslationPhase(PhaseBase):
     """
     Phase 1: Traduction initiale (gros blocs, parallèle).
@@ -33,11 +35,10 @@ class InitialTranslationPhase(PhaseBase):
     Cette phase ne dépend d'aucune autre phase.
     """
 
-    name = "initial"
-    max_tokens = 1500
-    overlap_ratio = 0.15
+    name = PhaseName.INITIAL
+    max_tokens: int = field(default=1500)
+    overlap_ratio: float = field(default=0.15)
     execution_mode = ExecutionMode.PARALLEL
-    template_name = TemplateNames.First_Pass_Template
 
     depends_on = []  # Première phase, aucune dépendance
 
@@ -48,8 +49,7 @@ class InitialTranslationPhase(PhaseBase):
         SentenceCheck(),
     ]
 
-    @classmethod
-    def render_prompt(cls, chunk: Chunk, context: ChunkContext) -> str:
+    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> str:
         """
         Génère le prompt de traduction initiale.
 

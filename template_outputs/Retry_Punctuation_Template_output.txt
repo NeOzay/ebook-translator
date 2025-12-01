@@ -40,17 +40,6 @@ Tu es un traducteur professionnel. Ta traduction précédente a échoué car tu 
 
 ---
 
-## 📊 Présentation de l'erreur
-
-Chaque correction doit afficher :
-
-1. **Texte original** : Le texte source pour référence
-2. **Traduction incorrecte** : La tentative qui a échoué
-3. **Erreur quantifiée** : Nombres explicites (Attendu: X, Reçu: Y)
-4. **Cause probable** : Pourquoi l'erreur s'est produite (fusion, division, décalage, etc.)
-
----
-
 ### 🧩 Gestion des balises :
 
 - `<N/>` : Balise de **numérotation de ligne**.
@@ -89,28 +78,7 @@ Utilise strictement la structure suivante :
 3. **Contenu préservé** : Pas de changement de sens par rapport à la traduction incorrecte
 4. **Qualité maintenue** : Vocabulaire et style de la traduction incorrecte conservés
 
-### Vérifications spécifiques (ajoutées par chaque template)
-
-
----
-
-## 💡 Structure des exemples
-
-Chaque correction doit fournir des exemples au format suivant :
-
-✅ **CORRECT** :
-```
-<Output qui corrige l'erreur>
-```
-
-❌ **INCORRECT** :
-```
-<Output qui répète la même erreur>
-```
-
-**Explication** : Pourquoi la version correcte résout le problème
-
----## 🔴 RÈGLE ABSOLUE : Préserver EXACTEMENT le nombre de paires
+### Vérifications spécifiques## 🔴 RÈGLE ABSOLUE : Préserver EXACTEMENT le nombre de paires
 
 
 Le texte original contient **EXACTEMENT 2 paires de guillemets**.

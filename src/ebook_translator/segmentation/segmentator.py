@@ -6,22 +6,22 @@ de taille limitée (en tokens) pour la traduction par LLM. Il préserve le
 contexte entre les chunks via un système de chevauchement (overlap).
 """
 
-from typing import TYPE_CHECKING, Iterator
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
-import tiktoken
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
 
+from ebook_translator.config import Config
+from ebook_translator.segmentation.helper import turn_resource_to_chunks
 
+from ..constants import DEFAULT_OVERLAP_RATIO
+from ..htmlpage import get_texts
+from ..logger import get_logger
 from .chunk import Chunk
 
-from ..htmlpage import TagKey, get_texts, HtmlPage
-from ..logger import get_logger
-from ebooklib import epub
-
-from ..constants import DEFAULT_OVERLAP_RATIO, DEFAULT_ENCODING
-
 if TYPE_CHECKING:
-    from ..llm import LLM
-    from ..segmentation.chapter_detector import ChapterDetectorConfig
+    from ..segmentation.chapter_chunk import ChapterChunk
+    from ..segmentation.sequential_detector import SequentialDetectorConfig
 
 logger = get_logger(__name__)
 
@@ -57,7 +57,7 @@ class Segmentator:
         epub_htmls: list[epub.EpubHtml],
         max_tokens: int,
         overlap_ratio: float = DEFAULT_OVERLAP_RATIO,
-        encoding: str = DEFAULT_ENCODING,
+        encoding: str = Config.DEFAULT_ENCODING,
     ) -> None:
         """
         Initialise le segmentateur.
@@ -76,9 +76,9 @@ class Segmentator:
             la consommation de tokens et le coût des requêtes LLM.
         """
         self.epub_htmls = epub_htmls
-        self._encoding = tiktoken.get_encoding(encoding)
         self.max_tokens = max_tokens
         self.overlap_ratio = overlap_ratio
+        self.encoding = encoding
 
         # Warning si overlap_ratio >= 1.0 (contexte très étendu)
         if overlap_ratio >= 1.0:
@@ -88,18 +88,6 @@ class Segmentator:
                 f"({overlap_tokens} tokens d'overlap pour {max_tokens} tokens de body). "
                 f"Cela augmentera significativement la consommation de tokens et le coût des traductions."
             )
-
-    def count_tokens(self, text: str) -> int:
-        """
-        Compte le nombre de tokens dans un texte.
-
-        Args:
-            text: Le texte à analyser
-
-        Returns:
-            Nombre de tokens selon l'encodage configuré
-        """
-        return len(self._encoding.encode(text))
 
     def get_all_segments(self) -> Iterator[Chunk]:
         """
@@ -134,194 +122,16 @@ class Segmentator:
             ...     # Le head contient ~4000 tokens de contexte des chunks précédents
             ...     print(f"Chunk {chunk.index}: head={len(chunk.head)}, body={len(chunk.body)}, tail={len(chunk.tail)}")
         """
-        chunk_queue: dict[Chunk, int] = {}
-        # previous_chunk: Chunk | None = None
-        current_chunk = self._create_new_chunk(index=0)
-        current_token_count = 0
-        # overlap_token_budget = self._calculate_overlap_tokens()
-        chunk_index = 0
-
-        previous_chapter_name: str | None = None
-        current_chapter_name = ""
-
-        for page, tag_key, text in get_texts(self.epub_htmls):
-            token_count = self.count_tokens(text)
-
-            if self._is_chapter_delimiter(tag_key):
-                current_chapter_name = text.strip()
-                if not previous_chapter_name:
-                    previous_chapter_name = current_chapter_name
-            tag_key.set_chapter(current_chapter_name)
-            # Vérifier si on dépasse la limite de tokens
-            if (
-                current_token_count + token_count > self.max_tokens
-                or current_chapter_name != previous_chapter_name
-            ):
-                # Chunk plein : préparer le suivant
-                chunk_queue[current_chunk] = self._calculate_overlap_tokens()
-
-                chunk_index += 1
-                current_chunk = self._create_new_chunk(index=chunk_index)
-                self._add_fragment_to_body(current_chunk, tag_key, text)
-                self._fill_head_from_previous(chunk_queue, current_chunk)
-
-                current_token_count = token_count
-                previous_chapter_name = current_chapter_name
-            else:
-                # Ajouter au chunk actuel
-                self._add_fragment_to_body(current_chunk, tag_key, text)
-                current_token_count += token_count
-
-                # Gérer le tail des chunks précédents
-            if chunk_queue:
-                for chunk in list(chunk_queue.keys()):
-                    # Ajouter au tail tant qu'il reste du budget
-                    if chunk_queue[chunk] > 0:
-                        chunk.tail[tag_key] = text
-                        chunk_queue[chunk] -= token_count
-
-                    # Si le budget est épuisé ou négatif, yield le chunk
-                    if chunk_queue[chunk] <= 0:
-                        chunk_queue.pop(chunk)
-                        yield chunk
-
-        # Yield les chunks restants dans la queue
-        for previous_chunk in chunk_queue.keys():
-            yield previous_chunk
-
-        # Yield le chunk actuel seulement s'il n'a pas déjà été yielded via la queue
-        if current_chunk not in chunk_queue:
-            yield current_chunk
-
-    def get_all_chapters(self) -> Iterator[Chunk]:
-        """
-        Génère tous les chunks en segmentant le contenu de l'EPUB par chapitres.
-
-        Cette méthode parcourt tous les fragments de texte des pages HTML
-        et les regroupe en chunks utilisant la balise de chapitre comme délimiteur.
-
-        Yields:
-            Un chunk par chapitre avec son contenu.
-        """
-        chunk_index = 0
-        current_chunk = self._create_new_chunk(index=chunk_index)
-        current_chapter_name = ""
-
-        for page, tag_key, text in get_texts(self.epub_htmls):
-            # Vérifier si le fragment est un délimiteur de chapitre
-            if self._is_chapter_delimiter(
-                tag_key
-            ):  # Supposons que <h1> délimite les chapitres
-                # Si le chunk actuel a du contenu, yield-le
-                current_chapter_name = text.strip()
-                if current_chunk.body:
-                    yield current_chunk
-                    chunk_index += 1
-                    current_chunk = self._create_new_chunk(index=chunk_index)
-
-            # Ajouter le fragment au chunk actuel
-            self._add_fragment_to_body(current_chunk, tag_key, text)
-
-        # Yield le dernier chunk s'il a du contenu
-        if current_chunk.body:
-            yield current_chunk
-
-    def _is_chapter_delimiter(self, tag_key: TagKey) -> bool:
-        """
-        Vérifie si un TagKey est un délimiteur de chapitre.
-
-        Args:
-            tag_key: Le TagKey à vérifier
-
-        Returns:
-            True si le tag est un délimiteur de chapitre
-        """
-        return tag_key.tag.name == "h1"  # Supposons que <h1> délimite les chapitres
-
-    def _create_new_chunk(self, index: int) -> Chunk:
-        """
-        Crée un nouveau chunk vide.
-
-        Args:
-            index: L'index du chunk
-
-        Returns:
-            Un nouveau Chunk initialisé
-        """
-        return Chunk(index=index)
-
-    def _calculate_overlap_tokens(self) -> int:
-        """
-        Calcule le nombre de tokens disponibles pour le chevauchement.
-
-        Returns:
-            Nombre de tokens alloués au chevauchement
-        """
-        return int(self.max_tokens * self.overlap_ratio)
-
-    def _add_fragment_to_body(self, chunk: Chunk, tag_key: TagKey, text: str) -> None:
-        """
-        Ajoute un fragment de texte au body d'un chunk.
-
-        Met également à jour le file_range pour suivre le nombre de
-        fragments par page.
-
-        Args:
-            chunk: Le chunk à modifier
-            page: La page source du fragment
-            tag_key: La clé identifiant le fragment
-            text: Le texte du fragment
-        """
-        chunk.body[tag_key] = text
-
-    def _fill_head_from_previous(
-        self, previous_chunks: dict[Chunk, int], current_chunk: Chunk
-    ) -> None:
-        """
-        Remplit le head du chunk actuel avec du contexte des chunks précédents.
-
-        Parcourt les chunks précédents en ordre inverse (du plus récent au plus ancien)
-        et prend leurs éléments de body (également en ordre inverse) jusqu'à épuiser
-        le budget de tokens de chevauchement.
-
-        Avec overlap_ratio >= 1.0, cette méthode peut remonter sur plusieurs chunks
-        précédents pour construire un contexte étendu.
-
-        Args:
-            previous_chunks: Dictionnaire des chunks précédents (Chunk -> budget restant)
-            current_chunk: Le chunk actuel (destination du contexte)
-
-        Example:
-            Avec overlap_ratio=2.0 et max_tokens=2000 (budget=4000 tokens) :
-            - Chunk 0 : body=["A", "B", "C"] (2000 tokens total)
-            - Chunk 1 : body=["D", "E"] (1500 tokens)
-            - Chunk 2 : head sera rempli avec ["E", "D", "C", "B"] (~3500 tokens)
-                        Le budget de 4000 tokens permet d'inclure tout chunk 1 + une partie de chunk 0
-        """
-        overlap_budget = self._calculate_overlap_tokens()
-
-        collect_text: dict[TagKey, str] = {}
-        for chunk in reversed(previous_chunks.keys()):
-            # Parcourir le body en ordre inverse
-            for tag_key in reversed(chunk.body):
-                text = chunk.body[tag_key]
-                token_count = self.count_tokens(text)
-                overlap_budget -= token_count
-
-                if overlap_budget > 0:
-                    # Ajouter au début du head
-                    collect_text[tag_key] = text
-                else:
-                    # Budget épuisé
-                    break
-            if overlap_budget <= 0:
-                break
-        for tag_key in reversed(collect_text):
-            current_chunk.head[tag_key] = collect_text[tag_key]
+        yield from turn_resource_to_chunks(
+            get_texts(self.epub_htmls),
+            self.max_tokens,
+            self.overlap_ratio,
+            self.encoding,
+        )
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
-        overlap_tokens = self._calculate_overlap_tokens()
+        overlap_tokens = self.max_tokens * self.overlap_ratio
 
         # Affichage différent selon si overlap < ou >= max_tokens
         if self.overlap_ratio < 1.0:
@@ -340,10 +150,8 @@ class Segmentator:
 
     def get_all_chapters_by_spine(
         self,
-        llm: "LLM | None" = None,
-        config: "ChapterDetectorConfig|None" = None,
-        use_sequential: bool = True,
-    ) -> Iterator[Chunk]:
+        config: "SequentialDetectorConfig|None" = None,
+    ) -> Iterator["ChapterChunk"]:
         """
         Génère chunks par chapitre basé sur analyse de la spine EPUB.
 
@@ -377,44 +185,18 @@ class Segmentator:
             Il est plus robuste et rapide que l'ancien détecteur 4-pass.
             L'ancien détecteur est conservé pour rétrocompatibilité mais sera supprimé dans v0.11.0.
         """
-        if use_sequential:
-            from .sequential_detector import (
-                SequentialChapterDetector,
-                SequentialDetectorConfig,
-            )
+        from ..segmentation.chapter_chunk import ChapterChunk
+        from .sequential_detector import SequentialChapterDetector
 
-            seq_config = SequentialDetectorConfig(
-                include_front_matter=getattr(config, "include_front_matter", False)
-                if config
-                else False,
-                include_back_matter=getattr(config, "include_back_matter", False)
-                if config
-                else False,
-            )
-
-            detector = SequentialChapterDetector(self.epub_htmls, config=seq_config)
-        else:
-            from .chapter_detector import ChapterDetector, ChapterDetectorConfig
-
-            if config is None:
-                config = ChapterDetectorConfig()
-
-            detector = ChapterDetector(self.epub_htmls, llm=llm, config=config)
+        detector = SequentialChapterDetector(self.epub_htmls, config=config)
 
         for chapter_group in detector.detect_chapters():
-            chunk = self._create_new_chunk(index=chapter_group.chapter_index)
-
-            # Extraire texte de tous les fichiers du chapitre
-            for _, tag_key, text in get_texts(chapter_group.html_files):
-                chunk.body[tag_key] = text
-
-            # Métadonnées du chapitre
-            chunk.chapter_name = chapter_group.chapter_name
+            chunk = ChapterChunk(chapter_group, token_encoding=self.encoding)
 
             logger.debug(
                 f"Chapitre {chunk.index}: {chapter_group.chapter_name} "
                 f"({len(chapter_group.html_files)} fichiers, "
                 f"{len(chunk.body)} fragments)"
             )
-
-            yield chunk
+            if chunk.body:
+                yield chunk

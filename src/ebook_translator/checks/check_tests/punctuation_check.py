@@ -6,18 +6,19 @@ texte original et traduit, garantissant la préservation de la structure narrati
 (dialogues interrompus, citations, etc.).
 """
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from ...logger import get_logger
+from ..retry_helper import retry_with_reasoning
 from .base import (
     Check,
     CheckResult,
+    FailedResult,
     PunctuationErrorData,
     PunctuationErrorDetail,
+    SuccessResult,
     ValidationContext,
-    ErrorData,
 )
-from ..retry_helper import retry_with_reasoning
 
 if TYPE_CHECKING:
     pass
@@ -65,7 +66,7 @@ def _count_quote_pairs(text: str) -> int:
     return total_pairs
 
 
-class PunctuationCheck(Check):
+class PunctuationCheck(Check[PunctuationErrorData]):
     """
     Vérifie que le nombre de paires de guillemets correspond.
 
@@ -91,7 +92,7 @@ class PunctuationCheck(Check):
         """Nom unique du check."""
         return "punctuation"
 
-    def validate(self, context: ValidationContext) -> CheckResult:
+    def validate(self, context: ValidationContext) -> CheckResult[PunctuationErrorData]:
         """
         Valide que le nombre de paires de guillemets correspond pour chaque ligne.
 
@@ -120,7 +121,7 @@ class PunctuationCheck(Check):
                 "actual_pairs": 1,
             }
         """
-        errors = []
+        errors: list[PunctuationErrorDetail] = []
 
         # Vérifier chaque paire (original, traduit)
         for line_idx, translated_text in context.translated_texts.items():
@@ -145,7 +146,7 @@ class PunctuationCheck(Check):
                 errors.append(error_detail)
 
         if not errors:
-            return CheckResult(is_valid=True, check_name=self.name)
+            return SuccessResult(check_name=self.name)
 
         # Construire message d'erreur
         first_error = errors[0]
@@ -159,17 +160,16 @@ class PunctuationCheck(Check):
             f"    - Paires reçues: {actual_p}\n"
         )
 
-        error_data: PunctuationErrorData = {"errors": errors}
+        error_data = PunctuationErrorData(errors=errors)
 
-        return CheckResult(
-            is_valid=False,
+        return FailedResult(
             check_name=self.name,
             error_message=error_message,
             error_data=error_data,
         )
 
     def correct(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: PunctuationErrorData
     ) -> dict[int, str]:
         """
         Corrige en retranslant les lignes avec mauvais nombre de paires.
@@ -205,9 +205,7 @@ class PunctuationCheck(Check):
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        # Type narrowing
-        typed_error_data = cast(PunctuationErrorData, error_data)
-        errors = typed_error_data["errors"]
+        errors = error_data.errors
         result = dict(context.translated_texts)
 
         logger.info(
@@ -224,7 +222,14 @@ class PunctuationCheck(Check):
             incorrect_translation = error["translated_text"]
 
             # Fonction de rendu du prompt
-            def render_prompt(attempt: int, use_reasoning: bool) -> str:
+            def render_prompt(
+                attempt: int,
+                use_reasoning: bool,
+                original_text: str = original_text,
+                incorrect_translation: str = incorrect_translation,
+                expected_pairs: int = expected_pairs,
+                actual_pairs: int = actual_pairs,
+            ) -> str:
                 # Le paramètre use_reasoning est passé mais non utilisé ici
                 # car le même template est utilisé pour les deux tentatives
                 if context.llm is None:
@@ -238,7 +243,11 @@ class PunctuationCheck(Check):
                 )
 
             # Fonction de validation
-            def validate_result(llm_output: str) -> bool:
+            def validate_result(
+                llm_output: str,
+                expected_pairs: int = expected_pairs,
+                line_idx: int = line_idx,
+            ) -> bool:
                 try:
                     corrected_line = parse_llm_translation_output("<0/>" + llm_output)
                     if 0 not in corrected_line:
@@ -273,7 +282,7 @@ class PunctuationCheck(Check):
         return result
 
     def get_invalid_lines(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: PunctuationErrorData
     ) -> set[int]:
         """
         Identifie les lignes avec mauvaise ponctuation comme invalides.
@@ -295,11 +304,10 @@ class PunctuationCheck(Check):
             >>> invalid = check.get_invalid_lines(context, error_data)
             >>> # invalid = {3, 7}
         """
-        typed_error_data = cast(PunctuationErrorData, error_data)
-        return {error["line_idx"] for error in typed_error_data["errors"]}
+        return {error["line_idx"] for error in error_data.errors}
 
-    def build_filter_reason(self, line_idx, error_data: PunctuationErrorData):
-        for err in error_data["errors"]:
+    def build_filter_reason(self, line_idx: int, error_data: PunctuationErrorData):
+        for err in error_data.errors:
             if err.get("line_idx") == line_idx:
                 expected = err.get("expected_pairs", "?")
                 actual = err.get("actual_pairs", "?")

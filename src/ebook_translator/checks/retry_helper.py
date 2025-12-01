@@ -1,6 +1,7 @@
 """Helper centralisé pour gérer les retries avec mode raisonnement."""
 
-from typing import Optional, Callable
+from collections.abc import Callable
+
 from ebook_translator.checks.check_tests.base import ValidationContext
 from ebook_translator.logger import get_logger
 
@@ -14,7 +15,7 @@ def retry_with_reasoning(
     context_name: str,
     max_attempts: int = 2,
     llm_content: str = "",
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Exécute une correction avec retry automatique (normal → reasoning).
 
@@ -71,8 +72,8 @@ def retry_with_reasoning(
             llm_output = context.llm.query(
                 system_prompt=prompt,
                 content=llm_content,
-                context=llm_context,
-                use_reasoning_mode=use_reasoning,
+                log_name=llm_context,
+                config={"use_reasoning": use_reasoning},
             )
         except Exception as e:
             logger.error(f"❌ Erreur LLM lors de la tentative {attempt} : {e}")

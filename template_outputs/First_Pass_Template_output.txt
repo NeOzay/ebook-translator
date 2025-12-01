@@ -158,7 +158,9 @@ Texte source :
 ```
 → ERREUR : L'interruption narrative `she said` n'est plus encadrée par des guillemets
 
----### 🧾 Format de sortie :
+---
+
+### 🧾 Format de sortie :
 
 Tu dois produire ta traduction **en texte brut**, sans aucun commentaire, sans balise additionnelle et sans notes.
 À la toute fin de ta traduction, ajoute sur une ligne avec le marqueur `[=[END]=]`

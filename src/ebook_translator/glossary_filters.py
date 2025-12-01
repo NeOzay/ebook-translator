@@ -9,6 +9,8 @@ Ce module fournit des listes de mots à exclure du glossaire terminologique :
 
 # Mots grammaticaux à TOUJOURS exclure du glossaire
 # Ces mots sont contextuels et varient selon la phrase
+from collections.abc import Callable
+
 GRAMMATICAL_STOPWORDS = {
     # Articles
     "a",
@@ -31,7 +33,6 @@ GRAMMATICAL_STOPWORDS = {
     "my",
     "your",
     "his",
-    "her",
     "its",
     "our",
     "their",
@@ -86,7 +87,6 @@ GRAMMATICAL_STOPWORDS = {
     "but",
     "so",
     "yet",
-    "for",
     "nor",
     "as",
     "if",
@@ -156,7 +156,6 @@ GRAMMATICAL_STOPWORDS = {
     "even",
     "still",
     "already",
-    "yet",
     "again",
     "once",
     "twice",
@@ -213,7 +212,6 @@ GRAMMATICAL_STOPWORDS = {
     "how",
     # Onomatopées/Interjections très courantes
     "ah",
-    "oh",
     "uh",
     "um",
     "hmm",
@@ -224,7 +222,7 @@ GRAMMATICAL_STOPWORDS = {
 
 # Patterns de mots à exclure
 # Utilisés pour filtrage additionnel
-EXCLUDE_PATTERNS = {
+EXCLUDE_PATTERNS: dict[str, Callable[[str], bool]] = {
     "single_letter": lambda word: len(word) == 1,  # A, B, C, etc.
     "two_letters_lowercase": lambda word: len(word) == 2
     and word.islower(),  # am, is, at, etc.
@@ -284,10 +282,7 @@ def should_exclude_from_glossary(word: str) -> bool:
         return True
 
     # Mots de 2 lettres exclus SAUF si commencent par majuscule (ex: "Dr")
-    if len(word) == 2 and word[0].islower():
-        return True
-
-    return False
+    return bool(len(word) == 2 and word[0].islower())
 
 
 def is_likely_extraction_error(
@@ -365,16 +360,17 @@ def categorize_conflict(source_term: str, translations: list[str]) -> str:
         return "onomatopoeia"
 
     # Catégorie 3 : Nom propre (commence par majuscule)
-    if source_term[0].isupper():
+    if source_term[0].isupper() and all(t[0].isupper() for t in translations):
         # Si toutes traductions commencent par majuscule → nom propre
-        if all(t[0].isupper() for t in translations):
-            return "proper_noun"
+        return "proper_noun"
 
     # Catégorie 4 : Contextuel (par défaut)
     return "contextual"
 
 
-def get_high_priority_conflicts(conflicts: dict[str, list[str]]) -> dict[str, list[str]]:
+def get_high_priority_conflicts(
+    conflicts: dict[str, list[str]],
+) -> dict[str, list[str]]:
     """
     Filtre les conflits haute priorité (noms propres/termes techniques).
 
@@ -395,16 +391,17 @@ def get_high_priority_conflicts(conflicts: dict[str, list[str]]) -> dict[str, li
         >>> "after" in high_priority
         False
     """
-    high_priority = {}
+    high_priority: dict[str, list[str]] = {}
 
     for source, translations in conflicts.items():
         category = categorize_conflict(source, translations)
 
         # Haute priorité : noms propres et contextuels
-        if category in ["proper_noun", "contextual"]:
+        if category in ["proper_noun", "contextual"] and not all(
+            is_grammatical_stopword(t) for t in translations
+        ):
             # Exclure si toutes traductions sont grammaticales
-            if not all(is_grammatical_stopword(t) for t in translations):
-                high_priority[source] = translations
+            high_priority[source] = translations
 
     return high_priority
 
@@ -430,7 +427,7 @@ def get_low_priority_conflicts(conflicts: dict[str, list[str]]) -> dict[str, lis
         >>> "Ahh" in low_priority
         True
     """
-    low_priority = {}
+    low_priority: dict[str, list[str]] = {}
 
     for source, translations in conflicts.items():
         category = categorize_conflict(source, translations)

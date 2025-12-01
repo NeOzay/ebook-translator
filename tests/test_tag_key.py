@@ -5,9 +5,11 @@ Ces tests vérifient le comportement des clés de tags HTML
 utilisées pour identifier les fragments de texte.
 """
 
-import pytest
-from bs4 import BeautifulSoup
 from unittest.mock import Mock
+
+from bs4 import BeautifulSoup
+
+from ebook_translator.htmlpage.page import HtmlPage
 from ebook_translator.htmlpage.tag_key import TagKey
 
 
@@ -18,6 +20,7 @@ class TestTagKey:
         """Vérifie que l'index est toujours converti en string."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
+        assert tag
         page = Mock()
 
         # Passer un int
@@ -35,7 +38,7 @@ class TestTagKey:
 
         # Deux tags avec le même contenu mais des objets différents
         key1 = TagKey(index=0, tag=tags[0], page=page)
-        key2 = TagKey(index=0, tag=tags[1], page=page)
+        key2 = TagKey(index=1, tag=tags[1], page=page)
 
         # Ne doivent PAS être égaux (différents objets)
         assert key1 != key2
@@ -48,6 +51,7 @@ class TestTagKey:
         """Vérifie que TagKey peut être utilisé comme clé de dictionnaire."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
+        assert tag
         page = Mock()
 
         key = TagKey(index=0, tag=tag, page=page)
@@ -60,6 +64,7 @@ class TestTagKey:
         """Vérifie que le hash d'un TagKey reste constant."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
+        assert tag
         page = Mock()
 
         key = TagKey(index=0, tag=tag, page=page)
@@ -73,7 +78,8 @@ class TestTagKey:
         """Vérifie la représentation string pour le debug."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
-        page = Mock()
+        assert tag
+        page: HtmlPage = Mock()
         page.epub_html.file_name = "test.html"
 
         key = TagKey(index=5, tag=tag, page=page)
@@ -88,6 +94,7 @@ class TestTagKey:
         """Vérifie que différents indices avec même tag sont égaux (identité du tag)."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
+        assert tag
         page = Mock()
 
         # Même tag, indices différents
@@ -103,6 +110,7 @@ class TestTagKey:
         """Vérifie que TagKey conserve la référence à la page."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
+        assert tag
         page = Mock()
 
         key = TagKey(index=0, tag=tag, page=page)

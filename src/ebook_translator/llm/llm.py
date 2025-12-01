@@ -1,15 +1,18 @@
-import os
 import datetime
-from pathlib import Path
+import os
 import sys
 import time
+from pathlib import Path
+from typing import Any
+
 from dotenv import load_dotenv
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from typing import Optional, Callable, Awaitable
-from openai import OpenAI, OpenAIError, APITimeoutError, RateLimitError, APIError
+from openai import APIError, APITimeoutError, OpenAI, OpenAIError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
 
+from ebook_translator.config import TemplateNames
+
 from ..logger import get_logger, get_session_log_path
+from .llm_config import LLMConfig
 from .template_renderers import TemplateRenderer
 
 logger = get_logger(__name__)
@@ -22,20 +25,15 @@ def get_api_key() -> str:
     # Configuration du LLM avec validation
     api_key = os.getenv("API_KEY")
     if not api_key:
-        print("\n❌ ERREUR : La clé API DeepSeek n'est pas définie.", file=sys.stderr)
-        print("\nPour configurer :", file=sys.stderr)
-        print("  1. Copiez .env.example en .env", file=sys.stderr)
-        print(
-            "  2. Obtenez une clé API sur https://platform.deepseek.com/api_keys",
-            file=sys.stderr,
+        logger.error("\n❌ ERREUR : La clé API DeepSeek n'est pas définie.")
+        logger.error("\nPour configurer :")
+        logger.error("  1. Copiez .env.example en .env")
+        logger.error(
+            "  2. Obtenez une clé API sur https://platform.deepseek.com/api_keys"
         )
-        print(
-            "  3. Ajoutez votre clé dans .env : DEEPSEEK_API_KEY=sk-votre-cle",
-            file=sys.stderr,
-        )
-        print(
-            "\nDocumentation : voir CLAUDE.md section 'Configuration des clés API'\n",
-            file=sys.stderr,
+        logger.error("  3. Ajoutez votre clé dans .env : DEEPSEEK_API_KEY=sk-votre-cle")
+        logger.error(
+            "\nDocumentation : voir CLAUDE.md section 'Configuration des clés API'\n"
         )
         sys.exit(1)
     return api_key
@@ -54,14 +52,16 @@ class LLM:
     def __init__(
         self,
         model_name: str,
+        reasoning_name: str,
         url: str,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         prompt_dir: str = "template",
         temperature: float = 0.5,
         max_retries: int = 3,
         retry_delay: float = 1.0,
     ):
         self.model_name = model_name
+        self.reasoning_name = reasoning_name
         self.api_key = api_key or get_api_key()
         self.client = OpenAI(api_key=self.api_key, base_url=url)
         self.temperature = temperature
@@ -78,7 +78,8 @@ class LLM:
     # -----------------------------------
     # 🔹 Rendu du template
     # -----------------------------------
-    def render_prompt(self, template_name: str, **kwargs) -> str:
+    @DeprecationWarning
+    def render_prompt(self, template_name: TemplateNames, **kwargs: Any) -> str:
         """
         Rend un template Jinja2 avec les variables données.
 
@@ -106,7 +107,7 @@ class LLM:
     # 🔹 Gestion du log
     # -----------------------------------
     def _create_log(
-        self, prompt: str, content: str, context: Optional[str] = None
+        self, prompt: str, content: str, context: str | None = None
     ) -> Path:
         """
         Prépare les données du log et retourne le chemin du fichier.
@@ -161,9 +162,8 @@ class LLM:
         self,
         system_prompt: str,
         content: str,
-        context: Optional[str] = None,
-        use_reasoning_mode: bool = False,
-        use_json_mode: bool = False,
+        log_name: str | None = None,
+        config: LLMConfig | None = None,
     ) -> str:
         """
         Envoie une requête au LLM avec gestion d'erreurs spécifiques et retry automatique.
@@ -173,10 +173,8 @@ class LLM:
             content: Le contenu à traiter
             context: Contexte optionnel pour nommer le fichier de log
                     (ex: "chunk_042", "retry_phase1", "validation")
-            use_reasoning_mode: Si True, utilise deepseek-reasoner au lieu de deepseek-chat.
-                               Le modèle génère alors un reasoning_content explicite.
-            use_json_mode: Si True, force le LLM à retourner du JSON valide.
-                          Utilise response_format={'type': 'json_object'} de l'API DeepSeek.
+            config: Configuration spécifique du LLM pour cette requête
+                    (ex: use_reasoning, use_json, temperature, max_tokens)
 
         Returns:
             La réponse du LLM ou un message d'erreur entre crochets
@@ -194,15 +192,22 @@ class LLM:
             En mode JSON (use_json_mode=True), le LLM est contraint de retourner du JSON
             valide. Le prompt doit contenir le mot "json" pour que cela fonctionne correctement.
         """
-        log_path = self._create_log(system_prompt, content, context)
-        last_error: Optional[Exception] = None
+        log_path = self._create_log(system_prompt, content, log_name)
+        last_error: Exception | None = None
+
+        config = config or {}
+
+        use_reasoning_mode = config.get("use_reasoning", False)
+        use_json_mode = config.get("use_json_mode", False)
+        temperature = config.get("temperature", self.temperature)
+        max_tokens = config.get("max_tokens", self.max_tokens)
 
         # Choisir le modèle selon le mode
-        model_name = "deepseek-reasoner" if use_reasoning_mode else self.model_name
+        model_name = self.reasoning_name if use_reasoning_mode else self.model_name
 
         # Log du mode utilisé
         if use_reasoning_mode:
-            logger.info(f"🧠 Mode raisonnement activé pour : {context}")
+            logger.info(f"🧠 Mode raisonnement activé pour : {log_name}")
 
         for attempt in range(self.max_retries):
             try:
@@ -214,22 +219,24 @@ class LLM:
                 # Préparer response_format si JSON mode activé
                 response_format = None
                 if use_json_mode:
-                    response_format = {'type': 'json_object'}
+                    response_format = {"type": "json_object"}
 
                 resp = self.client.chat.completions.create(
                     model=model_name,
                     messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                     response_format=response_format,  # type: ignore
                 )
                 result = resp.choices[0].message.content
                 response_text = result.strip() if result is not None else "Result Empty"
 
                 # Extraire le raisonnement si présent (deepseek-reasoner)
-                reasoning_text = ""
+                reasoning_text: str = ""
                 if hasattr(resp.choices[0].message, "reasoning_content"):
-                    reasoning_content = resp.choices[0].message.reasoning_content  # type: ignore
+                    reasoning_content = getattr(
+                        resp.choices[0].message, "reasoning_content", None
+                    )
                     reasoning_text = (
                         reasoning_content if reasoning_content is not None else ""
                     )

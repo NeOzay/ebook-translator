@@ -1,92 +1,127 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script de test manuel pour visualiser le rendu de chaque template.
 Usage: python test_template_manual.py [template_name]
 """
 
-import sys
 import io
+import sys
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
-from typing import Any, TypeVar, TypeAliasType, TypedDict
-from src.ebook_translator.llm.template_params import (
-    TranslateParams,
-    RefineParams,
-    MissingLinesParams,
-    RetryFragmentsParams,
-    RetrySentenceParams,
-    RetryPunctuationParams,
-    RetryFragmentsFlexibleParams,
-)
 
+from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
 from src.ebook_translator.config import TemplateNames
+from src.ebook_translator.llm.template_renderers import TemplateRenderer
+
+from ebook_translator.glossary import Glossary
+from ebook_translator.segmentation.segmentator import Segmentator
+from ebook_translator.stores.store import Store
+from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
 
 # Fix encoding for Windows console
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-T = TypeVar("T")
-TemplatePair = tuple[TemplateNames, T]
+
+source_epub = Path(
+    "books/The Genius Prince's Guide to Raising a Nation Out of Debt - Volume 01 [Yen Press][Kobo].epub"
+)
+source_book = epub.read_epub(source_epub)  # type: ignore
+html_items, target_book = extract_html_items_in_spine_order(source_book)
+
+segmentator = Segmentator(html_items, 500)
+
+chunk = next(segmentator.get_all_segments())
+
+glossary = Glossary()
+
+renderer = TemplateRenderer()
 
 # Templates disponibles avec leurs paramètres par défaut
 # === TRANSLATE Templates ===
-translate_base: TranslateParams = {"target_language": "français"}
+
+analyze_simplified = renderer.render_analyze_simplified(
+    chapter_name="Chapitre 1: Introduction",
+    target_language="français",
+)
 
 
-translate_refine: RefineParams = {
-    "target_language": "français",
-    "glossaire": "- Sakamoto: Sakamoto\n- Matrix: Matrice",
-    "original_text": "<0/>Test original text",
-    "initial_translation": "<0/>Texte de test traduit",
-    "expected_count": 1,
-}
+translate_base = renderer.render_translate(
+    target_language="français",
+)
+
+try:
+    translate_refine = renderer.render_refine(
+        target_language="français",
+        chunk=chunk,
+        glossary=glossary,
+        store=Store(Path("./store")),
+        # original_text="<0/>Test original text",
+        # initial_translation="<0/>Texte de test traduit",
+        # glossaire="- Sakamoto: Sakamoto\n- Matrix: Matrice",
+        # expected_count=1,
+    )
+except Exception as e:
+    print(f"Erreur lors du rendu de translate_refine: {e}")
+    translate_refine = "ERREUR DE RENDU"
+
+retry_translate_missing = renderer.render_missing_lines(
+    chunk=chunk,
+    target_language="français",
+    missing_indices=[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+)
 
 
-retry_translate_missing: MissingLinesParams = {
-    "target_language": "français",
-    "error_message": "❌ Lignes manquantes: <5/>, <6/>",
-    "missing_indices": [5, 6],
-    "source_content": "Line 1\nLine 2\nLine 3\nLine 4\n<5/>Line 5\n<6/>Line 6",
-}
+retry_translate_sentence = renderer.render_retry_sentence(
+    chunk=chunk,
+    target_language="français",
+    missing_indices=[3, 4],
+)
 
-
-retry_translate_sentence: RetrySentenceParams = {
-    "target_language": "français",
-    "missing_indices": "<3/>, <4/>",
-    "original_text": "Line 1\nLine 2\n<3/>Original line 3\n<4/>Original line 4",
-    "previous_translation": "Line 1\nLine 2\n<3/>Traduction ligne 3\n<4/>Traduction ligne 4",
-    "num_lines": 2,
-}
 
 # === CORRECT Templates ===
-retry_correct_fragments: RetryFragmentsParams = {
-    "target_language": "français",
-    "original_text": "Text with </>separator</>",
-    "incorrect_translation": "Texte avec séparateur",
-    "expected_separators": 2,
-    "actual_separators": 0,
-}
 
-retry_correct_fragments_flexible: RetryFragmentsFlexibleParams = {
-    "target_language": "français",
-    "original_text": "Text with </>separator</>",
-    "incorrect_translation": "Texte avec séparateur",
-    "expected_separators": 2,
-    "actual_separators": 0,
-}
+retry_correct_fragments = renderer.render_retry_fragments(
+    target_language="français",
+    actual_separators=3,
+    expected_separators=2,
+    mode="NORMAL",
+    original_text="Text with </>separator</>",
+    incorrect_translation="Texte avec séparateur",
+)
 
-retry_correct_punctuation: RetryPunctuationParams = {
-    "target_language": "français",
-    "original_text": '"Hello," she said, "world"',
-    "incorrect_translation": "« Bonjour, dit-elle, monde »",
-    "expected_pairs": 2,
-    "actual_pairs": 1,
-}
+retry_correct_fragments_flexible = renderer.render_retry_fragments(
+    target_language="français",
+    actual_separators=0,
+    expected_separators=2,
+    mode="FLEXIBLE",
+    original_text="Text with </>separator</>",
+    incorrect_translation="Texte avec séparateur",
+)
+
+retry_correct_punctuation = renderer.render_retry_punctuation(
+    target_language="français",
+    original_text='"Hello," she said, "world"',
+    incorrect_translation="« Bonjour, dit-elle, monde »",
+    expected_pairs=2,
+    actual_pairs=1,
+)
 
 
-TEMPLATES: dict[TemplateNames, Any] = {
+retry_analysis_invalid_json = renderer.render_retry_analysis_invalid_json(
+    chapter_name="Chapitre 1: Introduction",
+    target_language="français",
+    json_error_message="Erreur de syntaxe JSON à la ligne 3",
+    invalid_response='{"analyse": {"resume_narratif": "Ceci est un résumé"',
+)
+
+retry_analysis_missing_sections = renderer.render_retry_analysis_missing_sections(
+    chapter_name="Chapitre 1: Introduction",
+    target_language="français",
+    missing_sections=["analyse.resume_narratif", "glossaire[0].sexe"],
+)
+
+TEMPLATES: dict[TemplateNames, str] = {
     TemplateNames.First_Pass_Template: translate_base,
     TemplateNames.Refine_Template: translate_refine,
     TemplateNames.Retry_Missing_Lines_Targeted_Template: retry_translate_missing,
@@ -94,107 +129,31 @@ TEMPLATES: dict[TemplateNames, Any] = {
     TemplateNames.Retry_Fragments_Template: retry_correct_fragments,
     TemplateNames.Retry_Fragments_Flexible_Template: retry_correct_fragments_flexible,
     TemplateNames.Retry_Punctuation_Template: retry_correct_punctuation,
+    TemplateNames.Analyze_Simplified_Template: analyze_simplified,
+    TemplateNames.Retry_Analysis_Invalid_Json_Template: retry_analysis_invalid_json,
+    TemplateNames.Retry_Analysis_Missing_Sections_Template: retry_analysis_missing_sections,
 }
-
-
-def list_templates():
-    """Affiche la liste des templates disponibles."""
-    print("\n📋 Templates disponibles:\n")
-    print("TRANSLATE Templates:")
-    for name, info in TEMPLATES.items():
-        if "translate" in name:
-            print(f"  - {name.name:<30} ({name.value})")
-
-    print("\nCORRECT Templates:")
-    for name, info in TEMPLATES.items():
-        if "correct" in name:
-            print(f"  - {name.name:<30} ({name.value})")
-    print()
-
-
-def render_template(template_name: TemplateNames):
-    """Rend un template avec ses paramètres par défaut."""
-    if template_name not in TEMPLATES:
-        print(f"❌ Template '{template_name}' inconnu.")
-        list_templates()
-        return
-
-    params = TEMPLATES[template_name]
-    template_file = template_name.value
-
-    # Charger le template
-    template_dir = Path(__file__).parent / "template"
-    env = Environment(loader=FileSystemLoader(template_dir))
-
-    try:
-        template = env.get_template(template_file)
-        rendered = template.render(**params)
-
-        # Afficher les informations
-        print(f"\n{'='*80}")
-        print(f"📝 Template: {template_name}")
-        print(f"📄 Fichier: {template_file}")
-        print(f"{'='*80}\n")
-
-        print(f"🔧 Paramètres utilisés:")
-        for key, value in params.items():
-            value_preview = (
-                str(value)[:50] + "..." if len(str(value)) > 50 else str(value)
-            )
-            print(f"  - {key}: {value_preview}")
-
-        print(f"\n📊 Statistiques:")
-        print(f"  - Longueur: {len(rendered)} caractères")
-        print(f"  - Lignes: {rendered.count(chr(10)) + 1}")
-
-        # Vérifier que le template commun est inclus
-        has_common = "Règles de traduction" in rendered or "Correction" in rendered
-        print(f"  - Inclut règles communes: {'✅ Oui' if has_common else '⚠️  Non'}")
-
-        print(f"\n{'='*80}")
-        print("📄 RENDU DU PROMPT:")
-        print(f"{'='*80}\n")
-        print(rendered)
-        print(f"\n{'='*80}")
-        print(f"✅ Template rendu avec succès!")
-        print(f"{'='*80}\n")
-
-    except Exception as e:
-        print(f"\n❌ ERREUR lors du rendu:")
-        print(f"   {type(e).__name__}: {e}\n")
-        import traceback
-
-        traceback.print_exc()
 
 
 def save_template_output(template_name: TemplateNames, output_dir: Path):
     """Rend un template et sauvegarde la sortie dans un fichier."""
     if template_name not in TEMPLATES:
         print(f"❌ Template '{template_name}' inconnu.")
-        list_templates()
         return
 
-    params = TEMPLATES[template_name]
-    template_file = template_name.value
-
-    # Charger le template
-    template_dir = Path(__file__).parent / "template"
-    env = Environment(loader=FileSystemLoader(template_dir))
+    prompt = TEMPLATES[template_name]
 
     try:
-        template = env.get_template(template_file)
-        rendered = template.render(**params)
-
         # Sauvegarder dans un fichier
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / f"{template_name.name}_output.txt"
         with output_file.open("w", encoding="utf-8") as f:
-            f.write(rendered)
+            f.write(prompt)
 
         print(f"✅ Sortie sauvegardée dans: {output_file}")
 
     except Exception as e:
-        print(f"\n❌ ERREUR lors du rendu:")
+        print("\n❌ ERREUR lors du rendu:")
         print(f"   {type(e).__name__}: {e}\n")
         import traceback
 
@@ -202,7 +161,7 @@ def save_template_output(template_name: TemplateNames, output_dir: Path):
 
 
 def main():
-    for name, value in TEMPLATES.items():
+    for name in TEMPLATES:
         # render_template(name)
         save_template_output(name, Path("./template_outputs"))
 

@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class Language(Enum):
+class Language(StrEnum):
     SIMPLIFIED_CHINESE = "Chinois simplifié"
     TRADITIONAL_CHINESE = "Chinois Traditionnel"
     ENGLISH = "Anglais"

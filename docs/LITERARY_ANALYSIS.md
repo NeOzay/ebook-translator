@@ -1,7 +1,7 @@
-# Phase 0: Analyse Littéraire Pré-Traduction
+# Phase 0: Analyse Littéraire Simplifiée pour Traduction
 
-**Version**: v0.10.0-alpha
-**Status**: ✅ Implémentée et opérationnelle
+**Version**: v0.11.0
+**Status**: ✅ Implémentée et opérationnelle (format simplifié)
 
 ---
 
@@ -9,27 +9,32 @@
 
 La **Phase 0** analyse le contenu littéraire d'un EPUB **avant la traduction** pour extraire :
 
-- 👤 **Personnages** : Noms, rôles, relations, développement
-- 📍 **Lieux** : Descriptions, atmosphère, importance narrative
-- 📖 **Intrigue** : Événements, conflits, foreshadowing, révélations
-- 🎭 **Thèmes** : Thèmes principaux avec éléments de preuve
-- ✍️ **Style** : Techniques narratives, ton, dispositifs littéraires
-- 📚 **Terminologie** : Termes spécialisés, noms propres, glossaire
-- 🔄 **Considérations traduction** : Défis, exigences de cohérence
+- 📝 **Analyse littéraire** : Résumé, tonalité, style, thèmes, références culturelles
+- 🎯 **Pistes de traduction** : Liste concrète d'éléments à préserver/adapter
+- 📚 **Glossaire avec traductions** : Personnages, lieux, créatures, titres, termes techniques avec propositions de traduction
+
+### Nouveau format simplifié (v0.11.0)
+
+Le format `ContexteTraduction` remplace `ChapterAnalysis` et offre :
+
+- **-67% tokens LLM** : 300-400 tokens vs 800-1200 tokens
+- **-78% sections obligatoires** : 2 sections vs 9 sections
+- **+100% focus traduction** : Pistes concrètes au lieu de documentation générale
+- **Glossaire directement exploitable** : `proposition_traduction` unique par terme
 
 ### Avantages
 
 1. **Cohérence terminologique dès Phase 1**
-   Le glossaire est pré-rempli automatiquement → -30-50% de conflits
+   Le glossaire est pré-rempli avec propositions validées → -30-50% de conflits
 
-2. **Meilleure qualité de traduction**
-   Le LLM connaît le contexte narratif complet → traductions plus nuancées
+2. **Coût LLM réduit**
+   Format simplifié → -67% de tokens générés
 
-3. **Documentation automatique**
-   Fiches d'analyse Markdown pour traducteurs/éditeurs
+3. **Pistes de traduction opérationnelles**
+   Liste structurée d'éléments à préserver/adapter → guidance concrète pour le LLM
 
-4. **Détection précoce de défis**
-   Identification des jeux de mots, références culturelles avant traduction
+4. **Population automatique du glossaire**
+   Extraction intégrée dans `LiteraryAnalysisPhase` → pas de code séparé
 
 ---
 
@@ -40,222 +45,176 @@ La **Phase 0** analyse le contenu littéraire d'un EPUB **avant la traduction** 
 ```
 EPUB Input
     ↓
-[ChapterDetector] → Détection chapitres (spine-based)
+[SequentialChapterDetector] → Détection chapitres
     ↓
-[Segmentator] → Chunks de 2000 tokens (traduction)
+[ChapterChunk] → Un chunk par chapitre (8000 tokens max)
     ↓
-[BlockSplitter] → Re-segmentation en blocs de 4000 tokens (analyse)
+[LiteraryAnalysisPhase] → Analyse simplifiée (LLM JSON mode)
+    ├── render_analyze_simplified() → Template Jinja optimisé
+    ├── AnalysisValidator.validate() → Validation ContexteTraduction
+    └── _populate_glossary() → Population automatique
     ↓
-[LiteraryAnalysisPhase] → Analyse incrémentale (LLM JSON mode)
-    ├── [AnalysisValidator] → Validation structure JSON
-    ├── [AnalysisExporter] → Export Markdown formaté
-    └── [GlossaryPopulator] → Population automatique glossaire
-    ↓
-Output: JSON + Markdown + Glossaire pré-rempli
+Output: JSON + Glossaire pré-rempli
 ```
 
 ### Différences avec phases de traduction
 
 | Aspect | Phase 0 (Analyse) | Phase 1-2 (Traduction) |
 |--------|-------------------|------------------------|
-| **Objectif** | Extraire contexte littéraire | Traduire le texte |
-| **Taille blocs** | 4000 tokens | 2000 tokens |
-| **Validation** | Validation structure JSON | ValidationWorkerPool (checks) |
-| **Output** | JSON + Markdown | Traductions dans Store |
+| **Objectif** | Extraire contexte + glossaire | Traduire le texte |
+| **Taille blocs** | 8000 tokens (chapitre complet) | 2000 tokens |
+| **Validation** | Validation JSON structure | ValidationWorkerPool (checks) |
+| **Output** | JSON + Glossaire | Traductions dans Store |
 | **Parallélisation** | Séquentielle (par chapitre) | Parallèle (chunks) |
 | **Mode LLM** | JSON mode (structured output) | Normal mode |
 
 **Rationale**:
-- **4000 tokens** pour l'analyse → Meilleure compréhension narrative globale
+- **8000 tokens** pour l'analyse → Contexte narratif complet du chapitre
 - **2000 tokens** pour la traduction → Cohérence locale, moins d'hallucinations
 
 ---
 
 ## 📦 Composants
 
-### 1. ChapterDetector
+### 1. ContexteTraduction (schéma simplifié)
 
-**Fichier**: `src/ebook_translator/segmentation/chapter_detector.py` (580 lignes)
+**Fichier**: `src/ebook_translator/analysis/translation_context.py`
 
-**Objectif**: Détection robuste de chapitres via analyse de la spine EPUB.
-
-**Algorithme 4-pass**:
-1. **PASS 1**: Classifie fichiers (MAIN_CHAPTER, SUBPART, INSERT, etc.)
-2. **PASS 2**: Groupe par numéro de chapitre principal
-3. **PASS 3**: Attache sous-parties et inserts
-4. **PASS 4** (optionnel): Validation LLM si ambiguïté
-
-**Patterns gérés**:
-- `chapter1.xhtml + chapter11.xhtml` → Même chapitre (1, part 1)
-- `chapter1.xhtml + insert1.xhtml` → Même chapitre
-- `prologue.xhtml`, `epilogue.xhtml` → Chapitres séparés
-- Frontmatter/backmatter automatiquement détectés
-
-**Fallback LLM**: Template `chapter_grouping.jinja` pour cas ambigus
-
----
-
-### 2. BlockSplitter
-
-**Fichier**: `src/ebook_translator/analysis/block_splitter.py` (269 lignes)
-
-**Objectif**: Re-segmenter chunks de 2000t en blocs de 4000t pour analyse.
-
-**Classe AnalysisBlock**:
+**Structure** :
 ```python
-@dataclass
-class AnalysisBlock:
-    chapter_name: str
-    block_number: int          # 1, 2, 3, ...
-    total_blocks: int          # Nombre total de blocs dans chapitre
-    text: str                  # Contenu (~4000 tokens)
-    token_count: int           # Nombre exact de tokens
+class ContexteTraduction(TypedDict):
+    chapitre: str
+    analyse: AnalyseLitteraire
+    glossaire: list[TermeGlossaire]
 
-    @property
-    def is_first_block(self) -> bool
-    @property
-    def is_last_block(self) -> bool
+class AnalyseLitteraire(TypedDict):
+    resume_narratif: str
+    tonalite_ambiance: str
+    style_ecriture: str
+    themes_images_cles: str
+    references_culturelles: str
+    pistes_traduction: list[str]  # NOUVEAU : Liste structurée
+
+class TermeGlossaire(TypedDict):
+    terme: str
+    type: Literal["personnage", "lieu", "creature", "titre", "objet", "terme_technique", "reference_culturelle"]
+    sexe: Literal["m", "f", "nc"]
+    description_role: str
+    notes_traduction: str
+    proposition_traduction: str  # UN SEUL terme
 ```
 
-**Stratégie**: Regroupe chunks jusqu'à ~4000 tokens, puis crée nouveau bloc.
-
----
-
-### 3. LiteraryAnalysisPhase
-
-**Fichier**: `src/ebook_translator/analysis/literary_analysis_phase.py` (377 lignes)
-
-**Objectif**: Orchestrateur principal de la Phase 0.
-
-**Méthodes principales**:
-
-#### `__init__(llm, html_items, output_dir, block_tokens, genre)`
-Initialise la phase avec configuration.
-
-#### `detect_chapters() -> dict[str, list[Chunk]]`
-Détecte chapitres via ChapterDetector + Segmentator.
-
-#### `split_into_blocks(chapters) -> dict[str, list[AnalysisBlock]]`
-Découpe chapitres en blocs de 4000 tokens avec BlockSplitter.
-
-#### `analyze_chapter(chapter_name, blocks) -> ChapterAnalysis`
-Analyse incrémentale d'un chapitre :
-- **Bloc 1**: Initialise analyse (template `analyze_chapter_initial.jinja`)
-- **Blocs 2..N-1**: Enrichit analyse (template `analyze_chapter_incremental.jinja`, status="in_progress")
-- **Bloc N**: Finalise analyse (status="complete")
-
-#### `save_analysis(chapter_name, analysis) -> tuple[Path, Path]`
-Sauvegarde JSON + Markdown via AnalysisExporter.
-
-#### `run() -> dict[str, ChapterAnalysis]`
-Exécute le pipeline complet : détection → segmentation → analyse → export.
-
-**Workflow complet**:
-```python
-phase = LiteraryAnalysisPhase(
-    llm=llm,
-    html_items=epub.items,
-    output_dir="cache/analysis",
-    block_tokens=4000,
-    genre="fiction"
-)
-
-analyses = phase.run()
-# → Génère cache/analysis/{chapter}.json + {chapter}.md
+**Exemple** :
+```json
+{
+  "chapitre": "Chapter 1: An Unexpected Party",
+  "analyse": {
+    "resume_narratif": "Bilbo reçoit la visite de Gandalf et treize nains...",
+    "tonalite_ambiance": "Léger, humoristique avec touches d'aventure",
+    "style_ecriture": "Narratif avec dialogues vifs, phrases courtes",
+    "themes_images_cles": "L'aventure vs le confort, le courage face à l'inconnu",
+    "references_culturelles": "Traditions hobbites (repas, foyer), mythologie nordique",
+    "pistes_traduction": [
+      "Préserver le ton léger et humoristique des dialogues",
+      "Adapter les noms de repas hobbits avec équivalents culturels",
+      "Conserver le rythme rapide des phrases courtes",
+      "Maintenir la distinction registre formel/familier"
+    ]
+  },
+  "glossaire": [
+    {
+      "terme": "Bilbo Baggins",
+      "type": "personnage",
+      "sexe": "m",
+      "description_role": "Hobbit protagonist, reluctant adventurer",
+      "notes_traduction": "Nom propre établi dans traduction française",
+      "proposition_traduction": "Bilbo Sacquet"
+    },
+    {
+      "terme": "Smaug",
+      "type": "creature",
+      "sexe": "m",
+      "description_role": "Dragon guarding treasure",
+      "notes_traduction": "Nom de créature mythique à conserver",
+      "proposition_traduction": "Smaug"
+    }
+  ]
+}
 ```
 
 ---
 
-### 4. AnalysisExporter
+### 2. LiteraryAnalysisPhase
 
-**Fichier**: `src/ebook_translator/analysis/analysis_exporter.py` (292 lignes)
+**Fichier**: `src/ebook_translator/pipeline/phases/literary_analysis.py`
 
-**Objectif**: Export Markdown formaté pour lecture humaine.
+**Responsabilités** :
+1. Génération du prompt via `render_analyze_simplified()`
+2. Validation JSON via `AnalysisValidator.validate()`
+3. Population automatique du glossaire via `_populate_glossary()`
+4. Sauvegarde JSON dans le store
 
-**Structure générée** (9 sections):
-1. **En-tête** : Metadata (chapter_name, status, blocks_analyzed)
-2. **👤 Personnages** : Présents (nom, rôle, description) + Mentionnés
-3. **📍 Lieux** : Primaire (nom, description, atmosphère) + Secondaires
-4. **📖 Intrigue** : Événements, conflits, foreshadowing, révélations
-5. **🎭 Thèmes** : Thème + développement + éléments de preuve
-6. **✍️ Techniques narratives** : POV, temps, ton, dispositifs
-7. **📚 Terminologie** : Termes spécialisés + Noms propres
-8. **🎨 Style** : Style d'écriture, motifs, symboles, références culturelles
-9. **🔄 Considérations traduction** : Défis + Exigences de cohérence
-
-**Méthodes**:
-- `export_to_markdown(analysis)` : Génère Markdown d'une analyse
-- `save_markdown(content, path)` : Sauvegarde fichier
-- `export_all_to_markdown(analyses, output_dir)` : Export batch
-
----
-
-### 5. GlossaryPopulator
-
-**Fichier**: `src/ebook_translator/analysis/glossary_populator.py` (240 lignes)
-
-**Objectif**: Population automatique du glossaire depuis analyses.
-
-**Sources d'extraction**:
-1. `characters.present[].name` → Noms de personnages
-2. `locations.primary/secondary` → Noms de lieux
-3. `terminology.proper_nouns.{names,places,organizations}` → Noms propres
-4. `terminology.specialized_terms[].term` → Termes techniques
-
-**Stratégie**: Noms propres gardés tel quels (source=traduction) pour cohérence.
-
-**Workflow**:
+**Méthode clé : `_populate_glossary()`** :
 ```python
-glossary = Glossary(Path("cache/glossary.json"))
-populator = GlossaryPopulator(glossary)
+def _populate_glossary(
+    analysis: ContexteTraduction,
+    glossary: Glossary,
+    chapter_name: str,
+) -> None:
+    """Peuple le glossaire depuis l'analyse d'un chapitre."""
+    for term_entry in analysis["glossaire"]:
+        terme_original = term_entry["terme"].strip()
+        proposition = term_entry["proposition_traduction"].strip()
 
-# Extraire termes depuis toutes les analyses
-populator.populate_from_analyses(analyses)
-
-# Forcer validation (confidence=1.0)
-populator.validate_all_terms()
-
-# Sauvegarder
-glossary.save()
-
-# Statistiques
-stats = populator.get_stats()
-# → {'characters': 12, 'locations': 5, 'proper_nouns': 8, 'specialized_terms': 15}
+        # Ajouter au glossaire avec priorité maximale
+        glossary.validate_translation(terme_original, proposition)
 ```
 
 ---
 
-### 6. Templates Jinja2
+### 3. Template Jinja simplifié
 
-#### `analyze_chapter_initial.jinja` (163 lignes)
-Initialise l'analyse du premier bloc d'un chapitre.
+**Fichier**: `template/analyze_chapter_simplified.jinja`
 
-**Input**:
-- `chapter_name`: Nom du chapitre
-- `total_blocks`: Nombre total de blocs
-- `block_text`: Contenu du premier bloc (~4000 tokens)
-- `genre`: Genre littéraire (défaut: "fiction")
+**Variables** :
+- `chunk` : ChapterChunk contenant le texte
+- `chapter_name` : Nom du chapitre
+- `target_language` : Langue cible pour propositions
 
-**Output**: JSON structuré avec `status="in_progress"`, `blocks_analyzed=1`
+**Taille** : ~80 lignes (vs 163 lignes pour les anciens templates)
 
-#### `analyze_chapter_incremental.jinja` (122 lignes)
-Enrichit progressivement l'analyse pour les blocs suivants.
+**Sections** :
+1. Instructions claires (analyse + glossaire)
+2. Format JSON attendu avec exemples
+3. Exemples complets de glossaire (6 types)
 
-**Input**:
-- `chapter_name`, `current_block`, `total_blocks`
-- `partial_analysis_json`: Analyse partielle à enrichir
-- `block_text`: Contenu du bloc actuel
-- `is_last_block`: True si dernier bloc (active `status="complete"`)
-- `genre`: Genre littéraire
+---
 
-**Output**: JSON enrichi (cumulative, pas de suppression)
+### 4. AnalysisValidator
 
-#### `chapter_grouping.jinja` (87 lignes)
-Fallback LLM pour détection de chapitres ambigus.
+**Fichier**: `src/ebook_translator/analysis/validator.py`
 
-**Input**: `filenames` (liste des fichiers spine)
+**Validations** :
+- ✅ Champs obligatoires présents
+- ✅ `pistes_traduction` est une liste de chaînes
+- ✅ Types glossaire valides (7 types)
+- ✅ Sexe valide (m, f, nc)
+- ✅ `proposition_traduction` contient UN SEUL terme (pas de virgules)
+- ✅ Pas de traductions vides
 
-**Output**: JSON `{"chapters": [{"chapter_name": "...", "files": [...]}]}`
+---
+
+## 📊 Comparaison avec l'ancien système
+
+| Métrique | ChapterAnalysis (v0.10.0) | ContexteTraduction (v0.11.0) | Gain |
+|----------|---------------------------|------------------------------|------|
+| **Lignes de schéma** | 254 | 80 | **-68%** |
+| **Tokens prompt** | 600-800 | 150-200 | **-75%** |
+| **Tokens réponse LLM** | 800-1200 | 300-400 | **-67%** |
+| **Sections obligatoires** | 9 | 2 | **-78%** |
+| **Champs utilisés/totaux** | 7/30+ (23%) | 10/12 (83%) | **+260%** |
+| **Temps d'analyse/chapitre** | 15-25s (multi-blocs) | 8-12s (1 bloc) | **-50%** |
+| **Coût LLM/chapitre** | ~$0.015 | ~$0.005 | **-67%** |
 
 ---
 
@@ -263,16 +222,15 @@ Fallback LLM pour détection de chapitres ambigus.
 
 ### Exemple complet
 
-Voir `example_phase0_analysis.py` pour un exemple commenté complet.
-
 ```python
+from pathlib import Path
 from ebooklib import epub
-from src.ebook_translator.llm import LLM
-from src.ebook_translator.analysis import (
-    LiteraryAnalysisPhase,
-    GlossaryPopulator,
-)
+
 from src.ebook_translator.glossary import Glossary
+from src.ebook_translator.llm import LLM
+from src.ebook_translator.pipeline.executor import PipelineExecutor
+from src.ebook_translator.pipeline.phases.literary_analysis import LiteraryAnalysisPhase
+from src.ebook_translator.pipeline.pipeline import Language
 
 # 1. Charger EPUB
 book = epub.read_epub("input/book.epub")
@@ -281,313 +239,136 @@ html_items = [item for item in book.get_items() if isinstance(item, epub.EpubHtm
 # 2. Initialiser LLM
 llm = LLM(
     model_name="deepseek-chat",
-    max_tokens=8000,        # Pour blocs de 4000 tokens
-    temperature=0.3,        # Analyse structurée
+    max_tokens=8000,  # Chapitre complet en un seul bloc
+    temperature=0.3,
 )
 
-# 3. Exécuter Phase 0
-phase = LiteraryAnalysisPhase(
+# 3. Initialiser glossaire
+glossary = Glossary(cache_path=Path("cache/glossary.json"))
+
+# 4. Exécuter Phase 0
+executor = PipelineExecutor(
     llm=llm,
     html_items=html_items,
-    output_dir="cache/analysis",
-    block_tokens=4000,
-    genre="fiction"
+    cache_dir=Path("cache"),
+    glossary=glossary,
+    target_language=Language.FRENCH,
+    phases=[LiteraryAnalysisPhase],
 )
 
-analyses = phase.run()
-# → Génère cache/analysis/{chapter}.json + {chapter}.md
+executor.run()
 
-# 4. Peupler glossaire
-glossary = Glossary(Path("cache/glossary.json"))
-populator = GlossaryPopulator(glossary)
-populator.populate_from_analyses(analyses)
-populator.validate_all_terms()
+# 5. Glossaire automatiquement peuplé
 glossary.save()
-
-# 5. Afficher résumé
-for chapter_name, analysis in analyses.items():
-    print(f"{chapter_name}: {analysis['status']}")
-    print(f"  Personnages: {len(analysis['characters']['present'])}")
-    print(f"  Thèmes: {len(analysis['themes']['identified'])}")
+print(f"Termes extraits: {len(glossary.glossary)}")
 ```
 
-### Configuration recommandée
-
-| Paramètre | Valeur | Rationale |
-|-----------|--------|-----------|
-| `model_name` | `"deepseek-chat"` | Mode normal pour analyse |
-| `max_tokens` | `8000` | Pour blocs de 4000 tokens |
-| `temperature` | `0.3` | Analyse structurée (moins de créativité) |
-| `block_tokens` | `4000` | Taille optimale pour compréhension narrative |
-| `genre` | `"fiction"` | Adapter selon le livre |
+Voir [example_phase0_analysis.py](../example_phase0_analysis.py) pour un exemple complet.
 
 ---
 
-## 📊 Schéma JSON
+## 🔄 Migration depuis v0.10.0
 
-Voir `src/ebook_translator/analysis/schema.py` (180 lignes) pour le schéma TypedDict complet.
+### Changements breaking
 
-### Structure ChapterAnalysis
+1. **Schéma** : `ChapterAnalysis` → `ContexteTraduction`
+2. **GlossaryPopulator supprimé** : Intégré dans `LiteraryAnalysisPhase._populate_glossary()`
+3. **Templates** : `analyze_chapter_initial/incremental.jinja` → `analyze_chapter_simplified.jinja`
+4. **Blocs** : Multi-blocs 4000 tokens → Bloc unique 8000 tokens
 
+### Migration du code
+
+#### Ancien code (v0.10.0)
 ```python
+from src.ebook_translator.analysis import (
+    LiteraryAnalysisPhase,
+    GlossaryPopulator,
+)
+
+# Exécuter analyse
+phase = LiteraryAnalysisPhase(llm, html_items, ...)
+analyses = phase.run()
+
+# Peupler glossaire séparément
+populator = GlossaryPopulator(glossary)
+populator.populate_from_analyses(analyses)
+glossary.save()
+```
+
+#### Nouveau code (v0.11.0)
+```python
+from src.ebook_translator.pipeline.phases.literary_analysis import LiteraryAnalysisPhase
+
+# Exécuter analyse
+executor = PipelineExecutor(
+    llm=llm,
+    html_items=html_items,
+    glossary=glossary,  # Peuplé automatiquement
+    phases=[LiteraryAnalysisPhase],
+)
+executor.run()
+
+# Glossaire déjà peuplé !
+glossary.save()
+```
+
+---
+
+## 📝 Fichiers créés
+
+### Structure des fichiers
+
+```
+cache/
+├── literary_analysis/          # Store Phase 0
+│   ├── Chapter_1.json         # {"0": "...JSON..."}
+│   ├── Chapter_2.json
+│   └── ...
+└── glossary.json              # Glossaire peuplé automatiquement
+```
+
+### Format du store
+
+Chaque fichier chapitre contient :
+```json
 {
-  "chapter_name": "Chapter 1",
-  "analysis_version": "1.0",
-  "blocks_analyzed": 3,
-  "total_blocks": 3,
-  "status": "complete",  # "in_progress" | "complete"
-
-  "characters": {
-    "present": [
-      {
-        "name": "Alice",
-        "role": "protagonist",  # "protagonist" | "antagonist" | "supporting"
-        "first_appearance_block": 1,
-        "description": "Young girl, curious",
-        "relationships": ["White Rabbit", "Cheshire Cat"],
-        "development_notes": "Grows more confident"
-      }
-    ],
-    "mentioned": ["Queen of Hearts"]
-  },
-
-  "locations": {
-    "primary": {
-      "name": "Wonderland",
-      "description": "Surreal world down the rabbit hole",
-      "atmosphere": "Whimsical, unpredictable"
-    },
-    "secondary": [...]
-  },
-
-  "plot_elements": {
-    "main_events": ["Alice falls down rabbit hole", ...],
-    "conflicts": [
-      {
-        "type": "internal",  # "internal" | "external" | "interpersonal"
-        "description": "Alice struggles with her identity",
-        "parties_involved": ["Alice"]
-      }
-    ],
-    "foreshadowing": ["White Rabbit's pocket watch"],
-    "revelations": ["The trial is absurd"]
-  },
-
-  "themes": {
-    "identified": [
-      {
-        "theme": "Identity and self-discovery",
-        "evidence": ["Who in the world am I?"],
-        "development": "Alice questions her identity throughout"
-      }
-    ]
-  },
-
-  "narrative_techniques": {
-    "pov": "third-person-limited",  # "first-person" | "third-person-limited" | "omniscient"
-    "tense": "past",  # "past" | "present" | "mixed"
-    "tone": "Whimsical, absurd",
-    "narrative_devices": ["inner monologue", "dialogue"]
-  },
-
-  "terminology": {
-    "specialized_terms": [
-      {
-        "term": "Curiouser and curiouser",
-        "context": "Alice's catchphrase",
-        "category": "cultural",  # "magic" | "technology" | "cultural" | "medical" | "legal" | "other"
-        "translation_notes": "Grammatical oddity, preserve in translation"
-      }
-    ],
-    "proper_nouns": {
-      "names": ["Alice", "White Rabbit", "Cheshire Cat"],
-      "places": ["Wonderland", "Queen's Garden"],
-      "organizations": ["The Court"]
-    }
-  },
-
-  "stylistic_notes": {
-    "writing_style": "Playful, nonsensical wordplay",
-    "recurring_motifs": ["Size changes", "Time"],
-    "symbolic_elements": ["Rabbit hole = journey into unconscious"],
-    "cultural_references": ["Victorian manners", "British tea culture"]
-  },
-
-  "translation_considerations": {
-    "challenges": [
-      "Wordplay (e.g., 'tale' vs 'tail')",
-      "Cultural references (Victorian England)"
-    ],
-    "consistency_requirements": [
-      "Character names: Keep English names",
-      "Wonderland = Pays des Merveilles (consistent)"
-    ]
-  }
+  "0": "{\"chapitre\": \"Chapter 1\", \"analyse\": {...}, \"glossaire\": [...]}"
 }
 ```
 
----
-
-## 🔧 Dépannage
-
-### Erreur "Analyse incomplète"
-
-**Symptôme**: `WARNING: Analyse incomplète (status != 'complete')`
-
-**Causes possibles**:
-1. Bloc final non détecté correctement (`is_last_block=False`)
-2. LLM n'a pas mis `status="complete"` sur le dernier bloc
-
-**Solution**:
-- Vérifier que `blocks_analyzed == total_blocks` dans le JSON
-- Si incohérence, relancer avec `block_tokens` réduit
-
-### Erreur "JSON invalide"
-
-**Symptôme**: `ERROR: JSON invalide: Expecting value`
-
-**Causes possibles**:
-1. LLM a ajouté du texte avant/après le JSON (markdown code blocks)
-2. JSON mal formé (guillemets manquants, virgules incorrectes)
-
-**Solution**:
-- Vérifier que `use_json_mode=True` est activé
-- Essayer avec `temperature` plus basse (0.1-0.2)
-- Vérifier les logs LLM pour voir la sortie brute
-
-### Performance lente
-
-**Symptôme**: Analyse prend >1 minute par bloc
-
-**Causes possibles**:
-1. `max_tokens` trop bas (LLM tronque l'analyse)
-2. Rate limit API atteint
-
-**Solution**:
-- Augmenter `max_tokens` à 8000-10000
-- Réduire `block_tokens` à 3000 si toujours lent
-- Ajouter des retries avec backoff
+La clé `"0"` est utilisée car `ChapterChunk` a toujours `index=0`.
 
 ---
 
-## 📈 Performance
+## ⚠️ Limitations connues
 
-### Temps d'exécution typiques
+1. **Taille des chapitres** : Limité à 8000 tokens (~6000 mots)
+   - Si chapitre > 8000 tokens, il sera tronqué
+   - Solution future : Revenir à multi-blocs si nécessaire
 
-**Livre de 300 pages (~200k mots)**:
-- **Détection chapitres**: 5-10 secondes
-- **Segmentation blocs**: 2-5 secondes
-- **Analyse** (12 chapitres × 3 blocs chacun): ~15-20 minutes
-  - ~25-30 secondes par bloc (appel LLM)
-- **Export Markdown**: 1-2 secondes
-- **Population glossaire**: <1 seconde
+2. **Langue du LLM** : Le LLM doit comprendre la langue source et cible
+   - Testé avec : Anglais → Français
+   - Devrait fonctionner avec toutes langues supportées par le modèle
 
-**Total**: ~20-25 minutes pour un roman typique
-
-### Optimisations possibles
-
-1. **Parallélisation par chapitre** (TODO)
-   Analyser plusieurs chapitres en parallèle → -60% temps
-
-2. **Cache des blocs** (TODO)
-   Ré-utiliser blocs déjà analysés → 0 temps si relance
-
-3. **Streaming LLM** (TODO)
-   Afficher progression en temps réel
+3. **Qualité du glossaire** : Dépend de la qualité de l'analyse LLM
+   - Modèle recommandé : `deepseek-chat` (temperature=0.3)
+   - Révision manuelle recommandée pour livres complexes
 
 ---
 
 ## 🔮 Améliorations futures
 
-### Court terme (Phase 0.11)
-
-- [ ] Parallélisation par chapitre (ThreadPoolExecutor)
-- [ ] Cache des analyses (skip blocs déjà analysés)
-- [ ] Progress bar pour suivi temps réel
-- [ ] Export HTML en plus de Markdown
-- [ ] Suggestions de traductions pour termes techniques (LLM)
-
-### Moyen terme (Phase 0.12)
-
-- [ ] Analyse comparative multi-chapitres (évolution personnages)
-- [ ] Graphe de relations entre personnages (NetworkX)
-- [ ] Détection automatique de séries (volumes 1, 2, 3...)
-- [ ] Import/export analyses entre traducteurs
-- [ ] Interface web pour revue manuelle (FastAPI + React)
-
-### Long terme (Phase 0.13+)
-
-- [ ] Analyse sémantique avancée (embeddings)
-- [ ] Détection de plagia/similarités
-- [ ] Génération automatique de synopsis
-- [ ] Intégration avec outils CAT (memoQ, Trados)
+1. **Support multi-blocs adaptatif** : Revenir à multi-blocs si chapitre > 8000 tokens
+2. **Validation sémantique** : Vérifier cohérence entre `analyse` et `glossaire`
+3. **Export Markdown** : Adapter `AnalysisExporter` pour nouveau format
+4. **Métriques de qualité** : Score de complétude du glossaire
 
 ---
 
-## 📚 Références
+## 📚 Ressources
 
-- **Code source**: `src/ebook_translator/analysis/`
-- **Templates**: `template/analyze_*.jinja`
-- **Exemple**: `example_phase0_analysis.py`
-- **Schéma JSON**: `src/ebook_translator/analysis/schema.py`
-- **Tests**: `src/ebook_translator/analysis/check_tests/` (TODO)
-
----
-
-## 📝 Changelog Phase 0
-
-### v0.10.0-alpha (2025-11-08)
-
-**Initial release** - Phase 0 complète et opérationnelle
-
-**13 commits implémentés**:
-1. ✅ Support JSON mode dans LLM
-2. ✅ Schémas et validation de base
-3. ✅ ChapterDetector (4-pass algorithm)
-4. ✅ Intégration Segmentator
-5. ✅ Templates Jinja2 (3 templates)
-6. ✅ BlockSplitter (4000 tokens)
-7. ✅ LiteraryAnalysisPhase (orchestrateur)
-8. ✅ GlossaryPopulator (extraction automatique)
-9. ✅ AnalysisExporter (Markdown formaté)
-10-13. ✅ Exemple + finalisation
-
-**Statistiques**:
-- **2800+ lignes** de code Python (analysis/)
-- **370 lignes** de templates Jinja2
-- **580 lignes** ChapterDetector seul
-- **0 breaking changes** (architecture modulaire)
-
----
-
-## ❓ FAQ
-
-### Pourquoi 4000 tokens au lieu de 2000 ?
-
-**Réponse**: La traduction nécessite une cohérence **locale** (phrase par phrase) tandis que l'analyse littéraire nécessite une compréhension **narrative globale**. Les blocs de 4000 tokens permettent au LLM de mieux saisir les arcs narratifs, le développement des personnages et les thèmes récurrents.
-
-### Phase 0 est-elle obligatoire ?
-
-**Réponse**: Non, Phase 0 est **optionnelle**. Vous pouvez directement exécuter Phase 1 (traduction) si vous ne voulez pas d'analyse préalable. Cependant, Phase 0 améliore significativement la qualité et la cohérence de la traduction finale.
-
-### Peut-on modifier les analyses manuellement ?
-
-**Réponse**: Oui ! Les fichiers JSON générés peuvent être édités manuellement. Ensuite, relancez `GlossaryPopulator` pour mettre à jour le glossaire avec vos corrections.
-
-### Phase 0 fonctionne-t-elle avec d'autres LLM (GPT-4, Claude) ?
-
-**Réponse**: Oui, tant que le LLM supporte le mode JSON structuré. Modifiez `model_name` et `url` dans `LLM()`. Les templates sont LLM-agnostiques.
-
-### Comment adapter pour des livres non-fiction ?
-
-**Réponse**: Changez le paramètre `genre` :
-```python
-phase = LiteraryAnalysisPhase(..., genre="non-fiction")
-# ou "biography", "essay", "technical", etc.
-```
-
-Les templates s'adaptent automatiquement au genre.
-
----
-
-**Fin de la documentation Phase 0**
+- **Schéma** : [translation_context.py](../src/ebook_translator/analysis/translation_context.py)
+- **Phase** : [literary_analysis.py](../src/ebook_translator/pipeline/phases/literary_analysis.py)
+- **Template** : [analyze_chapter_simplified.jinja](../template/analyze_chapter_simplified.jinja)
+- **Exemple** : [example_phase0_analysis.py](../example_phase0_analysis.py)
+- **CHANGELOG** : [CHANGELOG.md](CHANGELOG.md)

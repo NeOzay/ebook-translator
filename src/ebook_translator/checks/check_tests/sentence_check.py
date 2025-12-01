@@ -1,11 +1,17 @@
 from typing import override
 
-from .line_count_check import validate_retry_indices
-
-from ..retry_helper import retry_with_reasoning
-from .base import Check, CheckResult, SentenceErrorData, SentenceErrorDetail
 from ...logger import get_logger
-
+from ..retry_helper import retry_with_reasoning
+from .base import (
+    Check,
+    CheckResult,
+    FailedResult,
+    SentenceErrorData,
+    SentenceErrorDetail,
+    SuccessResult,
+    ValidationContext,
+)
+from .line_count_check import validate_retry_indices
 
 logger = get_logger(__name__)
 
@@ -122,7 +128,7 @@ def _check_length_similarity(a: str, b: str, threshold: float) -> bool:
     return ratio >= threshold
 
 
-class SentenceCheck(Check):
+class SentenceCheck(Check[SentenceErrorData]):
     """
     Vérifie que le nombre de phrases est cohérent entre original et traduction.
 
@@ -150,7 +156,7 @@ class SentenceCheck(Check):
         return "sentence_check"
 
     @override
-    def validate(self, context) -> CheckResult:
+    def validate(self, context: ValidationContext) -> CheckResult[SentenceErrorData]:
         """
         Valide que le nombre de phrases est cohérent.
 
@@ -167,7 +173,7 @@ class SentenceCheck(Check):
         Returns:
             CheckResult avec erreurs détectées ou is_valid=True
         """
-        errors = []
+        errors: list[SentenceErrorDetail] = []
 
         # Vérifier chaque paire (original, traduit)
         for line_idx, translated_text in context.translated_texts.items():
@@ -218,18 +224,19 @@ class SentenceCheck(Check):
 
         # Retourner résultat
         if not errors:
-            return CheckResult(is_valid=True, check_name=self.name)
+            return SuccessResult(check_name=self.name)
 
-        error_data: SentenceErrorData = {"errors": errors}
-        return CheckResult(
-            is_valid=False,
+        error_data = SentenceErrorData(errors=errors)
+        return FailedResult(
             check_name=self.name,
             error_message="Nombre de phrases incorrect",
             error_data=error_data,
         )
 
     @override
-    def correct(self, context, error_data: SentenceErrorData) -> dict[int, str]:
+    def correct(
+        self, context: ValidationContext, error_data: SentenceErrorData
+    ) -> dict[int, str]:
         """
         Corrige les lignes avec nombre de phrases incorrect.
 
@@ -314,7 +321,7 @@ class SentenceCheck(Check):
             context=context,
             render_prompt=render_prompt,
             validate_result=validate_result,
-            context_name=f"sentence_lines",
+            context_name="sentence_lines",
             max_attempts=2,
         )
 
@@ -334,7 +341,9 @@ class SentenceCheck(Check):
         return result
 
     @override
-    def get_invalid_lines(self, context, error_data: SentenceErrorData) -> set[int]:
+    def get_invalid_lines(
+        self, context: ValidationContext, error_data: SentenceErrorData
+    ) -> set[int]:
         """
         Extrait les indices des lignes invalides depuis error_data.
 
@@ -346,4 +355,4 @@ class SentenceCheck(Check):
             Set des indices de lignes avec nombre de phrases incorrect
         """
         # Extraire line_idx de chaque erreur
-        return {detail["line_idx"] for detail in error_data["errors"]}
+        return {detail["line_idx"] for detail in error_data.errors}

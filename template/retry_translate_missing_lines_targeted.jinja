@@ -31,7 +31,7 @@ INCLUDE COMMON TRANSLATION RULES
 {%- include 'common_translate_rules.jinja' -%}
 {#- ========================================
 SECTION : TARGETED TRANSLATION SPECIFIC
-======================================== -#}
+======================================== #}
 
 ## 🎯 TRADUCTION CIBLÉE - LIGNES MANQUANTES UNIQUEMENT
 
@@ -64,7 +64,7 @@ Tu DOIS produire **EXACTEMENT {{ missing_indices|length }} ligne(s)** en {{ targ
 
 - [ ] {{ missing_indices|length }} ligne(s) traduites (ni plus, ni moins)
 - [ ] Indices conservés ({% for idx in missing_indices %}<{{ idx }}/>{% if not loop.last %}, {% endif %}{% endfor %})
-- [ ] Métadonnées/copyright traduits si présents
+- [ ] Métadonnées/copyright traduits si présents et marqués
 - [ ] Marqueur `[=[END]=]` présent
 
 Si tu ne respectes pas ces règles, ta réponse sera rejetée.

@@ -6,23 +6,24 @@ en encapsulant toute la logique métier nécessaire (extraction texte,
 export glossaire, calculs, etc.).
 """
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..config import TemplateNames
-
+from ..segmentation import Chunk, TranslatedChunk
 from .template_params import (
-    TranslateParams,
-    RefineParams,
+    AnalyzeSimplifiedParams,
     MissingLinesParams,
-    RetryFragmentsParams,
+    RefineParams,
+    RetryAnalysisInvalidJsonParams,
+    RetryAnalysisMissingSectionsParams,
     RetryFragmentsFlexibleParams,
+    RetryFragmentsParams,
     RetryPunctuationParams,
     RetrySentenceParams,
+    TranslateParams,
 )
-
-from ..segmentation import Chunk, TranslatedChunk
 
 if TYPE_CHECKING:
     from ..glossary import Glossary
@@ -64,7 +65,7 @@ class TemplateRenderer:
     # -----------------------------------
     # 🔹 Rendu du template
     # -----------------------------------
-    def render_prompt(self, template_name: TemplateNames, **kwargs) -> str:
+    def render_prompt(self, template_name: TemplateNames, **kwargs: Any) -> str:
         """
         Rend un template Jinja2 avec les variables données.
 
@@ -368,8 +369,8 @@ class TemplateRenderer:
         self,
         chunk: "Chunk",
         target_language: str,
-        previous_translation: "TranslatedChunk | None",
         missing_indices: list[int],
+        previous_translation: "TranslatedChunk | None" = None,
     ) -> str:
         """
         Rend le template retry_sentence.jinja (Correction nombre de phrases).
@@ -430,47 +431,6 @@ class TemplateRenderer:
     # -----------------------------------
     # 🔹 Phase 0 : Analyse littéraire
     # -----------------------------------
-
-    def render_analyze_initial(
-        self,
-        chapter_name: str,
-        total_blocks: int,
-        block_text: str,
-        genre: str = "fiction",
-    ) -> str:
-        """
-        Rend le template analyze_chapter_initial.jinja (Phase 0 - Premier bloc d'analyse).
-
-        Ce template est utilisé pour initialiser l'analyse littéraire d'un chapitre
-        lors du traitement du premier bloc (~4000 tokens).
-
-        Génère une structure JSON complète avec status="in_progress" et blocks_analyzed=1.
-
-        Args:
-            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
-            total_blocks: Nombre total de blocs pour ce chapitre
-            block_text: Contenu textuel du premier bloc (~4000 tokens)
-            genre: Genre littéraire du livre (défaut: "fiction")
-
-        Returns:
-            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
-
-        Example:
-            >>> prompt = renderer.render_analyze_initial(
-            ...     chapter_name="Chapter 1",
-            ...     total_blocks=3,
-            ...     block_text="It was a dark and stormy night...",
-            ...     genre="fiction"
-            ... )
-            >>> json_output = llm.query(prompt, "", use_json_mode=True)
-        """
-        return self.render_prompt(
-            TemplateNames.Analyze_Initial,
-            chapter_name=chapter_name,
-            total_blocks=total_blocks,
-            block_text=block_text,
-            genre=genre,
-        )
 
     def render_analyze_incremental(
         self,
@@ -567,6 +527,131 @@ class TemplateRenderer:
             >>> # Attendu: {"chapters": [{"chapter_name": "Prologue", "files": [...]}]}
         """
         return self.render_prompt(
-            TemplateNames.Chapter_Grouping,
+            TemplateNames.Chapter_Grouping_Template,
             filenames=filenames,
+        )
+
+    def render_analyze_simplified(
+        self,
+        chapter_name: str,
+        target_language: str,
+    ) -> str:
+        """
+        Rend le template analyze_chapter_simplified.jinja (Phase 0 - Analyse simplifiée).
+
+        Ce nouveau template simplifié remplace les templates analyze_chapter_initial.jinja
+        et analyze_chapter_incremental.jinja pour réduire la complexité de ~67%.
+
+        Génère un ContexteTraduction avec :
+        - Analyse littéraire orientée traduction (pistes concrètes)
+        - Glossaire avec propositions de traduction directement exploitables
+        - Format JSON simplifié (12 champs vs 30+ dans ChapterAnalysis)
+
+        Args:
+            chunk: Chunk contenant le texte du chapitre à analyser
+            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
+            target_language: Langue cible pour les propositions de traduction
+
+        Returns:
+            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
+
+        Example:
+            >>> prompt = renderer.render_analyze_simplified(
+            ...     chunk=chapter_chunk,
+            ...     chapter_name="Chapter 1",
+            ...     target_language="français"
+            ... )
+            >>> json_output = llm.query(prompt, "", use_json_mode=True)
+            >>> # Attendu: {"chapitre": "Chapter 1", "analyse": {...}, "glossaire": [...]}
+        """
+        params: AnalyzeSimplifiedParams = {
+            "chapter_name": chapter_name,
+            "target_language": target_language,
+        }
+
+        return self.render_prompt(
+            TemplateNames.Analyze_Simplified_Template,
+            **params,
+        )
+
+    def render_retry_analysis_invalid_json(
+        self,
+        chapter_name: str,
+        target_language: str,
+        json_error_message: str,
+        invalid_response: str,
+    ) -> str:
+        """
+        Rend le template retry_correct_analysis_invalid_json.jinja.
+
+        Template de correction pour erreurs de syntaxe JSON lors de l'analyse littéraire.
+        Fournit des conseils détaillés sur la syntaxe JSON et les erreurs courantes.
+
+        Args:
+            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
+            target_language: Langue cible pour les propositions de traduction
+            json_error_message: Message d'erreur du JSONDecodeError
+            invalid_response: Réponse JSON invalide du LLM (sera tronquée à 500 chars dans template)
+
+        Returns:
+            Prompt de correction rendu prêt pour retry avec reasoning
+
+        Example:
+            >>> prompt = renderer.render_retry_analysis_invalid_json(
+            ...     chapter_name="Chapter 1",
+            ...     target_language="français",
+            ...     json_error_message="Expecting ',' delimiter: line 5 column 2",
+            ...     invalid_response='{"chapitre": "Chapter 1" "analyse": {...}}'
+            ... )
+        """
+
+        params: RetryAnalysisInvalidJsonParams = {
+            "chapter_name": chapter_name,
+            "target_language": target_language,
+            "json_error_message": json_error_message,
+            "invalid_response": invalid_response,
+        }
+
+        return self.render_prompt(
+            TemplateNames.Retry_Analysis_Invalid_Json_Template,
+            **params,
+        )
+
+    def render_retry_analysis_missing_sections(
+        self,
+        chapter_name: str,
+        target_language: str,
+        missing_sections: list[str],
+    ) -> str:
+        """
+        Rend le template retry_correct_analysis_missing_sections.jinja.
+
+        Template de correction pour sections manquantes dans l'analyse littéraire.
+        Liste les sections manquantes avec guidance pour chaque type de section.
+
+        Args:
+            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
+            target_language: Langue cible pour les propositions de traduction
+            missing_sections: Liste des sections manquantes (ex: ["analyse.resume_narratif", "glossaire[2].sexe"])
+
+        Returns:
+            Prompt de correction rendu prêt pour retry avec reasoning
+
+        Example:
+            >>> prompt = renderer.render_retry_analysis_missing_sections(
+            ...     chapter_name="Chapter 1",
+            ...     target_language="français",
+            ...     missing_sections=["analyse.resume_narratif", "glossaire[0].sexe"]
+            ... )
+        """
+
+        params: RetryAnalysisMissingSectionsParams = {
+            "chapter_name": chapter_name,
+            "target_language": target_language,
+            "missing_sections": missing_sections,
+        }
+
+        return self.render_prompt(
+            TemplateNames.Retry_Analysis_Missing_Sections_Template,
+            **params,
         )

@@ -9,6 +9,18 @@ des paramètres requis pour chaque template.
 from typing import TypedDict
 
 
+class AnalyzeSimplifiedParams(TypedDict):
+    """
+    Paramètres pour analyze_simplified.jinja (Analyse simplifiée du chapitre).
+
+    Attributes:
+        chapter_name: Nom du chapitre à analyser
+    """
+
+    chapter_name: str
+    target_language: str
+
+
 class TranslateParams(TypedDict):
     """
     Paramètres pour translate.jinja (Phase 1 - Traduction initiale).
@@ -144,3 +156,16 @@ class RetrySentenceParams(TypedDict):
     previous_translation: str
     missing_indices: str
     num_lines: int
+
+
+class RetryAnalysisInvalidJsonParams(TypedDict):
+    chapter_name: str
+    target_language: str
+    json_error_message: str
+    invalid_response: str
+
+
+class RetryAnalysisMissingSectionsParams(TypedDict):
+    chapter_name: str
+    target_language: str
+    missing_sections: list[str]

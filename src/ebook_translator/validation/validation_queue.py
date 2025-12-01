@@ -7,13 +7,13 @@ les chunks à valider aux ValidationWorkers.
 
 import queue
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..segmentation import Chunk, TranslatedChunk
     from ..pipeline.context import ChunkContext
+    from ..segmentation import Chunk, TranslatedChunk
 
 
 @dataclass
@@ -71,15 +71,16 @@ class SaveItem:
     """
 
     chunk: "Chunk"
-    final_translations: dict[int, str]
+    final_result: dict[int, str]
     source_files: dict[str, dict[str, str]]  # Clés de ligne sont des strings (JSON)
+    on_save: Callable[["SaveItem"], None] | None = None
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
         return (
             f"SaveItem(chunk={self.chunk.index}, "
             f"files={len(self.source_files)}, "
-            f"lines={len(self.final_translations)})"
+            f"lines={len(self.final_result)})"
         )
 
 
@@ -126,9 +127,7 @@ class ValidationQueue:
         Args:
             maxsize: Taille maximale de la queue (défaut: 100)
         """
-        self._queue: queue.Queue[Optional[ValidationItem]] = queue.Queue(
-            maxsize=maxsize
-        )
+        self._queue: queue.Queue[ValidationItem | None] = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._stats = ValidationQueueStats()
         self._in_progress = (
@@ -137,9 +136,9 @@ class ValidationQueue:
 
     def put(
         self,
-        item: Optional[ValidationItem],
+        item: ValidationItem | None,
         block: bool = True,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> None:
         """
         Ajoute un item à la queue.
@@ -160,8 +159,8 @@ class ValidationQueue:
         self._queue.put(item, block=block, timeout=timeout)
 
     def get(
-        self, block: bool = True, timeout: Optional[float] = None
-    ) -> Optional[ValidationItem]:
+        self, block: bool = True, timeout: float | None = None
+    ) -> ValidationItem | None:
         """
         Récupère un item depuis la queue.
 
@@ -288,16 +287,16 @@ class SaveQueue:
         Args:
             maxsize: Taille maximale de la queue (défaut: 100)
         """
-        self._queue: queue.Queue[Optional[SaveItem]] = queue.Queue(maxsize=maxsize)
+        self._queue: queue.Queue[SaveItem | None] = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._stats = {"saved": 0, "pending": 0, "errors": 0}
         self._in_progress = 0  # Items sortis de la queue mais pas encore sauvegardés
 
     def put(
         self,
-        item: Optional[SaveItem],
+        item: SaveItem | None,
         block: bool = True,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> None:
         """
         Ajoute un item à la queue de sauvegarde.
@@ -316,9 +315,7 @@ class SaveQueue:
 
         self._queue.put(item, block=block, timeout=timeout)
 
-    def get(
-        self, block: bool = True, timeout: Optional[float] = None
-    ) -> Optional[SaveItem]:
+    def get(self, block: bool = True, timeout: float | None = None) -> SaveItem | None:
         """
         Récupère un item depuis la queue.
 

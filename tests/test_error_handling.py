@@ -50,23 +50,15 @@ class TestParserErrorHandling:
 
         result = parse_llm_translation_output(output)
 
-        assert result == {
-            0: "Bonjour",
-            1: "Monde",
-            2: "Test"
-        }
+        assert result == {0: "Bonjour", 1: "Monde", 2: "Test"}
 
     def test_parse_with_fragment_separators(self):
-        """Test : Parsing avec séparateurs de fragments.</>.
-        """
+        """Test : Parsing avec séparateurs de fragments.</>."""
         output = "<0/>Hello</>World\n<1/>Foo</>Bar</>Baz\n[=[END]=]"
 
         result = parse_llm_translation_output(output)
 
-        assert result == {
-            0: "Hello</>World",
-            1: "Foo</>Bar</>Baz"
-        }
+        assert result == {0: "Hello</>World", 1: "Foo</>Bar</>Baz"}
 
     def test_parse_multiline_text(self):
         """Test : Parsing avec texte multilignes."""
@@ -91,10 +83,11 @@ class TestFragmentMismatchErrorMessage:
 
     def test_error_message_format(self):
         """Test : Vérifier que FragmentMismatchError est levée avec les bonnes données."""
-        from bs4 import BeautifulSoup, NavigableString
-        from src.ebook_translator.htmlpage.replacement import TextReplacer
+        from bs4 import BeautifulSoup
+        from bs4.element import NavigableString
         from src.ebook_translator.htmlpage import BilingualFormat
         from src.ebook_translator.htmlpage.exceptions import FragmentMismatchError
+        from src.ebook_translator.htmlpage.replacement import TextReplacer
 
         # Créer un faux fragment
         soup = BeautifulSoup("<p>Hello World</p>", "html.parser")
@@ -116,7 +109,7 @@ class TestFragmentMismatchErrorMessage:
                 fragments,
                 translated_text,
                 BilingualFormat.DISABLE,
-                original_text="Hello World"  # Passer le texte original
+                original_text="Hello World",  # Passer le texte original
             )
 
         error = exc_info.value
@@ -133,7 +126,7 @@ class TestFragmentMismatchErrorMessage:
 
         # Vérifier le message d'erreur basique
         error_msg = str(error)
-        assert ("mismatch" in error_msg.lower() or "Mismatch" in error_msg)
+        assert "mismatch" in error_msg.lower() or "Mismatch" in error_msg
         assert "2" in error_msg  # expected count
         assert "1" in error_msg  # actual count
 

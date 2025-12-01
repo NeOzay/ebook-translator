@@ -2,13 +2,20 @@
 Gestion des fichiers EPUB : lecture, métadonnées, extraction et reconstruction.
 """
 
+# pyright: reportUnknownArgumentType =false
+# pyright: reportUnknownMemberType =false
+# pyright: reportUnknownVariableType =false
+
 from typing import TYPE_CHECKING, Literal
 
 from bs4 import BeautifulSoup
-from ebooklib import epub, ITEM_DOCUMENT
+from ebooklib import ITEM_DOCUMENT, epub  # pyright: ignore[reportMissingTypeStubs]
 
 if TYPE_CHECKING:
-    from ebooklib.epub import EpubBook, EpubHtml
+    from ebooklib.epub import (  # pyright: ignore[reportMissingTypeStubs]
+        EpubBook,
+        EpubHtml,
+    )
 
 
 def copy_epub_metadata(
@@ -64,7 +71,7 @@ def extract_html_items_in_spine_order(
     html_items: dict[int, epub.EpubHtml] = {}
 
     for item in book.get_items():
-        if item.get_type() == ITEM_DOCUMENT:
+        if item.get_type() == ITEM_DOCUMENT and item.id in spine_order:
             # Insérer à la position correcte selon le spine
             insert_position = spine_order.index(item.id)
             html_items[insert_position] = item

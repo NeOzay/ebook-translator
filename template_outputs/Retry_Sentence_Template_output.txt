@@ -16,18 +16,80 @@ Ces lignes ont perdu du contenu par rapport à la traduction initiale (Phase 1).
 
 **Texte source (original) - SEULEMENT lignes invalides** :
 ```
-Line 1
-Line 2
-<3/>Original line 3
-<4/>Original line 4
+Copyright
+
+The Genius Prince’s Guide to Raising a Nation Out of Debt (Hey, How About Treason?) 1
+
+Toru Toba
+
+<3/>Translation by Jessica Lange
+
+<4/>Cover art by Falmaro
+
+This book is a work of fiction. Names, characters, places, and incidents are the product of the author’s imagination or are used fictitiously. Any resemblance to actual events, locales, or persons, living or dead, is coincidental.
+
+TENSAI OUJI NO AKAJI KOKKA SAISEI-JYUTSU~SOUDA, BAIKOKU SHIYOU~ volume 1
+
+Copyright © 2018 Toru Toba
+
+Illustrations copyright © 2018 Falmaro
+
+All rights reserved.
+
+Original Japanese edition published in 2018 by SB Creative Corp.
+
+This English edition is published by arrangement with SB Creative Corp., Tokyo in care of Tuttle-Mori Agency, Inc., Tokyo.
+
+English translation © 2019 by Yen Press, LLC
+
+Yen Press, LLC supports the right to free expression and the value of copyright. The purpose of copyright is to encourage writers and artists to produce the creative works that enrich our culture.
+
+The scanning, uploading, and distribution of this book without permission is a theft of the author’s intellectual property. If you would like permission to use material from the book (other than for review purposes), please contact the publisher. Thank you for your support of the author’s rights.
+
+Yen On
+
+150 West 30th Street, 19th Floor
+
+New York, NY 10001
+
+Visit us at </>yenpress.com
+
+facebook.com/yenpress
+
+twitter.com/yenpress
+
+yenpress.tumblr.com
+
+instagram.com/yenpress
+
+First Yen On Edition: September 2019
+
+Yen On is an imprint of Yen Press, LLC.
+
+The Yen On name and logo are trademarks of Yen Press, LLC.
+
+The publisher is not responsible for websites (or their content) that are not owned by the publisher.
+
+Library of Congress Cataloging-in-Publication Data
+
+Names: Toba, Toru, author. | Falmaro, illustrator. | Lange, Jessica (Translator), translator.
+
+Title: The genius prince’s guide to raising a nation out of debt (hey, how about treason?) / Toru Toba ; illustration by Falmaro ; translation by Jessica Lange.
+
+Other titles: Tensai ouji no akaji kokka saisei-jyutsu, souda, baikoku shiyou. English
+
+Description: First Yen On edition. | New York, NY : Yen On, 2019-
+
+Identifiers: LCCN 2019017156| ISBN 9781975385194 (v. 1 : pbk.)
+
+Subjects: LCSH: Princes—Fiction.
+
+Classification: LCC PL876.O25 T4613 2019 | DDC 895.6/36—dc23
 ```
 
 **Traduction initiale (Phase 1) - Pour référence** :
 ```
-Line 1
-Line 2
-<3/>Traduction ligne 3
-<4/>Traduction ligne 4
+
 ```
 
 **💡 Contexte** :
@@ -186,7 +248,9 @@ Texte source :
 ```
 → ERREUR : L'interruption narrative `she said` n'est plus encadrée par des guillemets
 
----### 🧾 Format de sortie :
+---
+
+### 🧾 Format de sortie :
 
 Tu dois produire ta traduction **en texte brut**, sans aucun commentaire, sans balise additionnelle et sans notes.
 À la toute fin de ta traduction, ajoute sur une ligne avec le marqueur `[=[END]=]`

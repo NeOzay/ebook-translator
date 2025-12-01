@@ -3,7 +3,6 @@ Parsing des sorties de traduction des LLM.
 """
 
 import re
-from typing import Optional
 
 
 def parse_llm_translation_output(output: str) -> dict[int, str]:

@@ -5,12 +5,13 @@ Ce module teste la stratégie à 2 niveaux pour la correction des erreurs
 de fragment_count : essai strict d'abord, puis flexible si échec.
 """
 
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
 from ebook_translator.checks import FragmentCountCheck, ValidationContext
-from ebook_translator.segment import Chunk
 from ebook_translator.config import TemplateNames
+from ebook_translator.segmentation import Chunk
 
 
 @pytest.fixture
@@ -176,16 +177,16 @@ class TestDifficultCases:
         mock_llm.query = Mock(
             side_effect=[
                 # Strict : 2 séparateurs (fusion layabouts+doing)
-                '« Que font ces fainéants </>?!</>Phufun ! »\n[=[END]=]',
+                "« Que font ces fainéants </>?!</>Phufun ! »\n[=[END]=]",
                 # Flexible : 3 séparateurs (positions libres naturelles)
-                '« Que font ces fainéants ?</> Phufun !</> Dis-moi ! »\n[=[END]=]',
+                "« Que font ces fainéants ?</> Phufun !</> Dis-moi ! »\n[=[END]=]",
             ]
         )
 
         context = ValidationContext(
             chunk=mock_chunk,
             translated_texts={
-                0: '« Que font ces fainéants </>?!</>Phufun ! Dis-moi ! »'
+                0: "« Que font ces fainéants </>?!</>Phufun ! Dis-moi ! »"
             },
             original_texts={
                 0: '"What are those layabouts </>doing</>?!</>Phufun! Tell me!"'

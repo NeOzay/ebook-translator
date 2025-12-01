@@ -5,10 +5,16 @@ Ce module orchestre l'exécution séquentielle des checks avec
 correction inline et retry automatique.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..logger import get_logger
-from .check_tests.base import Check, CheckResult, ValidationContext, ErrorData
+from .check_tests.base import (
+    Check,
+    CheckResult,
+    ErrorData,
+    FailedResult,
+    ValidationContext,
+)
 
 if TYPE_CHECKING:
     pass
@@ -52,7 +58,7 @@ class ValidationPipeline:
         ...     logger.error("Validation échouée", results)
     """
 
-    def __init__(self, checks: list[Check]):
+    def __init__(self, checks: list[Check[Any]]) -> None:
         """
         Initialise le pipeline avec une liste de checks.
 
@@ -65,11 +71,11 @@ class ValidationPipeline:
             ...     FragmentCountCheck(),  # Puis nombre de fragments
             ... ])
         """
-        self.checks = checks
+        self.checks: list[Check[ErrorData]] = checks
 
     def validate_and_correct(
         self, context: ValidationContext
-    ) -> tuple[bool, dict[int, str], list[CheckResult]]:
+    ) -> tuple[bool, dict[int, str], list[CheckResult[ErrorData]]]:
         """
         Valide et corrige les traductions avec pipeline strict.
 
@@ -107,7 +113,7 @@ class ValidationPipeline:
         """
         # Copier traductions actuelles (seront modifiées par corrections)
         current_translations: dict[int, str] = dict(context.translated_texts)
-        all_results: list[CheckResult] = []
+        all_results: list[CheckResult[ErrorData]] = []
 
         # Exécuter chaque check séquentiellement
         for check in self.checks:
@@ -122,7 +128,7 @@ class ValidationPipeline:
                 result = check.validate(context)
                 all_results.append(result)
 
-                if result.is_valid:
+                if result.status == "success":
                     # Check OK → passer au suivant
                     logger.debug(f"✅ {check.name}: OK (chunk {context.chunk.index})")
                     break  # Sortir de la boucle retry
@@ -208,7 +214,7 @@ class ValidationPipeline:
         )
         return True, current_translations, all_results
 
-    def validate_only(self, context: ValidationContext) -> list[CheckResult]:
+    def validate_only(self, context: ValidationContext) -> list[CheckResult[ErrorData]]:
         """
         Valide sans corriger (mode lecture seule).
 
@@ -237,13 +243,13 @@ class ValidationPipeline:
             >>> if any(not r.is_valid for r in results):
             ...     print("Cache invalide, retraduction nécessaire")
         """
-        results: list[CheckResult] = []
+        results: list[CheckResult[ErrorData]] = []
 
         for check in self.checks:
             result = check.validate(context)
             results.append(result)
 
-            if not result.is_valid:
+            if result.status == "failed":
                 logger.debug(
                     f"⚠️ {check.name} échoué (lecture seule): {result.error_message}"
                 )
@@ -253,10 +259,10 @@ class ValidationPipeline:
     def _build_filtered_lines(
         self,
         context: ValidationContext,
-        check: Check,
+        check: Check[ErrorData],
         invalid_indices: set[int],
         check_name: str,
-        result: CheckResult,
+        result: FailedResult[ErrorData],
     ) -> None:
         """
         Construit les FilteredLine pour chaque ligne invalide et les ajoute au contexte.

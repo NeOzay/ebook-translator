@@ -5,8 +5,8 @@ Gestionnaire de stores pour les phases.
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ebook_translator.stores.store import Store
 from ebook_translator.segmentation.segmentator import Chunk
+from ebook_translator.stores.store import Store
 
 if TYPE_CHECKING:
     from ebook_translator.pipeline.base import PhaseBase
@@ -32,7 +32,7 @@ class StoreManager:
         translation = manager.get_with_fallback(chunk, ["refined", "initial"])
     """
 
-    def __init__(self, cache_dir: Path, phases: list[type["PhaseBase"]]):
+    def __init__(self, cache_dir: Path, phases: list["PhaseBase"]):
         """
         Initialise le gestionnaire de stores.
 
@@ -70,32 +70,29 @@ class StoreManager:
             )
         return self._stores[phase_name]
 
-    def get_translate(self, phase_name: str, chunk: Chunk) -> dict[int, str] | None:
+    def get_translate(
+        self, phase_name: str, chunk: Chunk
+    ) -> tuple[dict[int, str], bool]:
         """
         Helper: lit la traduction d'un chunk depuis le store d'une phase.
 
         Args:
-            phase_name: Nom de la phase
-            chunk: Chunk dont on veut la traduction
+            - phase_name: Nom de la phase
+            - chunk: Chunk dont on veut la traduction
 
         Returns:
-            Mapping line_index -> translated_text, ou None si pas trouvé
+            Tuple contenant:
+            - Dictionnaire {line_index: texte_traduit ou chaine vide}
+            - Boolean indiquant si au moins une traduction est manquante
         """
         try:
             store = self.get_store(phase_name)
-            result: dict[int, str] = {}
 
-            # Itérer sur chaque ligne du body du chunk
-            for line_index, tag_key in enumerate(chunk.body.keys()):
-                source_file = tag_key.page.epub_html.file_name
-                translated = store.get(source_file, tag_key.index)
-                if translated is not None:
-                    result[line_index] = translated
-
-            # Retourner None si aucune traduction trouvée
-            return result if result else None
-        except KeyError:
-            return None
+            return store.get_from_chunk(chunk)
+        except Exception as e:
+            raise ValueError(
+                f"Error getting translation from phase '{phase_name}': {e}"
+            ) from e
 
     def get_with_fallback(
         self,
@@ -117,12 +114,12 @@ class StoreManager:
             Mapping line_index -> translated_text, ou None si pas trouvé
 
         Example:
-            # Lors de la reconstruction EPUB, essayer refined puis initial
+            Lors de la reconstruction EPUB, essayer refined puis initial
             translation = manager.get_with_fallback(chunk, ["refined", "initial"])
         """
         for phase_name in phase_order:
-            result = self.get_translate(phase_name, chunk)
-            if result is not None:
+            result, has_missing = self.get_translate(phase_name, chunk)
+            if not has_missing:
                 return result
         return None
 

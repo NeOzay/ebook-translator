@@ -32,19 +32,15 @@ Exports publics :
 """
 
 # Constantes
-from ..constants import (
-    FRAGMENT_SEPARATOR,
-    VALID_ROOT_TAGS,
-    IGNORED_TAGS,
-)
-
-# Classes principales
-from .tag_key import TagKey
+from ..constants import FRAGMENT_SEPARATOR, IGNORED_TAGS, VALID_ROOT_TAGS
 from .bilingual import BilingualFormat
 from .page import HtmlPage, get_texts
 
 # Fonctions utilitaires
 from .replacement import find_root_tag
+
+# Classes principales
+from .tag_key import TagKey
 
 __all__ = [
     # Constantes

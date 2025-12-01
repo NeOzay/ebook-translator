@@ -19,17 +19,18 @@ Bénéfices:
 
 import threading
 import time
-from typing import TYPE_CHECKING, Literal, Callable, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from ..logger import get_logger
-from .validation_queue import ValidationQueue, ValidationItem, SaveQueue
-from .validation_worker import ValidationWorker
 from .save_worker import SaveWorker
+from .validation_queue import SaveQueue, ValidationItem, ValidationQueue
+from .validation_worker import ValidationWorker
 
 if TYPE_CHECKING:
+    from ebook_translator.pipeline.base import PhaseBase
+
     from ..checks import ValidationPipeline
     from ..llm import LLM
-    from ..segmentation.segmentator import Chunk
     from ..stores.store import Store
 
 logger = get_logger(__name__)
@@ -105,9 +106,8 @@ class ValidationWorkerPool:
         store: "Store",
         llm: "LLM",
         target_language: str,
-        phase: str,
+        phase: "PhaseBase",
         max_retries: int = 1,
-        on_validated: Callable[["Chunk", dict[int, str]], None] | None = None,
     ):
         """
         Initialise le pool de workers.
@@ -134,7 +134,6 @@ class ValidationWorkerPool:
         self.save_worker = SaveWorker(
             save_queue=self.save_queue,
             store=store,
-            on_validated=on_validated,  # Callback géré par SaveWorker
             stop_event=self._stop_event,  # Signal d'arrêt partagé
         )
 
@@ -207,6 +206,15 @@ class ValidationWorkerPool:
     def wait_completion(self):
         """
         Attend que tous les chunks soumis soient validés ET sauvegardés.
+        """
+
+        # Attendre que validation_queue et save_queue soient idle (vide + aucun en cours)
+        while not self.validation_queue.is_idle() or not self.save_queue.is_idle():
+            time.sleep(1)
+
+    def stop(self):
+        """
+        Attend que tous les chunks soumis soient validés ET sauvegardés.
 
         Flux d'arrêt:
         1. Attendre que validation_queue soit idle (toutes validations terminées)
@@ -221,13 +229,12 @@ class ValidationWorkerPool:
         logger.info("Attente de la fin de la validation...")
 
         # 1. Attendre que validation_queue et save_queue soient idle (vide + aucun en cours)
-        while not self.validation_queue.is_idle() or not self.save_queue.is_idle():
-            time.sleep(1)
+        self.wait_completion()
 
         logger.debug("Queue de validation idle, signal d'arrêt à TOUS les workers")
-
-        # 2. Signaler arrêt à TOUS les workers via Event (instantané, fiable)
         self._stop_event.set()
+
+        logger.warning("Arrêt immédiat du ValidationWorkerPool demandé")
 
         # 3. Attendre fin de tous les ValidationWorkers
         for thread in self.threads:
@@ -249,57 +256,31 @@ class ValidationWorkerPool:
 
         logger.info("ValidationWorkerPool terminé (validation + sauvegarde)")
 
-    def switch_pipeline(self, pipeline: "ValidationPipeline") -> None:
+    def switch_phase(self, phase: "PhaseBase", store: "Store") -> None:
         """
-        Change le pipeline de validation pour tous les ValidationWorkers.
+        Change la phase de tous les workers (Validation + Save).
 
         Args:
-            pipeline: Nouveau ValidationPipeline à utiliser
+            phase: Nouvelle classe de phase
+            store: Nouveau store associé à cette phase
+        Note:
+            Ne peut être appelé que si la validation_queue est idle
         """
         if not self.validation_queue.is_idle():
             logger.error(
-                "Impossible de changer le pipeline: la validation_queue n'est pas idle"
-            )
-            raise RuntimeError(
-                "Cannot switch pipeline while validation_queue is not idle"
-            )
-
-        for worker in self.workers:
-            worker.pipeline = pipeline
-        logger.debug("Pipeline de validation changé pour tous les workers")
-
-    def switch_store(self, store: "Store") -> None:
-        """
-        Change le store de sauvegarde pour le SaveWorker.
-
-        Args:
-            store: Nouveau Store à utiliser
-        """
-        if not self.save_queue.is_idle():
-            logger.error("Impossible de changer le store: la save_queue n'est pas idle")
-            raise RuntimeError("Cannot switch store while save_queue is not idle")
-
-        self.save_worker.store = store
-        logger.debug("Store de sauvegarde changé pour le SaveWorker")
-
-    def switch_name(self, phase: str) -> None:
-        """
-        Change le nom de la phase pour tous les ValidationWorkers.
-
-        Args:
-            phase: Nouveau nom de phase à utiliser
-        """
-        if not self.validation_queue.is_idle():
-            logger.error(
-                "Impossible de changer le nom de phase: la validation_queue n'est pas idle"
+                "Impossible de changer de phase: la validation_queue n'est pas idle"
             )
             raise RuntimeError(
                 "Cannot switch phase name while validation_queue is not idle"
             )
 
+        pipeline = phase.validation_pipeline()
+
         for worker in self.workers:
             worker.phase = phase
-        logger.debug("Nom de la phase changé pour tous les workers")
+            worker.pipeline = pipeline
+        self.save_worker.store = store
+        logger.debug("Changement de phase effectué dans ValidationWorkerPool")
 
     def get_statistics(self) -> ValidationPoolStats:
         """

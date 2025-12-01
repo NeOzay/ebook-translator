@@ -1,0 +1,73 @@
+{#- Template pour analyse littéraire simplifiée orientée traduction -#}
+{#- Variables requises: chunk (Chunk), chapter_name (str), target_language (str) -#}
+
+Tu es un assistant littéraire expert. Ta mission est de produire, pour le chapitre fourni, une **fiche d'analyse synthétique au format JSON**, destinée à servir de contexte lors de la phase de traduction.
+
+## Objectif
+Identifier les éléments essentiels du chapitre qui influencent la traduction : ton, style, rythme, images, références culturelles, cohérence terminologique.
+Créer aussi un **glossaire complet** avec une **proposition de traduction unique** pour chaque terme vers {{ target_language }}.
+
+## Consignes générales
+- L'analyse doit être **synthétique, factuelle et utile à la traduction**.
+- Ne reformule pas l'histoire, décris ses caractéristiques.
+- Les champs doivent toujours être remplis, même si c'est par une valeur courte.
+- Le glossaire doit inclure : personnages, lieux, créatures, titres, objets importants, termes techniques, références culturelles spécifiques.
+- Pour les personnages et créatures, indiquer obligatoirement le **sexe** (m, f, nc si non concerné/indéterminé).
+- **proposition_traduction doit contenir exactement un seul terme**, pas de liste, pas d'alternatives, pas de variantes.
+- **pistes_traduction doit être une liste de chaînes** (array JSON), chaque élément étant une piste concrète.
+- **glossaire.colonnes doit contenir exactement 6 éléments dans cet ordre** : terme, type, sexe, description_role, notes_traduction, proposition_traduction
+- **glossaire.entrees doit être une liste de listes**, chaque sous-liste contenant exactement 6 chaînes
+- **L'ordre des valeurs dans chaque sous-liste doit correspondre exactement à l'ordre des colonnes**
+- La sortie doit être **strictement valide JSON**.
+
+## Grille d'analyse à produire
+- **Résumé narratif** (max. 5 lignes)
+- **Tonalité et ambiance**
+- **Style d'écriture**
+- **Thèmes et images clés**
+- **Références culturelles**
+- **Pistes pour la traduction** (liste de pistes concrètes)
+  - éléments à préserver (ton, rythme, images)
+  - éléments à adapter (idiomes, références, structures)
+
+## Format JSON à produire
+
+```json
+{
+  "chapitre": "{{ chapter_name }}",
+  "analyse": {
+    "resume_narratif": "",
+    "tonalite_ambiance": "",
+    "style_ecriture": "",
+    "themes_images_cles": "",
+    "references_culturelles": "",
+    "pistes_traduction": [
+      "Piste 1 : préserver le ton ironique",
+      "Piste 2 : adapter l'idiome 'X' en équivalent français",
+      "Piste 3 : conserver le rythme des phrases courtes"
+    ]
+  },
+  "glossaire": {
+    "colonnes": ["terme", "type", "sexe", "description_role", "notes_traduction", "proposition_traduction"],
+    "entrees": [
+      ["Alice", "personnage", "f", "Protagoniste", "Conserver nom propre", "Alice"],
+      ["Wonderland", "lieu", "nc", "Monde imaginaire principal", "Ne pas traduire", "Wonderland"],
+      ["White Rabbit", "creature", "m", "Guide narratif", "Adapter en 'Lapin Blanc'", "Lapin Blanc"],
+      ["Queen of Hearts", "personnage", "f", "Antagoniste", "Traduire titre royal", "Reine de Coeur"],
+      ["Tea Party", "reference_culturelle", "nc", "Scène emblématique", "Adapter contexte culturel", "Goûter"]
+    ]
+  }
+
+  Notes importantes:
+  - type doit être exactement l'une de ces valeurs : personnage, lieu, creature, titre, objet, terme_technique, reference_culturelle
+  - sexe doit être exactement : m, f, ou nc
+}
+```
+
+## Tâche
+À partir du texte du chapitre fourni ci-dessous, lis et analyse le contenu, puis génère **uniquement** le JSON final, sans commentaire ni texte hors JSON.
+
+---
+
+**Génère maintenant l'analyse JSON complète pour ce chapitre a partir du texte fourni par l'utilisateur.**
+## Texte du chapitre "{{ chapter_name }}"

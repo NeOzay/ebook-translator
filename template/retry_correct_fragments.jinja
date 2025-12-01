@@ -2,7 +2,7 @@
 RETRY_CORRECT_FRAGMENTS.JINJA - Fix Fragment Count (STRICT)
 
 Purpose: Correct translations with wrong `</>` separator count.
-         STRICT mode: Same count AND same positions.
+STRICT mode: Same count AND same positions.
 
 Input: Original + incorrect translation
 Output: Corrected translation with exact separator count/positions
@@ -13,7 +13,6 @@ This template uses common correction rules from:
 {#- ========================================
 SECTION 1 : ANALYSE DE L'ERREUR
 ======================================== #}
-
 ⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de séparateurs `</>`.
 
 Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté la structure du texte original.
@@ -50,7 +49,7 @@ INCLUDE COMMON CORRECTION RULES
 SECTION : FRAGMENT CORRECTION SPECIFIC (STRICT)
 ======================================== #}
 
-{% if expected_separators == 0 %}
+{% if expected_separators == 0 -%}
 
 ## ✅ RÈGLE : Texte CONTINU (AUCUN séparateur)
 
@@ -92,34 +91,38 @@ Tu dois **conserver EXACTEMENT ces séparateurs** aux mêmes positions relatives
 {% if expected_separators == 1 %}
 **Exemple : 1 séparateur (position milieu)**
 ```
-Original : <0/>She smiled, but </>her eyes </>betrayed her feelings.
+Original :
+<0 />She smiled, but </>her eyes </>betrayed her feelings.
 ```
 
 ✅ **CORRECT** (1 séparateur conservé) :
 ```
-<0/>Elle sourit, mais </>ses yeux </>trahissaient ses sentiments.
+<0 />Elle sourit, mais </>ses yeux </>trahissaient ses sentiments.
 ```
 
 ❌ **INCORRECT** (séparateurs supprimés) :
 ```
-<0/>Elle sourit, mais ses yeux trahissaient ses sentiments.
+<0 />Elle sourit, mais ses yeux trahissaient ses sentiments.
 ```
 {% elif expected_separators >= 2 %}
 **Exemple : Plusieurs séparateurs**
 ```
-Original : <0/>Text with </>multiple</> </>separators</>.
+Original :
+<0 />Text with </>multiple</>
+</>separators</>.
 ```
 
 ✅ **CORRECT** (tous séparateurs préservés) :
 ```
-<0/>Texte avec </>plusieurs</> </>séparateurs</>.
+<0 />Texte avec </>plusieurs</>
+</>séparateurs</>.
 ```
 
 ❌ **INCORRECT** (séparateurs manquants) :
 ```
-<0/>Texte avec plusieurs séparateurs.
+<0 />Texte avec plusieurs séparateurs.
 ```
-{% endif %}
+{% endif -%}
 
 ---
 

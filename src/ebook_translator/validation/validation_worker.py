@@ -7,18 +7,34 @@ applique le pipeline de validation, et envoie vers SaveQueue si validé.
 
 import queue
 import threading
-import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from ..checks import ValidationContext, ValidationPipeline
 from ..logger import get_logger
-from .validation_queue import ValidationItem, ValidationQueue, SaveQueue, SaveItem
+from .validation_queue import SaveItem, SaveQueue, ValidationItem, ValidationQueue
 
 if TYPE_CHECKING:
+    from ebook_translator.pipeline.base import PhaseBase
+
     from ..llm import LLM
     from ..segmentation.segmentator import Chunk
 
 logger = get_logger(__name__)
+
+
+def default_save_item_builder(
+    chunk: "Chunk",
+    final_result: dict[int, str],
+) -> SaveItem:
+    # Préparer SaveItem pour sauvegarde asynchrone
+    from ..translation.engine import build_translation_map
+
+    translation_map = build_translation_map(chunk, final_result)
+    return SaveItem(
+        chunk=chunk,
+        final_result=final_result,
+        source_files=translation_map,
+    )
 
 
 class ValidationWorker:
@@ -63,7 +79,7 @@ class ValidationWorker:
         pipeline: ValidationPipeline,
         llm: "LLM",
         target_language: str,
-        phase: str,
+        phase: "PhaseBase",
         stop_event: threading.Event,
         max_retries: int = 1,
     ):
@@ -173,16 +189,11 @@ class ValidationWorker:
         )
 
         if success:
-            # Préparer SaveItem pour sauvegarde asynchrone
-            from ..translation.engine import build_translation_map
-
-            translation_map = build_translation_map(chunk, final_translations)
-            save_item = SaveItem(
-                chunk=chunk,
-                final_translations=final_translations,
-                source_files=translation_map,
+            # Construire SaveItem
+            save_item = self.phase.save_item_builder(
+                chunk,
+                final_translations,
             )
-
             # Envoyer vers SaveQueue (SaveWorker s'en occupera)
             self.save_queue.put(save_item)
 
@@ -222,7 +233,7 @@ class ValidationWorker:
             self.validation_queue.mark_rejected()
 
             # Logger les erreurs détaillées
-            failed_checks = [r for r in results if not r.is_valid]
+            failed_checks = [r for r in results if r.status != "success"]
             error_summary = "\n".join(f"  • {r}" for r in failed_checks)
 
             logger.error(

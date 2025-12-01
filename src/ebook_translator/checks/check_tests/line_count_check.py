@@ -6,11 +6,18 @@ et corrige automatiquement en retranslant uniquement les lignes manquantes.
 """
 
 import re
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING
 
 from ...logger import get_logger
-from .base import Check, CheckResult, ValidationContext, LineCountErrorData, ErrorData
 from ..retry_helper import retry_with_reasoning
+from .base import (
+    Check,
+    CheckResult,
+    FailedResult,
+    LineCountErrorData,
+    SuccessResult,
+    ValidationContext,
+)
 
 if TYPE_CHECKING:
     pass
@@ -41,7 +48,7 @@ def count_expected_lines(content: str) -> int:
 def validate_retry_indices(
     retry_translations: dict[int, str],
     expected_indices: list[int],
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Valide que le retry a fourni exactement les indices demandés.
 
@@ -102,7 +109,7 @@ def validate_retry_indices(
     return False, "\n".join(error_parts)
 
 
-class LineCountCheck(Check):
+class LineCountCheck(Check[LineCountErrorData]):
     """
     Vérifie que toutes les lignes ont été traduites.
 
@@ -125,7 +132,7 @@ class LineCountCheck(Check):
         """Nom unique du check."""
         return "line_count"
 
-    def validate(self, context: ValidationContext) -> CheckResult:
+    def validate(self, context: ValidationContext) -> CheckResult[LineCountErrorData]:
         """
         Valide que toutes les lignes ont été traduites.
 
@@ -152,7 +159,7 @@ class LineCountCheck(Check):
         actual_count = len(context.translated_texts)
 
         if expected_count == actual_count:
-            return CheckResult(is_valid=True, check_name=self.name)
+            return SuccessResult(check_name=self.name)
 
         # Trouver les lignes manquantes
         expected_indices = set(context.original_texts.keys())
@@ -162,21 +169,17 @@ class LineCountCheck(Check):
         error_message = (
             f"Lignes manquantes: {len(missing_indices)}/{expected_count}\n"
             f"  • Indices: {missing_indices[:10]}"
-            + (
-                f"... (+{len(missing_indices) - 10} autres)"
-                if len(missing_indices) > 10
-                else ""
-            )
+        )
+        if len(missing_indices) > 10:
+            error_message += f"... (+{len(missing_indices) - 10} autres)"
+
+        error_data = LineCountErrorData(
+            missing_indices=missing_indices,
+            expected_count=expected_count,
+            actual_count=actual_count,
         )
 
-        error_data: LineCountErrorData = {
-            "missing_indices": missing_indices,
-            "expected_count": expected_count,
-            "actual_count": actual_count,
-        }
-
-        return CheckResult(
-            is_valid=False,
+        return FailedResult(
             check_name=self.name,
             error_message=error_message,
             error_data=error_data,
@@ -215,7 +218,7 @@ class LineCountCheck(Check):
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        missing_indices = error_data["missing_indices"]
+        missing_indices = error_data.missing_indices
 
         logger.info(
             f"[LineCountCheck] Correction de {len(missing_indices)} lignes "
@@ -265,7 +268,7 @@ class LineCountCheck(Check):
             context=context,
             render_prompt=render_prompt,
             validate_result=validate_result,
-            context_name=f"missing_lines",
+            context_name="missing_lines",
             max_attempts=2,
         )
 
@@ -286,7 +289,7 @@ class LineCountCheck(Check):
         return result
 
     def get_invalid_lines(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: LineCountErrorData
     ) -> set[int]:
         """
         Identifie les lignes manquantes comme invalides.
@@ -303,8 +306,7 @@ class LineCountCheck(Check):
             >>> invalid = check.get_invalid_lines(context, error_data)
             >>> # invalid = {5, 10, 15}
         """
-        typed_error_data = cast(LineCountErrorData, error_data)
-        return set(typed_error_data["missing_indices"])
+        return set(error_data.missing_indices)
 
-    def build_filter_reason(self, line_idx, error_data):
+    def build_filter_reason(self, line_idx: int, error_data: LineCountErrorData) -> str:
         return "Ligne manquante après correction"

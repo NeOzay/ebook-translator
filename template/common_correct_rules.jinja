@@ -30,20 +30,6 @@ CORRECTION PHILOSOPHY
 
 ---
 {#- ========================================
-ERROR CONTEXT PRESENTATION
-======================================== #}
-
-## 📊 Présentation de l'erreur
-
-Chaque correction doit afficher :
-
-1. **Texte original** : Le texte source pour référence
-2. **Traduction incorrecte** : La tentative qui a échoué
-3. **Erreur quantifiée** : Nombres explicites (Attendu: X, Reçu: Y)
-4. **Cause probable** : Pourquoi l'erreur s'est produite (fusion, division, décalage, etc.)
-
----
-{#- ========================================
 TAG HANDLING (SAME AS TRANSLATE)
 ======================================== #}
 
@@ -91,31 +77,8 @@ VERIFICATION CHECKLIST
 3. **Contenu préservé** : Pas de changement de sens par rapport à la traduction incorrecte
 4. **Qualité maintenue** : Vocabulaire et style de la traduction incorrecte conservés
 
-### Vérifications spécifiques (ajoutées par chaque template)
-{# Chaque template spécifique ajoutera ses propres vérifications :
+### Vérifications spécifiques
+{#- Chaque template spécifique ajoutera ses propres vérifications :
    - retry_correct_fragments.jinja : Compter les `</>`
    - retry_correct_punctuation.jinja : Compter les paires `« »`
-#}
-
----
-{#- ========================================
-EXAMPLE STRUCTURE
-======================================== #}
-
-## 💡 Structure des exemples
-
-Chaque correction doit fournir des exemples au format suivant :
-
-✅ **CORRECT** :
-```
-<Output qui corrige l'erreur>
-```
-
-❌ **INCORRECT** :
-```
-<Output qui répète la même erreur>
-```
-
-**Explication** : Pourquoi la version correcte résout le problème
-
----
+-#}

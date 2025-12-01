@@ -16,6 +16,7 @@ Notes d'implémentation:
     - La recherche se fait d'abord par index, puis par texte original si disponible
 """
 
+import contextlib
 import hashlib
 import json
 import os
@@ -23,14 +24,13 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..logger import get_logger
 
-
 if TYPE_CHECKING:
+    from ..htmlpage import HtmlPage, TagKey
     from ..segmentation.segmentator import Chunk
-    from ..htmlpage import TagKey, HtmlPage
 
 logger = get_logger(__name__)
 
@@ -138,14 +138,14 @@ class Store:
             try:
                 # Lire le contenu, puis fermer explicitement avant de parser
                 # Cela garantit que le fichier est fermé au niveau OS avant de retourner
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, encoding="utf-8") as f:
                     content = f.read()
 
                 # Parser après fermeture du fichier
                 data: dict[str, str] = json.loads(content)
                 return data
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 logger.error(f"⚠️  Erreur lecture cache {cache_file.name}: {e}")
                 return {}
             except json.JSONDecodeError as e:
@@ -213,14 +213,12 @@ class Store:
                         # Micro-délai pour laisser Windows libérer le verrou
                         time.sleep(0.01)  # 10ms
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 logger.error(f"❌ Erreur sauvegarde cache {cache_file.name}: {e}")
                 # Nettoyer le fichier temporaire si nécessaire
                 if temp_file.exists():
-                    try:
+                    with contextlib.suppress(Exception):
                         temp_file.unlink()
-                    except Exception:
-                        pass
                 raise  # Re-lever car c'est critique
 
     def save(
@@ -241,7 +239,7 @@ class Store:
             >>> store = Store()
             >>> store.save("file.html", 0, "Bonjour")
         """
-        cache_file = self._get_cache_file(source_file)
+        cache_file: Path = self._get_cache_file(source_file)
         data = self._load_cache(cache_file)
         data[line_index] = translated_text
         self._save_cache(cache_file, data)
@@ -267,7 +265,7 @@ class Store:
         self,
         source_file: str,
         line_index: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Récupère une traduction depuis le disque.
 
@@ -287,13 +285,13 @@ class Store:
         data = self._load_cache(cache_file)
 
         # Essayer d'abord par index
-        return data.get(line_index)
+        return data.get(line_index, None)
 
     def get_all(
         self,
         source_file: str,
         line_indices: list[str],
-    ) -> dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """
         Récupère plusieurs traductions depuis le disque.
 
@@ -312,28 +310,27 @@ class Store:
         cache_file = self._get_cache_file(source_file)
         data = self._load_cache(cache_file)
 
-        result: dict[str, Optional[str]] = {}
+        result: dict[str, str | None] = {}
         for idx in line_indices:
             result[idx] = data.get(idx)
 
         return result
 
     def get_from_chunk(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
-        """
-        Récupère les traductions pour tous les textes du body d'un chunk.
+        """Récupère les traductions pour tous les textes du body d'un chunk.
 
-        Utilise la méthode chunk.fetch() pour parcourir efficacement les fichiers
+        Utilise la méthode `chunk.fetch()` pour parcourir efficacement les fichiers
         et leurs textes associés, en utilisant l'index du TagKey comme clé.
 
         Args:
-            chunk: Le chunk contenant les textes à traduire
+            chunk (Chunk): Le chunk contenant les textes à traduire.
 
         Returns:
-            Tuple contenant:
-            - Dictionnaire {line_index: texte_traduit ou None}
-            - Boolean indiquant si au moins une traduction est manquante
+            Tuple[Dict[int, str], bool]: Un tuple contenant:
+            - Un dictionnaire `{line_index: texte_traduit ou chaine vide}`.
+            - Un booléen indiquant si au moins une traduction est manquante.
 
-        Example:
+        Examples:
             >>> store = Store()
             >>> translations, has_missing = store.get_from_chunk(chunk)
             >>> if has_missing:
@@ -341,13 +338,14 @@ class Store:
         """
         result: dict[int, str] = {}
         has_missing = False
-        index = 0
 
         # Cache des traductions par fichier pour éviter les rechargements
         # Stocke le dictionnaire de traductions pour chaque fichier source
         file_cache: dict[str, dict[str, str]] = {}
 
-        for html_page, tag_key, original_text in chunk.fetch_body():
+        for index, (html_page, tag_key, _original_text) in enumerate(
+            chunk.fetch_body()
+        ):
             source_path = html_page.epub_html.file_name
 
             # Charger les traductions du fichier si pas encore en cache
@@ -361,7 +359,6 @@ class Store:
             result[index] = translated or ""
             if translated is None:
                 has_missing = True
-            index += 1
 
         return result, has_missing
 
@@ -382,7 +379,7 @@ class Store:
         # Stocke le dictionnaire de traductions pour chaque fichier source
         file_cache: dict[str, dict[str, str]] = {}
 
-        for html_page, tag_key, original_text in chunk.fetch_all():
+        for html_page, tag_key, _original_text in chunk.fetch_all():
             source_path = html_page.epub_html.file_name
 
             # Charger les traductions du fichier si pas encore en cache

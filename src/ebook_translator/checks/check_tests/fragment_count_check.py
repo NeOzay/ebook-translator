@@ -6,27 +6,23 @@ texte original et traduit, et corrige automatiquement en retranslant
 les lignes problématiques avec un prompt strict.
 """
 
-from typing import cast
-
+from ...constants import FRAGMENT_SEPARATOR
 from ...logger import get_logger
+from ..retry_helper import retry_with_reasoning
 from .base import (
     Check,
     CheckResult,
-    ValidationContext,
-    ErrorData,
+    FailedResult,
     FragmentCountErrorData,
     FragmentErrorDetail,
+    SuccessResult,
+    ValidationContext,
 )
-
-from ...constants import FRAGMENT_SEPARATOR
-
-from ..retry_helper import retry_with_reasoning
-
 
 logger = get_logger(__name__)
 
 
-class FragmentCountCheck(Check):
+class FragmentCountCheck(Check[FragmentCountErrorData]):
     """
     Vérifie que le nombre de fragments </> correspond.
 
@@ -53,7 +49,9 @@ class FragmentCountCheck(Check):
         """Nom unique du check."""
         return "fragment_count"
 
-    def validate(self, context: ValidationContext) -> CheckResult:
+    def validate(
+        self, context: ValidationContext
+    ) -> CheckResult[FragmentCountErrorData]:
         """
         Valide que le nombre de fragments correspond pour chaque ligne.
 
@@ -82,7 +80,7 @@ class FragmentCountCheck(Check):
                 "actual_fragments": 1,
             }
         """
-        errors = []
+        errors: list[FragmentErrorDetail] = []
 
         # Vérifier chaque paire (original, traduit)
         for line_idx, translated_text in context.translated_texts.items():
@@ -107,7 +105,7 @@ class FragmentCountCheck(Check):
                 errors.append(error_detail)
 
         if not errors:
-            return CheckResult(is_valid=True, check_name=self.name)
+            return SuccessResult(check_name=self.name)
 
         # Construire message d'erreur
         first_error = errors[0]
@@ -123,17 +121,16 @@ class FragmentCountCheck(Check):
             f"    - Type: {text_type}"
         )
 
-        error_data: FragmentCountErrorData = {"errors": errors}
+        error_data = FragmentCountErrorData(errors=errors)
 
-        return CheckResult(
-            is_valid=False,
+        return FailedResult(
             check_name=self.name,
             error_message=error_message,
             error_data=error_data,
         )
 
     def correct(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: FragmentCountErrorData
     ) -> dict[int, str]:
         """
         Corrige en retranslant les lignes avec mauvais nombre de fragments.
@@ -171,9 +168,7 @@ class FragmentCountCheck(Check):
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        # Type narrowing: on sait que error_data est FragmentCountErrorData
-        typed_error_data = cast(FragmentCountErrorData, error_data)
-        errors = typed_error_data["errors"]
+        errors = error_data.errors
         result = dict(context.translated_texts)
 
         logger.info(
@@ -195,7 +190,14 @@ class FragmentCountCheck(Check):
             # Récupérer la traduction incorrecte actuelle
             incorrect_translation = context.translated_texts.get(line_idx, "")
 
-            def render_prompt(attempt: int, use_reasoning: bool) -> str:
+            def render_prompt(
+                attempt: int,
+                use_reasoning: bool,
+                original_text: str = original_text,
+                incorrect_translation: str = incorrect_translation,
+                expected_separators: int = expected_separators,
+                actual_separators: int = actual_separators,
+            ) -> str:
                 # Le paramètre use_reasoning est passé mais non utilisé ici
                 # car le même template est utilisé pour les deux tentatives
                 if context.llm is None:
@@ -212,7 +214,11 @@ class FragmentCountCheck(Check):
                 )
 
             # Fonction de validation
-            def validate_result(llm_output: str) -> bool:
+            def validate_result(
+                llm_output: str,
+                expected_separators: int = expected_separators,
+                line_idx: int = line_idx,
+            ) -> bool:
                 try:
                     corrected_line = parse_llm_translation_output("<0/>" + llm_output)
                     if 0 not in corrected_line:
@@ -251,7 +257,7 @@ class FragmentCountCheck(Check):
         return result
 
     def get_invalid_lines(
-        self, context: ValidationContext, error_data: ErrorData
+        self, context: ValidationContext, error_data: FragmentCountErrorData
     ) -> set[int]:
         """
         Identifie les lignes avec mauvais nombre de fragments comme invalides.
@@ -273,12 +279,14 @@ class FragmentCountCheck(Check):
             >>> invalid = check.get_invalid_lines(context, error_data)
             >>> # invalid = {5, 10}
         """
-        typed_error_data = cast(FragmentCountErrorData, error_data)
-        return {error["line_idx"] for error in typed_error_data["errors"]}
 
-    def build_filter_reason(self, line_idx, error_data: FragmentCountErrorData):
+        return {error["line_idx"] for error in error_data.errors}
+
+    def build_filter_reason(
+        self, line_idx: int, error_data: FragmentCountErrorData
+    ) -> str:
         # Chercher détails dans error_data
-        for err in error_data["errors"]:
+        for err in error_data.errors:
             if err.get("line_idx") == line_idx:
                 expected = err.get("expected_fragments", "?")
                 actual = err.get("actual_fragments", "?")

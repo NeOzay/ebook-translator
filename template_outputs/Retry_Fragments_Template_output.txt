@@ -1,5 +1,4 @@
 
-
 ⚠️ ATTENTION : Votre précédente traduction contenait un nombre INCORRECT de séparateurs `</>`.
 
 Tu es un traducteur professionnel. Ta tâche précédente a échoué car tu n'as pas respecté la structure du texte original.
@@ -16,9 +15,9 @@ Texte avec séparateur
 
 ❌ **ERREUR DÉTECTÉE** :
 - Séparateurs `</>` attendus : 2
-- Séparateurs `</>` dans ta traduction : 0
+- Séparateurs `</>` dans ta traduction : 3
 
-💡 Le texte original contient **2 séparateur(s)**, mais ta traduction n'en contient aucun.
+💡 Tu as ajouté **trop de séparateurs** (1 en trop).
 
 ---
 
@@ -36,17 +35,6 @@ Texte avec séparateur
 - ❌ Un ajout ou suppression de contenu
 
 **Objectif** : Corriger UNIQUEMENT l'erreur structurelle spécifique, rien d'autre.
-
----
-
-## 📊 Présentation de l'erreur
-
-Chaque correction doit afficher :
-
-1. **Texte original** : Le texte source pour référence
-2. **Traduction incorrecte** : La tentative qui a échoué
-3. **Erreur quantifiée** : Nombres explicites (Attendu: X, Reçu: Y)
-4. **Cause probable** : Pourquoi l'erreur s'est produite (fusion, division, décalage, etc.)
 
 ---
 
@@ -88,28 +76,7 @@ Utilise strictement la structure suivante :
 3. **Contenu préservé** : Pas de changement de sens par rapport à la traduction incorrecte
 4. **Qualité maintenue** : Vocabulaire et style de la traduction incorrecte conservés
 
-### Vérifications spécifiques (ajoutées par chaque template)
-
-
----
-
-## 💡 Structure des exemples
-
-Chaque correction doit fournir des exemples au format suivant :
-
-✅ **CORRECT** :
-```
-<Output qui corrige l'erreur>
-```
-
-❌ **INCORRECT** :
-```
-<Output qui répète la même erreur>
-```
-
-**Explication** : Pourquoi la version correcte résout le problème
-
----
+### Vérifications spécifiques
 
 ## ✅ RÈGLE : Texte avec 2 séparateur(s) `</>` (MODE STRICT)
 
@@ -119,7 +86,7 @@ Tu dois **conserver EXACTEMENT ces séparateurs** aux mêmes positions relatives
 
 ⚠️ **Position des séparateurs** :
 
-Text with  [</>] separator [</>] 
+Text with  [</>] separator [</>]
 
 **MODE STRICT** : Tu dois :
 1. Traduire chaque partie séparément
@@ -146,8 +113,6 @@ Original : <0/>Text with </>multiple</> </>separators</>.
 ```
 <0/>Texte avec plusieurs séparateurs.
 ```
-
-
 ---
 
 ## ✅ CHECKLIST SPÉCIFIQUE (MODE STRICT)
@@ -161,4 +126,4 @@ Avant de finaliser, VÉRIFIE MANUELLEMENT :
 
 ---
 
-Produis maintenant la correction avec le bon nombre de séparateurs `</>` :
+Corrige maintenant la correction avec le bon nombre de séparateurs `</>` :
