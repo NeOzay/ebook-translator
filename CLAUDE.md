@@ -6,6 +6,8 @@ Ce fichier fournit des instructions à Claude Code (claude.ai/code) lors du trav
 
 La documentation du projet est organisée en fichiers spécialisés :
 
+### Documentation technique
+
 | Document | Description | Contenu |
 |----------|-------------|---------|
 | **[docs/SETUP.md](docs/SETUP.md)** | Configuration et installation | Clés API, dépendances, commandes de dev, dépannage |
@@ -14,6 +16,156 @@ La documentation du projet est organisée en fichiers spécialisés :
 | **[docs/TEMPLATES.md](docs/TEMPLATES.md)** | Architecture des templates | Templates LLM, bases communes, refactorisation v0.9.0 |
 | **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Historique des versions | Versions 0.2.0 à 0.9.0, changements détaillés |
 | **[docs/ROADMAP.md](docs/ROADMAP.md)** | Améliorations futures | Fonctionnalités planifiées (Phase 2 - non implémentées) |
+
+### Documentation pour contributeurs
+
+| Document | Description | Contenu |
+|----------|-------------|---------|
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Guide de contribution principal | Standards de code, workflow Git, processus de développement |
+| **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Guide développeur détaillé | Setup environnement, développement incrémental, exemples concrets |
+| **[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)** | Référence technique des standards | Typage, documentation, tests, architecture, exemples bon/mauvais |
+
+## 📋 Standards de développement
+
+Ce projet suit des **standards de qualité stricts** pour garantir la maintenabilité et la cohérence du code.
+
+### Standards obligatoires
+
+#### 1. Typage strict (OBLIGATOIRE)
+
+**Tous les paramètres et retours de fonction doivent être typés.**
+
+```python
+# ✅ BON : Typage complet
+def translate_chunk(
+    chunk: Chunk,
+    target_language: str,
+    llm: LLM,
+    max_retries: int = 3
+) -> dict[int, str]:
+    """Traduit un chunk avec typage strict."""
+    result: dict[int, str] = {}
+    return result
+
+# ❌ MAUVAIS : Pas de typage
+def translate_chunk(chunk, target_language, llm, max_retries=3):
+    result = {}
+    return result
+```
+
+**Configuration** : Pyright en mode strict (0 errors tolérés)
+
+```bash
+# Vérifier les types
+poetry run pyright src/
+# Doit retourner : "0 errors, 0 warnings"
+```
+
+#### 2. Développement incrémental (OBLIGATOIRE)
+
+**Pour toute feature complexe, suivre le processus :**
+
+1. **Décomposer** la feature en sous-tâches testables
+2. **Implémenter** une sous-tâche à la fois
+3. **Tester** chaque sous-tâche avant d'avancer
+4. **Valider** que tout fonctionne ensemble
+5. **Commit atomique** pour chaque sous-tâche complétée
+
+**Exemple** : Voir [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#développement-incrémental-en-pratique) pour un exemple détaillé.
+
+#### 3. Documentation (OBLIGATOIRE)
+
+**Toutes les docstrings doivent utiliser le format Google (OBLIGATOIRE pour toutes les fonctions/classes publiques).**
+
+**⚠️ IMPORTANT** : Le format Google est le **seul format autorisé** pour les docstrings dans ce projet. Aucun autre format (reStructuredText, NumPy, etc.) n'est accepté.
+
+```python
+def validate_translation(
+    original: dict[int, str],
+    translated: dict[int, str],
+    checks: list[Check]
+) -> ValidationResult:
+    """
+    Valide une traduction selon une liste de checks.
+
+    Args:
+        original: Textes originaux indexés par numéro de ligne
+        translated: Textes traduits indexés par numéro de ligne
+        checks: Liste des checks de validation à exécuter
+
+    Returns:
+        ValidationResult avec statut et erreurs détectées
+
+    Raises:
+        ValueError: Si original et translated ont des clés différentes
+
+    Example:
+        >>> result = validate_translation(original, translated, checks)
+        >>> assert result.is_valid
+    """
+    ...
+```
+
+#### 4. Tests (OBLIGATOIRE)
+
+- **Tout nouveau code doit avoir des tests unitaires**
+- **Coverage minimale de 80%** pour nouveau code
+- **Tests doivent passer** avant commit/PR
+
+```bash
+# Exécuter les tests
+poetry run pytest
+
+# Avec coverage
+poetry run pytest --cov=src/ebook_translator
+```
+
+### Outils de qualité
+
+Le projet utilise des **outils automatiques** pour garantir la qualité :
+
+- **Pyright** (mode strict) : Type checking
+- **Black** : Formatage automatique
+- **Isort** : Tri des imports
+- **Ruff** : Linting moderne
+- **Pre-commit hooks** : Vérifications automatiques avant commit
+
+```bash
+# Installation
+poetry install --with dev
+poetry run pre-commit install
+
+# Vérifications manuelles
+poetry run black src/ tests/           # Formatage
+poetry run isort src/ tests/           # Imports
+poetry run ruff check src/ tests/      # Linting
+poetry run pyright src/                # Types
+
+# Tout en une fois
+poetry run pre-commit run --all-files
+```
+
+### Workflow Git
+
+**Commits conventionnels obligatoires** :
+
+```bash
+feat:      # Nouvelle fonctionnalité
+fix:       # Correction de bug
+refactor:  # Refactoring sans changement de comportement
+test:      # Ajout/modification de tests
+docs:      # Documentation
+chore:     # Maintenance (deps, config, etc.)
+```
+
+**Branches** : `feature/<nom>`, `bugfix/<nom>`, `refactor/<nom>`, `docs/<nom>`
+
+### Ressources pour contributeurs
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guide complet de contribution
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Guide développeur avec exemples
+- **[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)** - Référence technique détaillée
+- **[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)** - Template pour PRs
 
 ## Vue d'ensemble du projet
 
@@ -272,10 +424,17 @@ ebook-translator/
 │   ├── VALIDATION.md       # Système de validation
 │   ├── TEMPLATES.md        # Architecture des templates
 │   ├── CHANGELOG.md        # Historique des versions
-│   └── ROADMAP.md          # Améliorations futures
+│   ├── ROADMAP.md          # Améliorations futures
+│   ├── DEVELOPMENT.md      # Guide développeur détaillé
+│   └── CODING_STANDARDS.md # Référence technique des standards
+├── .github/                 # Configuration GitHub
+│   └── PULL_REQUEST_TEMPLATE.md  # Template pour PRs
 ├── logs/                    # Logs de traduction (par session)
 │   └── run_YYYYMMDD_HHMMSS/ # Session unique
-└── cache/                   # Cache et glossaires
+├── cache/                   # Cache et glossaires
+├── CONTRIBUTING.md          # Guide de contribution
+├── .pre-commit-config.yaml  # Configuration pre-commit hooks
+└── pyproject.toml           # Configuration Python (Poetry, Pyright strict, Black, Ruff, etc.)
 ```
 
 ## Historique des versions
@@ -327,19 +486,50 @@ Voir [docs/ROADMAP.md](docs/ROADMAP.md) pour la roadmap complète.
 ### Développement
 
 ```bash
-# Installer dépendances
+# Installer dépendances (production)
 poetry install
+
+# Installer dépendances de dev (qualité de code)
+poetry install --with dev
+
+# Installer pre-commit hooks (automatisation)
+poetry run pre-commit install
 
 # Exécuter le traducteur
 python -m ebook_translator
+```
 
+### Tests et validation
+
+```bash
 # Tests
 poetry run pytest                                          # Tous les tests
 poetry run pytest tests/test_segment.py -v                # Test spécifique
-poetry run pytest --cov=src/ebook_translator              # Avec couverture
+poetry run pytest --cov=src/ebook_translator              # Avec couverture (≥80% requis)
 
-# Vérification des types
-poetry run pyright src/ebook_translator
+# Vérification des types (mode strict)
+poetry run pyright src/ebook_translator                   # 0 errors requis
+```
+
+### Qualité de code
+
+```bash
+# Formatage automatique
+poetry run black src/ tests/                              # Formatage du code
+poetry run isort src/ tests/                              # Tri des imports
+
+# Linting
+poetry run ruff check src/ tests/                         # Analyse statique
+poetry run ruff check --fix src/ tests/                   # Auto-correction
+
+# Vérification complète (recommandé avant commit)
+poetry run pre-commit run --all-files                     # Tous les hooks
+
+# Vérifications individuelles
+poetry run black --check src/ tests/                      # Check formatage
+poetry run isort --check-only src/ tests/                 # Check imports
+poetry run ruff check src/ tests/                         # Check linting
+poetry run pyright src/                                   # Check types
 ```
 
 ### Tests des templates
@@ -372,10 +562,74 @@ python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(os.ge
 
 Voir [docs/SETUP.md](docs/SETUP.md) pour plus de dépannage.
 
+## ✅ Checklist qualité avant commit/PR
+
+Avant chaque commit ou Pull Request, vérifier que :
+
+### Code
+
+- [ ] Tous les paramètres de fonction sont typés
+- [ ] Tous les retours de fonction sont typés (même `-> None`)
+- [ ] Variables complexes explicitement typées
+- [ ] Pyright strict sans erreurs : `poetry run pyright src/`
+- [ ] Code formaté : `poetry run black src/ tests/`
+- [ ] Imports triés : `poetry run isort src/ tests/`
+- [ ] Ruff linting OK : `poetry run ruff check src/ tests/`
+
+### Documentation
+
+- [ ] Docstrings ajoutées pour nouvelles fonctions/classes publiques
+- [ ] Format Google UNIQUEMENT (Args, Returns, Raises, Example) - aucun autre format accepté
+- [ ] Commentaires inline pour code complexe
+- [ ] CHANGELOG.md mis à jour (si version bump)
+
+### Tests
+
+- [ ] Tests unitaires pour tout nouveau code
+- [ ] Tests d'intégration pour features multi-composants
+- [ ] Tous les tests passent : `poetry run pytest`
+- [ ] Coverage ≥ 80% : `poetry run pytest --cov=src/ebook_translator`
+
+### Git
+
+- [ ] Commits conventionnels (feat:, fix:, refactor:, test:, docs:, chore:)
+- [ ] Messages de commit descriptifs
+- [ ] Branche nommée correctement (feature/, bugfix/, refactor/, docs/)
+- [ ] Pas de conflits avec master
+- [ ] Pre-commit hooks OK : `poetry run pre-commit run --all-files`
+
+### Vérification rapide
+
+```bash
+# Commande unique pour vérifier tous les critères
+poetry run pytest && \
+poetry run pyright src/ && \
+poetry run pre-commit run --all-files
+
+# Si tout est vert (✅), vous êtes prêt à commit/PR !
+```
+
 ## Ressources
 
+### Documentation technique
+
+- **[docs/SETUP.md](docs/SETUP.md)** - Configuration et installation
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture technique
+- **[docs/VALIDATION.md](docs/VALIDATION.md)** - Système de validation
+- **[docs/TEMPLATES.md](docs/TEMPLATES.md)** - Architecture des templates
+- **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - Historique des versions
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** - Roadmap
+
+### Documentation pour contributeurs
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guide de contribution complet
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Guide développeur avec exemples concrets
+- **[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)** - Référence technique des standards
+- **[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)** - Template pour PRs
+
+### Liens externes
+
 - **GitHub** : [Repository URL]
-- **Documentation** : [docs/](docs/)
 - **Issues** : Rapporter les bugs sur GitHub Issues
 - **API DeepSeek** : https://platform.deepseek.com
 
