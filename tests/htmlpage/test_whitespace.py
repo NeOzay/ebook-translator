@@ -7,8 +7,8 @@ préservés lors de l'extraction et du remplacement de texte.
 
 import pytest
 from bs4 import BeautifulSoup
-from ebook_translator.htmlpage.replacement import preserve_whitespace, TextReplacer
-from ebook_translator.htmlpage.bilingual import BilingualFormat
+
+from ebook_translator.htmlpage.replacement import TextReplacer, preserve_whitespace
 
 
 class TestPreserveWhitespace:
@@ -116,7 +116,10 @@ class TestHtmlReconstructionWithWhitespace:
 
         result = str(new_tag)
         # Les espaces de bordure doivent être préservés
-        assert result.strip() in ["<p> text with spaces </p>", "<p>text with spaces</p>"]
+        assert result.strip() in [
+            "<p> text with spaces </p>",
+            "<p>text with spaces</p>",
+        ]
 
     def test_only_spaces_no_stripping(self):
         """Fragments contenant uniquement des espaces ne doivent pas être ignorés."""
@@ -135,8 +138,9 @@ class TestFormatTextPreservesWhitespace:
     def test_format_single_fragment_with_leading_space(self):
         """Fragment unique avec espace au début."""
         from bs4.element import NavigableString
-        from ebook_translator.htmlpage.page import HtmlPage
         from ebooklib import epub
+
+        from ebook_translator.htmlpage.page import HtmlPage
 
         # Créer un EpubHtml minimal
         epub_html = epub.EpubHtml(title="test", file_name="test.xhtml")
@@ -153,8 +157,9 @@ class TestFormatTextPreservesWhitespace:
     def test_format_multiple_fragments_with_spaces(self):
         """Multiples fragments avec espaces de bordure."""
         from bs4.element import NavigableString
-        from ebook_translator.htmlpage.page import HtmlPage
         from ebooklib import epub
+
+        from ebook_translator.htmlpage.page import HtmlPage
 
         epub_html = epub.EpubHtml(title="test", file_name="test.xhtml")
         epub_html.content = b"<html><body></body></html>"

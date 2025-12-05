@@ -5,7 +5,6 @@ Vérifie que validate_retry_indices détecte correctement les cas d'erreur
 et accepte les cas valides.
 """
 
-import pytest
 from ebook_translator.translation.parser import validate_retry_indices
 
 

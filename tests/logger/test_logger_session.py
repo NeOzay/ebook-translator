@@ -2,17 +2,17 @@
 Tests pour le système de logging avec sessions et création lazy.
 """
 
-import pytest
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 
+import pytest
 from src.ebook_translator.logger import (
-    LogSession,
     LazyFileHandler,
-    setup_logger,
+    LogSession,
     get_logger,
     get_session_log_path,
+    setup_logger,
 )
 
 
@@ -29,7 +29,9 @@ def temp_logs_dir(monkeypatch):
     """Crée un répertoire temporaire pour les logs."""
     temp_dir = tempfile.mkdtemp()
     # Rediriger le répertoire de session vers temp
-    monkeypatch.setattr(Path, "mkdir", lambda self, **kwargs: Path(temp_dir).mkdir(**kwargs))
+    monkeypatch.setattr(
+        Path, "mkdir", lambda self, **kwargs: Path(temp_dir).mkdir(**kwargs)
+    )
     yield Path(temp_dir)
     # Nettoyer
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -84,7 +86,7 @@ def test_lazy_file_handler_creates_file_only_on_emit():
     assert temp_file.exists(), "Le fichier doit exister après le premier log"
 
     # Vérifier le contenu
-    with open(temp_file, "r", encoding="utf-8") as f:
+    with open(temp_file, encoding="utf-8") as f:
         content = f.read()
         assert "Test message" in content
 
@@ -140,13 +142,11 @@ def test_setup_logger_avoids_duplicate_handlers():
 
 def test_log_session_reset():
     """Test que LogSession.reset() fonctionne correctement."""
-    session_dir1 = LogSession.get_session_dir()
-
     # Reset
     LogSession.reset()
 
     # Nouvelle session doit avoir un répertoire différent
-    session_dir2 = LogSession.get_session_dir()
+    session_dir = LogSession.get_session_dir()
     # Note: Comme les timestamps peuvent être identiques si trop rapides,
     # on vérifie juste que la fonction ne plante pas
-    assert session_dir2 is not None
+    assert session_dir is not None

@@ -8,17 +8,14 @@ Ce module teste les fonctionnalités de nettoyage du glossaire :
 - Méthodes de nettoyage (clean_stopwords, remove_low_confidence_terms, clean_all)
 """
 
-import pytest
-from pathlib import Path
-
 from ebook_translator.glossary import Glossary
 from ebook_translator.glossary_filters import (
-    is_grammatical_stopword,
-    should_exclude_from_glossary,
-    is_likely_extraction_error,
     categorize_conflict,
     get_high_priority_conflicts,
     get_low_priority_conflicts,
+    is_grammatical_stopword,
+    is_likely_extraction_error,
+    should_exclude_from_glossary,
 )
 
 

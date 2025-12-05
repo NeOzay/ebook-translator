@@ -9,9 +9,9 @@ import pytest
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString
 
-from ebook_translator.htmlpage.replacement import TextReplacer
-from ebook_translator.htmlpage.exceptions import FragmentMismatchError
 from ebook_translator.htmlpage.bilingual import BilingualFormat
+from ebook_translator.htmlpage.exceptions import FragmentMismatchError
+from ebook_translator.htmlpage.replacement import TextReplacer
 
 
 @pytest.fixture
@@ -30,7 +30,8 @@ def test_fragment_mismatch_error_raised(replacer):
     p_tag = soup.find("p")
 
     fragments = [
-        child for child in p_tag.descendants
+        child
+        for child in p_tag.descendants
         if isinstance(child, NavigableString) and child.strip()
     ]
 
@@ -65,7 +66,8 @@ def test_fragment_mismatch_error_attributes(replacer):
     p_tag = soup.find("p")
 
     fragments = [
-        child for child in p_tag.descendants
+        child
+        for child in p_tag.descendants
         if isinstance(child, NavigableString) and child.strip()
     ]
 
@@ -110,7 +112,8 @@ def test_valid_replacement_no_error(replacer):
     p_tag = soup.find("p")
 
     fragments = [
-        child for child in p_tag.descendants
+        child
+        for child in p_tag.descendants
         if isinstance(child, NavigableString) and child.strip()
     ]
 

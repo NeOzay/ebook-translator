@@ -7,8 +7,8 @@ autour des balises imbriquées.
 
 import pytest
 from bs4 import BeautifulSoup
+
 from ebook_translator.htmlpage.replacement import TextReplacer
-from ebook_translator.htmlpage.bilingual import BilingualFormat
 
 
 def test_user_reported_case():
@@ -65,22 +65,27 @@ def test_user_reported_case():
     translation_text = str(translation_tag)
 
     # Doit contenir "Vestimentaire <em>" (espace avant <em>)
-    assert "Vestimentaire <em>" in translation_text, f"Espace manquant avant <em>. Got: {translation_text}"
+    assert (
+        "Vestimentaire <em>" in translation_text
+    ), f"Espace manquant avant <em>. Got: {translation_text}"
 
     # Doit contenir "</em> pour" (espace après </em>)
-    assert "</em> pour" in translation_text, f"Espace manquant après </em>. Got: {translation_text}"
+    assert (
+        "</em> pour" in translation_text
+    ), f"Espace manquant après </em>. Got: {translation_text}"
 
     # 4. Vérifier le texte complet reconstitué
-    expected_translation = "Sort de Restructuration Vestimentaire <em>peut être utilisé</em> pour redessiner cette tenue."
-
     # Extraire le texte complet de la balise traduite (sans les tags HTML internes)
     full_text = translation_tag.get_text()
-    assert full_text == "Sort de Restructuration Vestimentaire peut être utilisé pour redessiner cette tenue."
+    assert (
+        full_text
+        == "Sort de Restructuration Vestimentaire peut être utilisé pour redessiner cette tenue."
+    )
 
     # Vérifier la structure HTML complète
     assert "<em>peut être utilisé</em>" in translation_text
 
-    print(f"\nTest reussi !")
+    print("\nTest reussi !")
     print(f"HTML final :\n{result_html}")
 
 

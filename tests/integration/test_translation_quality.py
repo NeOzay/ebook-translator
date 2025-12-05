@@ -8,8 +8,9 @@ Ces tests vérifient :
 """
 
 import pytest
-from ebook_translator.llm import LLM
+
 from ebook_translator.config import TemplateNames
+from ebook_translator.llm import LLM
 
 
 class TestLLMConfiguration:
@@ -24,9 +25,9 @@ class TestLLMConfiguration:
         )
 
         # La température doit être <= 0.5 pour plus de cohérence
-        assert llm.temperature <= 0.5, (
-            f"Temperature should be <= 0.5 for consistency, got {llm.temperature}"
-        )
+        assert (
+            llm.temperature <= 0.5
+        ), f"Temperature should be <= 0.5 for consistency, got {llm.temperature}"
 
     def test_custom_temperature_is_respected(self):
         """Vérifie que la température personnalisée est respectée."""
@@ -184,6 +185,8 @@ class TestBackwardCompatibility:
 
         # Règles obligatoires
         assert "RÈGLE ABSOLUE" in prompt
-        assert ("TOUTES les lignes" in prompt or "TOUTES ET SEULEMENT les lignes" in prompt)
+        assert (
+            "TOUTES les lignes" in prompt or "TOUTES ET SEULEMENT les lignes" in prompt
+        )
         assert "SANS EXCEPTION" in prompt
         assert "[=[END]=]" in prompt

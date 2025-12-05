@@ -2,12 +2,11 @@
 Tests d'intégration pour le logging des requêtes LLM.
 """
 
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from src.ebook_translator.llm import LLM
-from src.ebook_translator.logger import LogSession, get_session_log_path
+from src.ebook_translator.logger import LogSession
 
 
 @pytest.fixture(autouse=True)

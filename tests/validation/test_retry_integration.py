@@ -5,6 +5,7 @@ Vérifie que la numérotation sélective des lignes fonctionne correctement.
 """
 
 from unittest.mock import Mock
+
 from ebook_translator.segment import Chunk
 
 

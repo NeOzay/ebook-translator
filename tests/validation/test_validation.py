@@ -8,16 +8,15 @@ Ces tests vérifient :
 4. Validateur de qualité intégré
 """
 
-import pytest
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
-from ebook_translator.quality import (
-    UntranslatedDetector,
-    TerminologyChecker,
-    QualityValidator,
-)
 from ebook_translator.glossary import Glossary
+from ebook_translator.quality import (
+    QualityValidator,
+    TerminologyChecker,
+    UntranslatedDetector,
+)
 
 
 class TestUntranslatedDetector:
@@ -111,7 +110,9 @@ class TestTerminologyChecker:
 
         # Doit contenir au moins "Sakamoto", "Matrix", "Tokyo"
         assert len(nouns) >= 2
-        assert any("Sakamoto" in noun or "Matrix" in noun or "Tokyo" in noun for noun in nouns)
+        assert any(
+            "Sakamoto" in noun or "Matrix" in noun or "Tokyo" in noun for noun in nouns
+        )
 
     def test_generate_glossary(self):
         """Vérifie la génération de glossaire."""
@@ -293,7 +294,10 @@ class TestIntegration:
         translations = [
             ("Dr. Sakamoto activated the Matrix.", "Le Dr Sakamoto activa la Matrice."),
             ("The Matrix hummed to life.", "La Matrice s'anima en ronronnant."),
-            ("Matrix power levels stable.", "Niveaux de puissance de la Matrice stables."),
+            (
+                "Matrix power levels stable.",
+                "Niveaux de puissance de la Matrice stables.",
+            ),
         ]
 
         for i, (orig, trans) in enumerate(translations):

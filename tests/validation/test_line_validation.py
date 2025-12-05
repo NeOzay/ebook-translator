@@ -3,6 +3,7 @@ Tests pour la validation du nombre de lignes dans les traductions.
 """
 
 import pytest
+
 from ebook_translator.checks.line_count_check import count_expected_lines
 from ebook_translator.translation.parser import parse_llm_translation_output
 
@@ -11,11 +12,13 @@ from ebook_translator.translation.parser import parse_llm_translation_output
 def validate_line_count(
     translations: dict[int, str],
     expected_count: int | None = None,
-    source_content: str | None = None
+    source_content: str | None = None,
 ) -> tuple[bool, str | None]:
     """Fonction de compatibilité pour tests existants."""
     if expected_count is None and source_content is None:
-        raise ValueError("Au moins un de expected_count ou source_content doit être fourni")
+        raise ValueError(
+            "Au moins un de expected_count ou source_content doit être fourni"
+        )
 
     if expected_count is None and source_content is not None:
         expected_count = count_expected_lines(source_content)
@@ -118,9 +121,7 @@ class TestValidateLineCount:
         """Test en calculant expected_count depuis source_content."""
         translations = {0: "Bonjour", 1: "Monde"}
         source = "<0/>Hello\n<1/>World"
-        is_valid, error = validate_line_count(
-            translations, source_content=source
-        )
+        is_valid, error = validate_line_count(translations, source_content=source)
         assert is_valid is True
         assert error is None
 
@@ -173,9 +174,7 @@ class TestIntegrationWithParser:
         output += "\n[=[END]=]"
 
         translations = parse_llm_translation_output(output)
-        is_valid, error = validate_line_count(
-            translations, source_content=source
-        )
+        is_valid, error = validate_line_count(translations, source_content=source)
 
         assert is_valid is False
         assert "Attendu: 47 lignes" in error

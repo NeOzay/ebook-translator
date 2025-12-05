@@ -1,9 +1,9 @@
 """Tests pour le helper de retry avec mode raisonnement."""
 
-import pytest
-from unittest.mock import Mock, MagicMock
-from ebook_translator.checks.retry_helper import retry_with_reasoning
+from unittest.mock import Mock
+
 from ebook_translator.checks.base import ValidationContext
+from ebook_translator.checks.retry_helper import retry_with_reasoning
 from ebook_translator.segment import Chunk
 
 
@@ -36,11 +36,13 @@ def test_retry_success_first_attempt():
     context = create_mock_context(llm_mock)
 
     render_calls = []
+
     def render_prompt(use_reasoning: bool) -> str:
         render_calls.append(use_reasoning)
         return "Test prompt"
 
     validate_calls = []
+
     def validate_result(llm_output: str) -> bool:
         validate_calls.append(llm_output)
         return True  # Succès immédiat
@@ -81,11 +83,13 @@ def test_retry_success_second_attempt():
     context = create_mock_context(llm_mock)
 
     render_calls = []
+
     def render_prompt(use_reasoning: bool) -> str:
         render_calls.append(use_reasoning)
         return f"Prompt (reasoning={use_reasoning})"
 
     validate_calls = []
+
     def validate_result(llm_output: str) -> bool:
         validate_calls.append(llm_output)
         # Première tentative échoue, deuxième réussit
@@ -106,7 +110,7 @@ def test_retry_success_second_attempt():
     assert result == "Second attempt output with reasoning"
     assert len(render_calls) == 2
     assert render_calls[0] is False  # Première tentative = mode normal
-    assert render_calls[1] is True   # Deuxième tentative = mode reasoning
+    assert render_calls[1] is True  # Deuxième tentative = mode reasoning
     assert len(validate_calls) == 2
 
     # Vérifier que LLM a été appelé 2 fois
@@ -138,6 +142,7 @@ def test_retry_failure_all_attempts():
         return "Test prompt"
 
     validate_calls = []
+
     def validate_result(llm_output: str) -> bool:
         validate_calls.append(llm_output)
         return False  # Toujours échoue
@@ -173,6 +178,7 @@ def test_retry_llm_error():
         return "Test prompt"
 
     validate_calls = []
+
     def validate_result(llm_output: str) -> bool:
         validate_calls.append(llm_output)
         return True
@@ -190,7 +196,9 @@ def test_retry_llm_error():
     # Assert
     assert success is True  # Réussit à la deuxième tentative
     assert result == "Second attempt output"
-    assert len(validate_calls) == 1  # validate_result appelé 1 seule fois (2e tentative)
+    assert (
+        len(validate_calls) == 1
+    )  # validate_result appelé 1 seule fois (2e tentative)
     assert llm_mock.query.call_count == 2
 
 
@@ -249,11 +257,16 @@ def test_retry_context_naming():
 
     # Vérifier première tentative (mode normal)
     first_call = llm_mock.query.call_args_list[0]
-    assert first_call.kwargs["context"] == "correction_fragment_line_5_chunk_099_attempt_1"
+    assert (
+        first_call.kwargs["context"] == "correction_fragment_line_5_chunk_099_attempt_1"
+    )
 
     # Vérifier deuxième tentative (mode reasoning)
     second_call = llm_mock.query.call_args_list[1]
-    assert second_call.kwargs["context"] == "correction_fragment_line_5_chunk_099_attempt_2_reasoning"
+    assert (
+        second_call.kwargs["context"]
+        == "correction_fragment_line_5_chunk_099_attempt_2_reasoning"
+    )
 
 
 def test_retry_validate_exception():
@@ -270,6 +283,7 @@ def test_retry_validate_exception():
         return "Test prompt"
 
     validate_calls = []
+
     def validate_result(llm_output: str) -> bool:
         validate_calls.append(llm_output)
         if len(validate_calls) == 1:

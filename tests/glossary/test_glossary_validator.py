@@ -2,10 +2,10 @@
 Tests pour le module de validation du glossaire.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-from io import StringIO
+from unittest.mock import patch
+
+import pytest
 
 from ebook_translator.glossary import Glossary
 from ebook_translator.pipeline.glossary_validator import GlossaryValidator
@@ -225,7 +225,9 @@ class TestGlossaryValidator:
 
         validator = GlossaryValidator(glossary)
 
-        with patch("ebook_translator.pipeline.glossary_validator.logger") as mock_logger:
+        with patch(
+            "ebook_translator.pipeline.glossary_validator.logger"
+        ) as mock_logger:
             validator._display_sample_terms(max_terms=10)
 
             # Vérifier que seulement 10 termes + message "et X autres" sont affichés

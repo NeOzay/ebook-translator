@@ -42,6 +42,26 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+
+# Markers pour organisation modulaire et filtrage
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (multi-component)",
+    "e2e: End-to-end tests (full workflow)",
+    "llm: Tests requiring LLM API calls (skip in CI)",
+    "slow: Slow tests (> 1s)",
+    # Markers par module (optionnel, pour filtrage ciblé)
+    "analysis: Analysis module tests",
+    "checks: Checks module tests",
+    "htmlpage: HTML page module tests",
+    "llm_module: LLM module tests",
+    "pipeline: Pipeline module tests",
+    "segmentation: Segmentation module tests",
+    "validation: Validation module tests",
+    "glossary: Glossary module tests",
+    "translation: Translation module tests",
+]
+
 addopts = [
     "-v",
     "--strict-markers",
