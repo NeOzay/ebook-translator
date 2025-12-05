@@ -182,6 +182,18 @@ class Chunk:
             self.token_encoding,
         )
 
+    def calculate_chunk_hash(self) -> str:
+        """Calcule un hash unique basé sur le contenu du chunk."""
+        import hashlib
+
+        hasher = hashlib.md5()
+
+        # Inclure le body
+        for text in self.body.values():
+            hasher.update(text.encode("utf-8"))
+
+        return hasher.hexdigest()
+
     def get_body_size(self) -> int:
         """Retourne le nombre de fragments dans le body du chunk."""
         return len(self.body)

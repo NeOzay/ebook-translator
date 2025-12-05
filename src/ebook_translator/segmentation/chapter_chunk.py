@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ebook_translator.config import Config
-from ebook_translator.segmentation.helper import count_tokens, safe_copy
+from ebook_translator.segmentation.helper import count_tokens
 
 from ..htmlpage.page import get_texts
 from ..segmentation import Chunk
@@ -20,11 +20,33 @@ class ChapterPartChunk(Chunk):
     chapter: "ChapterChunk"
 
     @classmethod
-    def from_chunk(cls, chunk: "Chunk", chapter: "ChapterChunk", total_parts: int):
-        data = safe_copy(chunk.__dict__)
-        data["total_parts"] = total_parts
-        data["chapter"] = chapter
-        return cls(**data)
+    def from_chunk(
+        cls,
+        chunk: "Chunk",
+        chapter: "ChapterChunk",
+        total_parts: int,
+    ) -> "ChapterPartChunk":
+        """
+        Crée un ChapterPartChunk à partir d'un Chunk générique.
+
+        Args:
+            chunk: Chunk source à convertir
+            chapter: ChapterChunk parent (référence)
+            total_parts: Nombre total de parties du chapitre splitté
+
+        Returns:
+            ChapterPartChunk avec tous les attributs du Chunk source
+        """
+        return cls(
+            index=chunk.index,
+            head=chunk.head.copy(),
+            body=chunk.body.copy(),
+            tail=chunk.tail.copy(),
+            token_count=chunk.token_count,
+            token_encoding=chunk.token_encoding,
+            total_parts=total_parts,
+            chapter=chapter,
+        )
 
     def is_first(self) -> bool:
         return self.index == 0

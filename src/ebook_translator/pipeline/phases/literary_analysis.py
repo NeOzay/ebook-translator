@@ -8,7 +8,7 @@ from ebook_translator.analysis import AnalysisExporter, ContexteTraduction
 from ebook_translator.checks import AnalysisChecks
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, PhaseName
-from ebook_translator.segmentation.chapter_chunk import ChapterChunk
+from ebook_translator.segmentation.chapter_chunk import ChapterChunk, ChapterPartChunk
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.validation.validation_queue import SaveItem
 
@@ -54,13 +54,13 @@ class LiteraryAnalysisPhase(PhaseBase):
         Note: Le nouveau template simplifié traite le chapitre complet en un seul
         appel LLM (vs approche incrémentale multi-blocs de l'ancien système).
         """
-        chapters = list(
-            Segmentator(
-                self.context.html_items, self.max_tokens, self.overlap_ratio
-            ).get_all_chapters_by_spine()
-        )
+        all_chunks: list[Chunk] = []
+        for chapter in Segmentator(
+            self.context.html_items, self.max_tokens, self.overlap_ratio
+        ).get_all_chapters_by_spine():
+            all_chunks.extend(chapter.split_chunk(self.max_tokens, self.overlap_ratio))
         # Retourner directement les ChapterChunk (pas de split en parties)
-        return chapters
+        return all_chunks
 
     @override
     def get_translation_cache(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
@@ -72,11 +72,12 @@ class LiteraryAnalysisPhase(PhaseBase):
             - résultat: dict avec l'analyse (ou vide si pas trouvée)
             - has_missing: True si l'analyse est manquante, False sinon
         """
-        if not isinstance(chunk, ChapterChunk):
+        if not isinstance(chunk, ChapterPartChunk):
             raise ValueError("chunk must be ChapterChunk")
         store = self.context.store_manager.get_store(self.store_key())
-        chapter_name = chunk.name
-        cached_json = store.get(chapter_name, "0")  # Analysis stockée sous clé "0"
+        chapter_name = chunk.chapter.name
+        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
+        cached_json = store.get(chapter_name, keyname)
         if cached_json is None:
             return ({}, True)  # Analyse manquante
         return ({0: cached_json}, False)  # Analyse trouvée
@@ -165,16 +166,18 @@ class LiteraryAnalysisPhase(PhaseBase):
         self, chunk: "Chunk", final_result: dict[int, str]
     ) -> "SaveItem":
         """Construit l'item de sauvegarde pour le store."""
-        if not isinstance(chunk, ChapterChunk):
+        if not isinstance(chunk, ChapterPartChunk):
             raise ValueError("chunk must be ChapterChunk")
 
         result = final_result[0]  # ChapterChunk a toujours index 0
         store = self.context.store_manager.get_store(self.store_key())
+        name = chunk.chapter.name
+        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
         return SaveItem(
             chunk=chunk,
             final_result=final_result,
-            source_files={chunk.name: {"0": result}},
+            source_files={name: {keyname: result}},
             on_save=lambda item: AnalysisExporter.export(
-                item.final_result[0], store.cache_dir / f"{chunk.name}.md", 0
+                item.final_result[0], store.cache_dir / f"{name}.md", 0
             ),
         )

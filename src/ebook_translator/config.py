@@ -16,6 +16,9 @@ class ConfigBase:
     def lock(self):
         self._locked = True
 
+    def unlock(self):
+        self._locked = False
+
     def __setattr__(self, name: str, value: Any):
         if getattr(self, "_locked", False):
             raise AttributeError("Configuration is locked")
@@ -60,3 +63,10 @@ class Config(ConfigBase):
 def lock_config():
     """Verrouille la configuration pour empêcher les modifications ultérieures."""
     Logger_Level().lock()
+    Config().lock()
+
+
+def unlock_config():
+    """Déverrouille la configuration pour permettre les modifications."""
+    Logger_Level().unlock()
+    Config().unlock()

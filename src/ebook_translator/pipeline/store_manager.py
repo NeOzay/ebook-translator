@@ -46,6 +46,8 @@ class StoreManager:
         # Créer un store par phase
         for phase_class in phases:
             phase_name = phase_class.name
+            if phase_name in self._stores:
+                raise RuntimeError(f"Duplicate phase name: {phase_name}")
             store_path = cache_dir / phase_name
             store_path.mkdir(parents=True, exist_ok=True)
             self._stores[phase_name] = Store(store_path)

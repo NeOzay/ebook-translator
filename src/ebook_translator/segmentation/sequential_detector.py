@@ -68,7 +68,7 @@ class ChapterContext:
     current_files: list[epub.EpubHtml] = field(default_factory=list[epub.EpubHtml])
     """Fichiers HTML du chapitre actuel"""
 
-    chapters_by_name: dict[str, int] = field(default_factory=dict[str, int])
+    index_by_name: dict[str, int] = field(default_factory=dict[str, int])
     """
     Tracking générique du dernier numéro vu par type de nom.
 
@@ -110,9 +110,6 @@ class FileAnalysis:
 class ChapterGroup:
     """
     Représente un groupe de fichiers HTML formant un chapitre.
-
-    Compatible avec l'ancien ChapterGroup de chapter_detector.py
-    pour assurer rétrocompatibilité.
     """
 
     chapter_index: int
@@ -149,7 +146,7 @@ class SequentialChapterDetector:
     3. Décide : nouveau chapitre / subpart / insert
     4. Yield les chapitres au fur et à mesure
 
-    Avantages vs chapter_detector.py :
+    Avantages:
     - **Robustesse** : Résout chapter11 contextuellement (après 10 → 11, après 1 → 1.1)
     - **Performance** : 1 passe vs 4 (4× plus rapide théoriquement)
     - **Simplicité** : ~300 lignes vs 607, logique centralisée
@@ -324,7 +321,7 @@ class SequentialChapterDetector:
         Returns:
             FileAnalysis avec décision contextuelle
         """
-        last_index = self.context.chapters_by_name.get(name)
+        last_index = self.context.index_by_name.get(name)
         last_name = self.context.current_chapter_name
 
         # Cas spécial : Pas de numéro détecté (ex: "intermission" sans numéro)
@@ -346,9 +343,9 @@ class SequentialChapterDetector:
                 reason=f"Sous-partie répétée '{name}' sans numéro",
             )
 
-        # Cas 1 : Premier chapitre de ce type (ex: premier "intermission")
+        # Cas 1 : Premier chapitre de ce type (ex: premier "intermission1")
         if last_index is None:
-            self.context.chapters_by_name[name] = num
+            self.context.index_by_name[name] = num
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
                 name=name,
@@ -359,7 +356,7 @@ class SequentialChapterDetector:
 
         # Cas 2 : Séquence naturelle (last=10, num=11)
         if num == last_index + 1:
-            self.context.chapters_by_name[name] = num
+            self.context.index_by_name[name] = num
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
                 name=name,
@@ -403,7 +400,7 @@ class SequentialChapterDetector:
                 f"⚠️  Saut dans numérotation '{name}' : {last_index} → {num} "
                 f"(éléments intermédiaires manquants ?)"
             )
-            self.context.chapters_by_name[name] = num
+            self.context.index_by_name[name] = num
             return FileAnalysis(
                 FileType.MAIN_CHAPTER,
                 name=name,
@@ -417,7 +414,7 @@ class SequentialChapterDetector:
         logger.warning(
             f"⚠️  Retour arrière dans numérotation '{name}' : {last_index} → {num}"
         )
-        self.context.chapters_by_name[name] = num
+        self.context.index_by_name[name] = num
         return FileAnalysis(
             FileType.MAIN_CHAPTER,
             name=name,
@@ -432,7 +429,7 @@ class SequentialChapterDetector:
         """
         Extrait le numéro de chapitre d'un nom de fichier.
 
-        Supporte patterns flexibles avec séparateurs variables :
+        Supporte patterns flexibles avec séparateurs variables:
         - chapter1, chap1, ch1, part1, section1
         - chapter_1, chapter-01, ch_001 (séparateurs : espace, _, -)
         - 001, 002 (numéros purs ≥2 chiffres)
