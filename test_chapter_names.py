@@ -7,9 +7,7 @@ from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
 
-source_epub = Path(
-    "books/The Genius Prince's Guide to Raising a Nation Out of Debt - Volume 01 [Yen Press][Kobo].epub"
-)
+source_epub = Path("books/Mushoku Tensei - Jobless Reincarnation Volume-1.epub")
 source_book = epub.read_epub(source_epub)  # pyright: ignore[reportUnknownMemberType]
 html_items, target_book = extract_html_items_in_spine_order(source_book)
 

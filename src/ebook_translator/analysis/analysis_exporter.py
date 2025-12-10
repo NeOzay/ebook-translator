@@ -22,7 +22,6 @@ Structure Markdown générée:
 5. Métadonnées (version schéma)
 """
 
-import json
 import logging
 import re
 import unicodedata
@@ -215,7 +214,7 @@ def _format_glossaire_table(entries: list[TermeGlossaire]) -> list[str]:
 
 
 def export_to_markdown(
-    raw_analysis: str,
+    analysis: ContexteTraduction,
     toc_threshold: int = 5,
 ) -> str:
     """
@@ -233,7 +232,6 @@ def export_to_markdown(
         json.JSONDecodeError: Si le JSON est invalide
         SchemaError: Si le schéma ne respecte pas ContexteTraduction
     """
-    analysis: ContexteTraduction = json.loads(raw_analysis)
 
     lines: list[str] = []
 
@@ -295,7 +293,7 @@ class AnalysisExporter:
 
     @staticmethod
     def export(
-        raw_analysis: str,
+        analysis: ContexteTraduction,
         output_path: Path | str,
         toc_threshold: int = 5,
     ) -> None:
@@ -312,5 +310,5 @@ class AnalysisExporter:
             >>> exporter = AnalysisExporter()
             >>> exporter.export(raw_json, "cache/analysis/Chapter_1.md")
         """
-        markdown = export_to_markdown(raw_analysis, toc_threshold=toc_threshold)
+        markdown = export_to_markdown(analysis, toc_threshold=toc_threshold)
         save_markdown(markdown, output_path)

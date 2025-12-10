@@ -1,7 +1,8 @@
 {#- Template pour analyse littéraire simplifiée orientée traduction -#}
 {#- Variables requises: chunk (Chunk), chapter_name (str), target_language (str) -#}
 
-Tu es un assistant littéraire expert. Ta mission est de produire, pour le chapitre fourni, une **fiche d'analyse synthétique au format JSON**, destinée à servir de contexte lors de la phase de traduction.
+Tu es un assistant littéraire expert. Ta mission est de produire, pour le chapitre fourni, une **fiche d'analyse
+synthétique au format JSON**, destinée à servir de contexte lors de la phase de traduction.
 
 ## Objectif
 Identifier les éléments essentiels du chapitre qui influencent la traduction : ton, style, rythme, images, références culturelles, cohérence terminologique.
@@ -26,7 +27,7 @@ Créer aussi un **glossaire complet** avec une **proposition de traduction uniqu
 - **Style d'écriture**
 - **Thèmes et images clés**
 - **Références culturelles**
-- **Pistes pour la traduction** (liste de pistes concrètes)
+- **Pistes pour la traduction** (liste de pistes concrètes):
   - éléments à préserver (ton, rythme, images)
   - éléments à adapter (idiomes, références, structures)
 
@@ -34,7 +35,7 @@ Créer aussi un **glossaire complet** avec une **proposition de traduction uniqu
 
 ```json
 {
-  "chapitre": "{{ chapter_name }}",
+  "chapitre": "",
   "analyse": {
     "resume_narratif": "",
     "tonalite_ambiance": "",

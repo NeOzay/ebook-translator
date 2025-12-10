@@ -4,7 +4,9 @@ Validation des contextes de traduction (Phase 0).
 Valide la structure et le contenu des objets ContexteTraduction.
 """
 
+import json
 import re
+from functools import cache
 from typing import Any, cast
 
 from .translation_context import (
@@ -100,6 +102,17 @@ def _check_glossary_entry(
 
 class AnalysisValidator:
     """Valide et vérifie les contextes de traduction."""
+
+    @staticmethod
+    @cache
+    def load(data: str) -> ContexteTraduction:
+        raw_data = json.loads(data)
+        validated_data, missing_sections = AnalysisValidator.validate(raw_data)
+        if missing_sections:
+            raise ValueError(
+                f"ContexteTraduction validation failed, missing or invalid sections: {', '.join(missing_sections)}"
+            )
+        return validated_data
 
     @staticmethod
     def validate(data: dict[str, Any]) -> tuple[ContexteTraduction, list[str]]:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, override
 
 from ebook_translator.analysis import AnalysisExporter, ContexteTraduction
+from ebook_translator.analysis.validator import AnalysisValidator
 from ebook_translator.checks import AnalysisChecks
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, PhaseName
@@ -13,7 +14,6 @@ from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.validation.validation_queue import SaveItem
 
 if TYPE_CHECKING:
-    from ebook_translator.glossary import Glossary
     from ebook_translator.llm.llm_config import LLMConfig
     from ebook_translator.segmentation.chunk import Chunk
 
@@ -126,7 +126,6 @@ class LiteraryAnalysisPhase(PhaseBase):
     def _populate_glossary(
         self,
         analysis: ContexteTraduction,
-        glossary: "Glossary",
         chapter_name: str,
     ) -> None:
         """
@@ -141,6 +140,7 @@ class LiteraryAnalysisPhase(PhaseBase):
             chapter_name: Nom du chapitre (pour logging)
         """
         terms_added = 0
+        glossary = self.context.glossary
 
         for term_entry in analysis["glossaire"]:
             terme_original = term_entry["terme"].strip()
@@ -154,7 +154,7 @@ class LiteraryAnalysisPhase(PhaseBase):
                 continue
 
             # Ajouter au glossaire avec priorité maximale (validate_translation)
-            glossary.validate_translation(terme_original, proposition)
+            glossary.learn(terme_original, proposition)
             terms_added += 1
 
         logger.info(
@@ -173,11 +173,20 @@ class LiteraryAnalysisPhase(PhaseBase):
         store = self.context.store_manager.get_store(self.store_key())
         name = chunk.chapter.name
         keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
+
+        def on_save(item: "SaveItem") -> None:
+            analysis = AnalysisValidator.load(item.final_result[0])
+            # Peupler le glossaire global
+            self._populate_glossary(
+                analysis,
+                chapter_name=chunk.chapter.name,
+            )
+            # Exporter l'analyse en markdown pour revue humaine
+            AnalysisExporter.export(analysis, store.cache_dir / f"{name}.md", 0)
+
         return SaveItem(
             chunk=chunk,
             final_result=final_result,
             source_files={name: {keyname: result}},
-            on_save=lambda item: AnalysisExporter.export(
-                item.final_result[0], store.cache_dir / f"{name}.md", 0
-            ),
+            on_save=on_save,
         )

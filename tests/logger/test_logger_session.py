@@ -2,11 +2,15 @@
 Tests pour le système de logging avec sessions et création lazy.
 """
 
+import logging
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pytest import MonkeyPatch
 from src.ebook_translator.logger import (
     LazyFileHandler,
     LogSession,
@@ -17,7 +21,7 @@ from src.ebook_translator.logger import (
 
 
 @pytest.fixture(autouse=True)
-def reset_log_session():
+def reset_log_session() -> Generator[None, None, None]:
     """Reset la session de logs entre chaque test."""
     LogSession.reset()
     yield
@@ -25,13 +29,15 @@ def reset_log_session():
 
 
 @pytest.fixture
-def temp_logs_dir(monkeypatch):
+def temp_logs_dir(monkeypatch: MonkeyPatch) -> Generator[Path, None, None]:
     """Crée un répertoire temporaire pour les logs."""
     temp_dir = tempfile.mkdtemp()
     # Rediriger le répertoire de session vers temp
-    monkeypatch.setattr(
-        Path, "mkdir", lambda self, **kwargs: Path(temp_dir).mkdir(**kwargs)
-    )
+
+    def mock_mkdir(self: Path, **kwargs: Any) -> None:
+        Path(temp_dir).mkdir(**kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
     yield Path(temp_dir)
     # Nettoyer
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -97,7 +103,9 @@ def test_lazy_file_handler_creates_file_only_on_emit():
 
 def test_setup_logger_uses_session_dir():
     """Test que setup_logger utilise le répertoire de session."""
-    logger = setup_logger("test.module", log_filename="test_setup.log")
+    logger = setup_logger(
+        logging.getLogger("test.module"), log_filename="test_setup.log"
+    )
 
     # Vérifier que le logger a bien 2 handlers (console + file)
     assert len(logger.handlers) == 2
@@ -130,8 +138,8 @@ def test_get_logger_creates_with_custom_filename():
 
 def test_setup_logger_avoids_duplicate_handlers():
     """Test que setup_logger n'ajoute pas de handlers multiples."""
-    logger1 = setup_logger("test.duplicate")
-    logger2 = setup_logger("test.duplicate")
+    logger1 = setup_logger(logging.getLogger("test.duplicate"))
+    logger2 = setup_logger(logging.getLogger("test.duplicate"))
 
     # Les deux doivent être le même objet
     assert logger1 is logger2

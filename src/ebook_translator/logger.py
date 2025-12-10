@@ -56,7 +56,6 @@ class LogSession:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_dir = Path("logs")
         LogSession._session_dir = base_dir / f"run_{timestamp}"
-        # LogSession._session_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def get_session_dir(cls) -> Path:
@@ -125,18 +124,19 @@ class LazyFileHandler(logging.Handler):
 
     def _ensure_handler(self):
         """Crée le FileHandler sous-jacent si pas encore fait."""
-        if self._handler is None:
-            # Créer le répertoire parent si nécessaire
-            self.filename.parent.mkdir(parents=True, exist_ok=True)
-            # Créer le FileHandler
-            self._handler = logging.FileHandler(
-                self.filename,
-                mode=self.mode,
-                encoding=self.encoding,
-            )
-            # Copier le formatter
-            if self.formatter:
-                self._handler.setFormatter(self.formatter)
+        if self._handler is not None:
+            return
+        # Créer le répertoire parent si nécessaire
+        self.filename.parent.mkdir(parents=True, exist_ok=True)
+        # Créer le FileHandler
+        self._handler = logging.FileHandler(
+            self.filename,
+            mode=self.mode,
+            encoding=self.encoding,
+        )
+        # Copier le formatter
+        if self.formatter:
+            self._handler.setFormatter(self.formatter)
 
     def emit(self, record: logging.LogRecord):
         """Émit un log, en créant le fichier si nécessaire."""
@@ -209,13 +209,7 @@ def setup_logger(
     logger.addHandler(console_handler)
 
     # Handler fichier (sauvegarde dans logs/run_XXX/)
-    if log_dir is None:
-        # Utiliser le répertoire de session
-        session_dir = LogSession.get_session_dir()
-    else:
-        # Utiliser le répertoire spécifié (backward compatibility)
-        session_dir = Path(log_dir)
-        session_dir.mkdir(parents=True, exist_ok=True)
+    session_dir = Path(log_dir) if log_dir else LogSession.get_session_dir()
 
     log_path = session_dir / log_filename
     file_handler = LazyFileHandler(
@@ -230,16 +224,16 @@ def setup_logger(
     return logger
 
 
-def get_logger(name: str, log_filename: str | None = None) -> logging.Logger:
+def get_logger(name: str, log_filename: str = "translation.log") -> logging.Logger:
     """
     Récupère un logger existant ou en crée un nouveau avec la configuration par défaut.
 
     Args:
         name: Nom du logger (généralement __name__ du module)
-        log_filename: Nom optionnel du fichier de log (None = "translation.log")
+        log_filename: Nom du fichier de log (défaut: "translation.log")
 
     Returns:
-        Logger configuré
+        Logger configuré et prêt à l'emploi
 
     Example:
         >>> logger = get_logger(__name__)
@@ -248,13 +242,17 @@ def get_logger(name: str, log_filename: str | None = None) -> logging.Logger:
         >>> # Logger avec fichier spécifique
         >>> logger = get_logger(__name__, "validation.log")
         >>> logger.info("Validation démarrée")
+
+    Note:
+        Si le logger est déjà configuré (handlers présents), il est retourné tel quel.
+        Sinon, il est configuré via setup_logger avec la configuration par défaut.
+        Les logs sont regroupés dans logs/run_YYYYMMDD_HHMMSS/ automatiquement.
     """
     logger = logging.getLogger(name)
 
     # Si le logger n'a pas de handlers, le configurer
     if not logger.handlers:
-        filename = log_filename or "translation.log"
-        return setup_logger(logger, log_filename=filename)
+        return setup_logger(logger, log_filename=log_filename)
 
     return logger
 

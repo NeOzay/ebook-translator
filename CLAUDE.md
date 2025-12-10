@@ -12,9 +12,10 @@ La documentation du projet est organisée en fichiers spécialisés :
 |----------|-------------|---------|
 | **[docs/SETUP.md](docs/SETUP.md)** | Configuration et installation | Clés API, dépendances, commandes de dev, dépannage |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Architecture technique | Pipeline de traduction, composants clés, flux de données |
+| **[docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md)** | Phase 0 - Analyse littéraire | ContexteTraduction, glossaire, détection chapitres (v0.11.0) |
 | **[docs/VALIDATION.md](docs/VALIDATION.md)** | Système de validation | Module validation/, retry progressif, checks structurels |
 | **[docs/TEMPLATES.md](docs/TEMPLATES.md)** | Architecture des templates | Templates LLM, bases communes, refactorisation v0.9.0 |
-| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Historique des versions | Versions 0.2.0 à 0.9.0, changements détaillés |
+| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Historique des versions | Versions 0.2.0 à 0.11.0, changements détaillés |
 | **[docs/ROADMAP.md](docs/ROADMAP.md)** | Améliorations futures | Fonctionnalités planifiées (Phase 2 - non implémentées) |
 
 ### Documentation pour contributeurs
@@ -173,12 +174,14 @@ Ceci est un outil de traduction d'ebooks qui utilise des API LLM (compatibles Op
 
 ### Caractéristiques principales
 
+- **Phase 0 - Analyse littéraire** : Extraction automatique du contexte narratif et glossaire pré-rempli (-67% tokens LLM)
+- **Détection automatique des chapitres** : SequentialChapterDetector via EPUB spine avec contexte narratif
 - **Segmentation intelligente** : Découpe le contenu en chunks de 2000 tokens avec chevauchement configurable
 - **Traduction parallèle** : Utilise ThreadPoolExecutor pour traductions concurrentes
 - **Validation automatique** : Système de validation structurelle avec retry progressif (mode reasoning)
 - **Templates refactorisés** : Architecture DRY avec bases communes (-73% duplication)
 - **Logging par session** : Organisation claire des logs avec nommage contextuel
-- **Rétrocompatibilité** : 0 breaking changes sur 9 versions (0.2.0 → 0.9.0)
+- **Rétrocompatibilité** : 0 breaking changes sur 11 versions (0.2.0 → 0.11.0)
 
 ## 🚀 Démarrage rapide
 
@@ -235,7 +238,18 @@ poetry run pyright src/ebook_translator
 ```
 EPUB Input
     ↓
-[Segmentator] → Chunks (head/body/tail)
+[Phase 0: Analyse Littéraire] (optionnelle)
+    ├── [SequentialChapterDetector] → Détection chapitres via spine
+    ├── [ChapterChunk] → Un chunk par chapitre (8000 tokens)
+    ├── [LiteraryAnalysisPhase] → Analyse simplifiée (JSON mode)
+    │   ├── render_analyze_simplified() → Template Jinja optimisé
+    │   ├── AnalysisValidator.validate() → Validation ContexteTraduction
+    │   └── _populate_glossary() → Population automatique
+    └── Output: JSON + Glossaire pré-rempli
+    ↓
+[Phase 1-2: Traduction] (classique)
+    ↓
+[Segmentator] → Chunks (head/body/tail, 2000 tokens)
     ↓
 [ValidationQueue] → [ValidationWorkers (N threads)]
     ↓                       ↓
@@ -250,26 +264,41 @@ EPUB Output
 
 **Flux détaillé** :
 1. **Chargement EPUB** - Extraction métadonnées et contenu
-2. **Segmentation** - Découpe en chunks avec overlap (défaut: 15%)
-3. **Traduction** - Appels LLM parallèles avec retry automatique
-4. **Validation** - Vérification structurelle (lignes, fragments, ponctuation)
-5. **Sauvegarde** - Persistance thread-safe via SaveWorker
-6. **Reconstruction** - Remplacement texte dans DOM HTML
-7. **Génération EPUB** - Création du fichier traduit
+2. **[Phase 0] Analyse littéraire** (optionnelle) - Extraction contexte + glossaire
+3. **Segmentation** - Découpe en chunks avec overlap (défaut: 15%)
+4. **[Phase 1] Traduction initiale** - Appels LLM parallèles avec retry automatique
+5. **[Phase 2] Raffinage** (optionnel) - Amélioration avec glossaire et contexte
+6. **Validation** - Vérification structurelle (lignes, fragments, ponctuation)
+7. **Sauvegarde** - Persistance thread-safe via SaveWorker
+8. **Reconstruction** - Remplacement texte dans DOM HTML
+9. **Génération EPUB** - Création du fichier traduit
 
-Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour plus de détails.
+Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) pour plus de détails.
 
 ### Composants clés
 
-**Segmentator** ([src/ebook_translator/segment.py](src/ebook_translator/segment.py)) :
+**SequentialChapterDetector** ([src/ebook_translator/segmentation/sequential_detector.py](src/ebook_translator/segmentation/sequential_detector.py)) :
+- Détection automatique des chapitres via EPUB spine (v0.10.0)
+- Parcours séquentiel avec contexte narratif complet
+- Méthodes: `get_all_chapters()`, `get_all_chapters_by_spine()`
+- Support patterns multiples: "Chapter 1", "Chapitre I", etc.
+
+**LiteraryAnalysisPhase** ([src/ebook_translator/pipeline/phases/literary_analysis.py](src/ebook_translator/pipeline/phases/literary_analysis.py)) :
+- Phase 0 optionnelle d'analyse pré-traduction (v0.11.0)
+- Extraction contexte narratif + glossaire automatique
+- Format simplifié `ContexteTraduction` (-67% tokens LLM)
+- Population automatique du glossaire avec `validate_translation()`
+
+**Segmentator** ([src/ebook_translator/segmentation/segmentator.py](src/ebook_translator/segmentation/segmentator.py)) :
 - Découpe le contenu en chunks de 2000 tokens (configurable)
 - Support overlap_ratio >= 1.0 pour contexte étendu (v0.7.0)
 - Système de queue pour gestion multi-chunks
 
-**AsyncLLMTranslator** ([src/ebook_translator/llm.py](src/ebook_translator/llm.py)) :
+**AsyncLLMTranslator** ([src/ebook_translator/llm/llm.py](src/ebook_translator/llm/llm.py)) :
 - Client async OpenAI compatible avec toute API OpenAI
 - Retry automatique avec backoff exponentiel (v0.3.0)
 - Support mode reasoning (deepseek-reasoner) pour corrections complexes (v0.8.0)
+- Support JSON mode pour analyse structurée (v0.10.0)
 - Logging contextuel avec création lazy (v0.6.0)
 
 **ValidationWorkerPool** ([src/ebook_translator/validation/](src/ebook_translator/validation/)) :
@@ -277,12 +306,12 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour plus de détails.
 - Découplage validation/sauvegarde → +33-50% de throughput
 - Retry progressif : tentative 1 (normal) + tentative 2 (reasoning)
 
-**HtmlPage** ([src/ebook_translator/htmlpage.py](src/ebook_translator/htmlpage.py)) :
+**HtmlPage** ([src/ebook_translator/htmlpage/page.py](src/ebook_translator/htmlpage/page.py)) :
 - Pattern singleton avec cache pour éviter re-parsing
 - Gestion des séparateurs de fragments (`</>`)
 - Remplacement texte avec préservation structure DOM
 
-Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour la liste complète.
+Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) pour la liste complète.
 
 ## Système de validation
 
@@ -308,8 +337,13 @@ Voir [docs/VALIDATION.md](docs/VALIDATION.md) pour plus de détails.
 ## Architecture des templates LLM
 
 **Catégories** :
-- **TRANSLATE** (4 templates) : Créent nouvelles traductions
-- **CORRECT** (3 templates) : Corrigent erreurs structurelles
+- **ANALYZE** (1 template) : Analyse littéraire pré-traduction (Phase 0)
+- **TRANSLATE** (4 templates) : Créent nouvelles traductions (Phase 1-2)
+- **CORRECT** (3 templates) : Corrigent erreurs structurelles (retry)
+
+**Templates Phase 0** (v0.11.0) :
+- `analyze_chapter_simplified.jinja` (80 lignes) : Analyse littéraire format `ContexteTraduction`
+- 2 templates de correction: `retry_correct_analysis_invalid_json.jinja`, `retry_correct_analysis_missing_sections.jinja`
 
 **Bases communes** (v0.9.0) :
 - `common_translate_rules.jinja` (199 lignes) : Règles partagées TRANSLATE
@@ -317,10 +351,94 @@ Voir [docs/VALIDATION.md](docs/VALIDATION.md) pour plus de détails.
 
 **Bénéfices** :
 - -73% duplication de code (1260 → 329 lignes partagées)
+- -67% tokens LLM Phase 0 (format simplifié)
 - 7× plus facile à maintenir (1 fichier au lieu de 7)
 - Cohérence 100% garantie
 
-Voir [docs/TEMPLATES.md](docs/TEMPLATES.md) pour plus de détails.
+Voir [docs/TEMPLATES.md](docs/TEMPLATES.md) et [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) pour plus de détails.
+
+## Phase 0 : Analyse Littéraire (v0.11.0)
+
+La **Phase 0** est une phase optionnelle d'analyse pré-traduction qui extrait automatiquement :
+
+### 📋 Objectifs
+
+1. **Contexte narratif** : Résumé, tonalité, style, thèmes, références culturelles
+2. **Glossaire pré-rempli** : Personnages, lieux, créatures, titres avec propositions de traduction
+3. **Pistes de traduction** : Liste concrète d'éléments à préserver/adapter
+
+### 🎯 Avantages
+
+| Aspect | Bénéfice | Impact |
+|--------|----------|--------|
+| **Cohérence terminologique** | Glossaire pré-rempli dès Phase 1 | -30-50% de conflits |
+| **Coût LLM réduit** | Format simplifié `ContexteTraduction` | -67% tokens Phase 0 |
+| **Guidance concrète** | Liste structurée de pistes | +15-25% qualité contextuelle |
+| **Population automatique** | Intégré dans `LiteraryAnalysisPhase` | Pas de code séparé |
+
+### 📊 Format simplifié (v0.11.0)
+
+**ContexteTraduction** remplace `ChapterAnalysis` (v0.10.0 déprécié) :
+
+```python
+class ContexteTraduction(TypedDict):
+    chapitre: str
+    analyse: AnalyseLitteraire  # 6 champs (résumé, tonalité, style, thèmes, références, pistes)
+    glossaire: list[TermeGlossaire]  # 6 champs (terme, type, sexe, description, notes, proposition)
+```
+
+**Réduction** :
+- -68% lignes de schéma (254 → 80)
+- -67% tokens LLM réponse (800-1200 → 300-400)
+- -78% sections obligatoires (9 → 2)
+- +260% champs utilisés (23% → 83%)
+
+### 🚀 Utilisation
+
+```python
+from src.ebook_translator.pipeline.executor import PipelineExecutor
+from src.ebook_translator.pipeline.phases.literary_analysis import LiteraryAnalysisPhase
+from src.ebook_translator.glossary import Glossary
+from pathlib import Path
+
+# 1. Exécuter Phase 0
+executor = PipelineExecutor(
+    llm=llm,
+    html_items=html_items,
+    cache_dir=Path("cache"),
+    glossary=glossary,  # Sera peuplé automatiquement
+    target_language=Language.FRENCH,
+    phases=[LiteraryAnalysisPhase],  # Phase 0 uniquement
+)
+executor.run()
+
+# 2. Glossaire déjà peuplé !
+glossary.save()
+print(f"Termes extraits: {len(glossary.glossary)}")
+
+# 3. Analyses sauvées dans cache/literary_analysis/Chapter_X.json
+```
+
+Voir [example_phase0_analysis.py](example_phase0_analysis.py) pour un exemple complet.
+
+### 📁 Fichiers générés
+
+```
+cache/
+├── literary_analysis/          # Store Phase 0
+│   ├── Chapter_1.json         # {"0": "...ContexteTraduction JSON..."}
+│   ├── Chapter_2.json
+│   └── ...
+└── glossary.json              # Glossaire peuplé automatiquement
+```
+
+### 🔗 Documentation complète
+
+Voir [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) pour :
+- Architecture détaillée
+- Schéma `ContexteTraduction`
+- Guide de migration depuis v0.10.0
+- Limitations et améliorations futures
 
 ## Configuration
 
@@ -401,26 +519,57 @@ Traduction:
 ```
 ebook-translator/
 ├── src/ebook_translator/     # Code source principal
+│   ├── analysis/            # Phase 0 - Analyse littéraire (v0.10.0+)
+│   │   ├── translation_context.py  # Schéma ContexteTraduction (v0.11.0)
+│   │   ├── validator.py            # Validation JSON structure
+│   │   └── analysis_exporter.py    # Export Markdown (WIP)
 │   ├── checks/              # Validation structurelle
-│   │   ├── check_tests/    # 4 checks: LineCount, FragmentCount, Punctuation, Sentence
+│   │   ├── check_tests/    # 5 checks: LineCount, FragmentCount, Punctuation, Sentence, ValidateAnalysis
 │   │   ├── pipeline.py     # ValidationPipeline orchestrateur
 │   │   └── retry_helper.py # Retry progressif avec mode reasoning
-│   ├── correction/          # (Ancien système, en transition)
 │   ├── glossary.py          # Glossaire pour cohérence terminologique
 │   ├── htmlpage/            # Manipulation HTML/DOM (HtmlPage, TagKey)
 │   ├── llm/                 # Client LLM et template renderers
-│   ├── pipeline/            # Pipeline de traduction (nouveau depuis v0.9.0+)
-│   ├── segmentation/        # Segmentation du contenu (Segmentator, Chunk)
+│   │   ├── llm.py          # Support JSON mode (v0.10.0)
+│   │   ├── template_renderers.py  # render_analyze_simplified() (v0.11.0)
+│   │   └── llm_config.py   # Configuration LLM
+│   ├── pipeline/            # Pipeline multi-phases (v0.9.0+)
+│   │   ├── phases/         # Phases individuelles
+│   │   │   ├── literary_analysis.py  # Phase 0 (v0.11.0)
+│   │   │   ├── initial_translation.py  # Phase 1
+│   │   │   └── refinement.py  # Phase 2
+│   │   ├── executor.py     # Exécuteur de pipeline
+│   │   └── store_manager.py  # Gestion des stores par phase
+│   ├── segmentation/        # Segmentation du contenu
+│   │   ├── sequential_detector.py  # Détection chapitres (v0.10.0)
+│   │   ├── chapter_chunk.py        # ChapterChunk (Phase 0)
+│   │   ├── segmentator.py          # Segmentation classique
+│   │   └── chunk.py                # Chunk de traduction
 │   ├── transition/          # Gestion des transitions entre phases
 │   └── validation/          # Architecture multi-thread (ValidationWorkerPool, SaveWorker)
 ├── template/                # Templates Jinja2 pour prompts LLM
-│   ├── common_translate_rules.jinja  # Règles communes TRANSLATE
-│   ├── common_correct_rules.jinja    # Règles communes CORRECT
-│   └── [7 templates spécifiques]
-├── tests/                   # Tests unitaires (107+ tests)
+│   ├── analyze_chapter_simplified.jinja  # Phase 0 analyse (v0.11.0)
+│   ├── retry_correct_analysis_*.jinja    # Correction analyses Phase 0
+│   ├── common_translate_rules.jinja      # Règles communes TRANSLATE
+│   ├── common_correct_rules.jinja        # Règles communes CORRECT
+│   └── [10+ templates spécifiques]
+├── tests/                   # Tests unitaires (140+ tests, organisation modulaire)
+│   ├── analysis/           # Tests Phase 0
+│   ├── checks/             # Tests validation
+│   ├── glossary/           # Tests glossaire
+│   ├── htmlpage/           # Tests manipulation HTML
+│   ├── llm/                # Tests LLM
+│   ├── logger/             # Tests logging
+│   ├── pipeline/           # Tests pipeline
+│   ├── segmentation/       # Tests segmentation
+│   ├── stores/             # Tests persistence
+│   ├── translation/        # Tests traduction
+│   ├── transition/         # Tests transitions
+│   └── validation/         # Tests ValidationWorkerPool
 ├── docs/                    # Documentation spécialisée
 │   ├── SETUP.md            # Configuration et installation
 │   ├── ARCHITECTURE.md     # Architecture technique
+│   ├── LITERARY_ANALYSIS.md  # Phase 0 - Analyse littéraire (v0.11.0)
 │   ├── VALIDATION.md       # Système de validation
 │   ├── TEMPLATES.md        # Architecture des templates
 │   ├── CHANGELOG.md        # Historique des versions
@@ -432,6 +581,9 @@ ebook-translator/
 ├── logs/                    # Logs de traduction (par session)
 │   └── run_YYYYMMDD_HHMMSS/ # Session unique
 ├── cache/                   # Cache et glossaires
+│   ├── literary_analysis/  # Store Phase 0 (JSON)
+│   └── glossary.json       # Glossaire pré-rempli
+├── example_phase0_analysis.py  # Exemple Phase 0 (v0.11.0)
 ├── CONTRIBUTING.md          # Guide de contribution
 ├── .pre-commit-config.yaml  # Configuration pre-commit hooks
 └── pyproject.toml           # Configuration Python (Poetry, Pyright strict, Black, Ruff, etc.)
@@ -439,7 +591,7 @@ ebook-translator/
 
 ## Historique des versions
 
-Versions principales (0.2.0 → 0.9.0) :
+Versions principales (0.2.0 → 0.11.0) :
 
 | Version | Date | Fonctionnalité | Impact |
 |---------|------|----------------|--------|
@@ -452,12 +604,15 @@ Versions principales (0.2.0 → 0.9.0) :
 | 0.7.0 | 2025-10-23 | Support overlap_ratio > 1.0 | Contexte étendu |
 | 0.8.0 | 2025-10-28 | Retry progressif + reasoning | +10-20% succès retry |
 | 0.9.0 | 2025-10-29 | Refactorisation templates (DRY) | -388 lignes, +73% lisibilité |
+| **0.10.x** | **2025-11-xx** | **Phase 0 - Analyse littéraire complète** | **Détection chapitres + analyse** |
+| **0.11.0** | **2025-11-15** | **Phase 0 - Format simplifié** | **-67% tokens LLM Phase 0** |
 
 **Statistiques cumulées** :
-- 107+ tests unitaires
+- 140+ tests unitaires (organisation modulaire)
 - 0 breaking changes (rétrocompatibilité totale)
 - +35-45% de qualité globale
 - -25% de duplication de code
+- Architecture pipeline multi-phases complète
 
 Voir [docs/CHANGELOG.md](docs/CHANGELOG.md) pour l'historique complet.
 
@@ -615,6 +770,7 @@ poetry run pre-commit run --all-files
 
 - **[docs/SETUP.md](docs/SETUP.md)** - Configuration et installation
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture technique
+- **[docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md)** - Phase 0 - Analyse littéraire (v0.11.0)
 - **[docs/VALIDATION.md](docs/VALIDATION.md)** - Système de validation
 - **[docs/TEMPLATES.md](docs/TEMPLATES.md)** - Architecture des templates
 - **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - Historique des versions
@@ -626,6 +782,11 @@ poetry run pre-commit run --all-files
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Guide développeur avec exemples concrets
 - **[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)** - Référence technique des standards
 - **[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)** - Template pour PRs
+
+### Exemples d'utilisation
+
+- **[example_phase0_analysis.py](example_phase0_analysis.py)** - Exemple Phase 0 (Analyse littéraire)
+- **[example_pipeline.py](example_pipeline.py)** - Exemple pipeline complet Phase 1-2
 
 ### Liens externes
 

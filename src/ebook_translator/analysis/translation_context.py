@@ -1,4 +1,5 @@
-"""Schéma simplifié pour contexte de traduction (Phase 0).
+"""
+Schéma simplifié pour contexte de traduction (Phase 0).
 
 Ce module définit le nouveau format d'analyse littéraire, optimisé pour
 la traduction et réduisant la complexité de ~67% par rapport à ChapterAnalysis.
