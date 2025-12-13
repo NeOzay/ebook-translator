@@ -5,7 +5,7 @@ Contextes de données pour le système de phases.
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ebook_translator.glossary import Glossary
 from ebook_translator.llm import LLM

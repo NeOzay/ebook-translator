@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import PhaseBase

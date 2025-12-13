@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ebook_translator.constants import (
     BACK_MATTER_KEYWORDS,

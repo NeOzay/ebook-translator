@@ -3,11 +3,11 @@ Classe principale HtmlPage pour parser et manipuler les pages HTML des EPUB.
 """
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ..constants import FRAGMENT_SEPARATOR, IGNORED_TAGS
 from .bilingual import BilingualFormat
@@ -70,12 +70,7 @@ class HtmlPage:
             return
 
         self.epub_html = epub_html
-        html_content: str = cast(
-            str,
-            epub_html.content.decode(  # pyright: ignore[reportUnknownMemberType]
-                "utf-8"
-            ),
-        )
+        html_content: str = epub_html.content.decode("utf-8")
         self.soup = BeautifulSoup(html_content, "html.parser")
         self.to_translate: dict[TagKey, TextFragment] = {}
         self.texts: dict[TagKey, TextFragment] = {}
@@ -344,9 +339,7 @@ class HtmlPage:
 
     def _save_content(self) -> None:
         """Sauvegarde le contenu HTML modifié dans l'EpubHtml."""
-        self.epub_html.set_content(  # pyright: ignore[reportUnknownMemberType]
-            self.soup.encode("utf-8")
-        )
+        self.epub_html.set_content(self.soup.encode("utf-8"))
 
     def __str__(self) -> str:
         """Retourne le nom du fichier pour l'affichage."""

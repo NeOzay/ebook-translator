@@ -9,7 +9,7 @@ contexte entre les chunks via un système de chevauchement (overlap).
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ebook_translator.config import Config
 from ebook_translator.segmentation.helper import turn_resource_to_chunks

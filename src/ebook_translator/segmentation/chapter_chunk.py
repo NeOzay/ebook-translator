@@ -9,7 +9,7 @@ from ..htmlpage.page import get_texts
 from ..segmentation import Chunk
 
 if TYPE_CHECKING:
-    from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+    from ebooklib import epub
 
     from ..segmentation.sequential_detector import ChapterGroup
 

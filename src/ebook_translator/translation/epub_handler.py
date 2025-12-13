@@ -9,13 +9,10 @@ Gestion des fichiers EPUB : lecture, métadonnées, extraction et reconstruction
 from typing import TYPE_CHECKING, Literal
 
 from bs4 import BeautifulSoup
-from ebooklib import ITEM_DOCUMENT, epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import ITEM_DOCUMENT, epub
 
 if TYPE_CHECKING:
-    from ebooklib.epub import (  # pyright: ignore[reportMissingTypeStubs]
-        EpubBook,
-        EpubHtml,
-    )
+    from ebooklib.epub import EpubBook, EpubHtml
 
 
 def copy_epub_metadata(
@@ -74,6 +71,7 @@ def extract_html_items_in_spine_order(
         if item.get_type() == ITEM_DOCUMENT and item.id in spine_order:
             # Insérer à la position correcte selon le spine
             insert_position = spine_order.index(item.id)
+            assert isinstance(item, epub.EpubHtml)  # ITEM_DOCUMENT garantit EpubHtml
             html_items[insert_position] = item
         else:
             # Copier les ressources non-document (images, CSS, etc.)
