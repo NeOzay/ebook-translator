@@ -8,7 +8,7 @@ import io
 import sys
 from pathlib import Path
 
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 from src.ebook_translator.config import TemplateNames
 from src.ebook_translator.llm.template_renderers import TemplateRenderer
 

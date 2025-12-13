@@ -1,6 +1,6 @@
 import re
 
-from ebooklib import epub  # type: ignore
+from ebooklib import epub
 
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
 

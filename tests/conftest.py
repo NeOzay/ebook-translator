@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 from bs4 import Tag
-from ebooklib import epub  # pyright: ignore[reportMissingTypeStubs]
+from ebooklib import epub
 
 from ebook_translator.checks import ValidationContext
 from ebook_translator.htmlpage import TagKey
@@ -19,7 +19,7 @@ from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
 
 source_epub = Path("tests/Saint-Exupery-Le_Petit_Prince.epub")
-source_book = epub.read_epub(source_epub)  # pyright: ignore[reportUnknownMemberType]
+source_book = epub.read_epub(source_epub)
 html_items, target_book = extract_html_items_in_spine_order(source_book)
 
 segmentator = Segmentator(html_items, 150)
