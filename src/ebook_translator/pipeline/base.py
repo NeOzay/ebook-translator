@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from ebook_translator.checks import Check, ValidationPipeline
 from ebook_translator.segmentation.segmentator import Chunk, Segmentator
@@ -35,7 +35,7 @@ class PhaseName(StrEnum):
 
 
 @dataclass
-class PhaseBase(ABC):
+class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     """
     Classe de base abstraite pour toutes les phases.
 
@@ -61,6 +61,9 @@ class PhaseBase(ABC):
     name: PhaseName = field(init=False)
     """Identifiant unique de la phase (ex: 'initial', 'refined', 'quality')"""
 
+    chunk_type: type[ChunkType] = field(init=False)
+    """Type de chunk traité par cette phase"""
+
     max_tokens: int = field(default=0)
     """Nombre maximum de tokens par segment"""
 
@@ -75,12 +78,12 @@ class PhaseBase(ABC):
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
-    depends_on: list[type["PhaseBase"]] = field(
-        default_factory=list[type["PhaseBase"]], init=False
+    depends_on: tuple[type[PhaseBase], ...] = field(
+        default_factory=tuple[type["PhaseBase"], ...], init=False
     )
     """Liste des phases dont cette phase dépend"""
 
-    checks: list[Check[Any]] = field(init=False)
+    checks: tuple[Check[Any], ...] = field(init=False)
     """Liste des checks de validation pour cette phase"""
 
     max_workers: int = field(default=4)
@@ -89,11 +92,7 @@ class PhaseBase(ABC):
     store_readonly: bool = False
     """Si True, le store de cette phase est en lecture seule"""
 
-    context: "PhaseContext" = field(init=False)
-
-    # === Singleton ===
-
-    _instances: ClassVar[dict["PhaseBase", "PhaseBase"]] = {}
+    context: PhaseContext = field(init=False)
 
     # === Validation de configuration ===
 
@@ -103,6 +102,7 @@ class PhaseBase(ABC):
 
         required_fields = [
             "name",
+            "chunk_type",
             "max_tokens",
             "overlap_ratio",
             "execution_mode",
@@ -117,6 +117,8 @@ class PhaseBase(ABC):
     # === Hooks (méthodes de classe avec implémentation par défaut) ===
 
     def get_chunks(self) -> Sequence[Chunk]:
+        if self.chunk_type != Chunk:
+            raise TypeError("get_chunks must be overridden for non-Chunk types")
         return list(
             Segmentator(
                 self.context.html_items,
@@ -125,7 +127,7 @@ class PhaseBase(ABC):
             ).get_all_segments()
         )
 
-    def get_translation_cache(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
+    def get_translation_cache(self, chunk: ChunkType) -> tuple[dict[int, str], bool]:
         """
         Helper: lit la traduction d'un chunk depuis le store d'une phase.
 
@@ -154,7 +156,9 @@ class PhaseBase(ABC):
         """
         pass
 
-    def before_chunk(self, chunk: Chunk, context: "ChunkContext") -> None:  # noqa: B027
+    def before_chunk(  # noqa: B027
+        self, chunk: ChunkType, context: ChunkContext
+    ) -> None:
         """
         Hook appelé avant le traitement d'un chunk.
 
@@ -170,7 +174,7 @@ class PhaseBase(ABC):
         pass
 
     @abstractmethod
-    def render_prompt(self, chunk: Chunk, context: "ChunkContext") -> str:
+    def render_prompt(self, chunk: ChunkType, context: ChunkContext) -> str:
         """
         Génère le prompt LLM pour ce chunk.
 
@@ -190,7 +194,7 @@ class PhaseBase(ABC):
         """
         ...
 
-    def source_content(self, chunk: Chunk, context: "ChunkContext") -> str:
+    def source_content(self, chunk: ChunkType, context: ChunkContext) -> str:
         """
         Retourne le contenu source du chunk sous forme de chaîne de caractères.
 
@@ -202,7 +206,7 @@ class PhaseBase(ABC):
         """
         return str(chunk)
 
-    def llm_config(self, chunk: Chunk, context: "ChunkContext") -> "LLMConfig":
+    def llm_config(self, chunk: ChunkType, context: ChunkContext) -> LLMConfig:
         """
         Retourne la configuration spécifique du LLM pour cette phase.
 
@@ -215,7 +219,7 @@ class PhaseBase(ABC):
         return {}
 
     def process_llm_response(
-        self, chunk: Chunk, response: str, context: "ChunkContext"
+        self, chunk: ChunkType, response: str, context: ChunkContext
     ) -> dict[int, str]:
         """
         Traite la réponse brute du LLM pour ce chunk.
@@ -234,9 +238,9 @@ class PhaseBase(ABC):
 
     def save_item_builder(
         self,
-        chunk: "Chunk",
+        chunk: ChunkType,
         final_result: dict[int, str],
-    ) -> "SaveItem":
+    ) -> SaveItem:
         """
         Construit un SaveItem à partir du chunk et des résultats finaux.
 
@@ -255,9 +259,9 @@ class PhaseBase(ABC):
 
     def after_chunk(  # noqa: B027
         self,
-        chunk: Chunk,
+        chunk: ChunkType,
         result: dict[int, str],
-        context: "ChunkContext",
+        context: ChunkContext,
     ) -> None:
         """
         Hook appelé après le traitement d'un chunk.
@@ -274,7 +278,7 @@ class PhaseBase(ABC):
         """
         pass
 
-    def after_phase(self, stats: "PhaseStats") -> None:  # noqa: B027
+    def after_phase(self, stats: PhaseStats) -> None:  # noqa: B027
         """
         Hook appelé après la fin de la phase.
 
@@ -325,7 +329,7 @@ class PhaseBase(ABC):
             return 1
         return self.max_workers
 
-    def put_context(self, context: "PhaseContext") -> None:
+    def put_context(self, context: PhaseContext) -> None:
         """
         Assigne le contexte de la phase à l'instance.
 

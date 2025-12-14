@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from ebook_translator.glossary import Glossary
+from ebook_translator.pipeline.base import PhaseName
 
 if TYPE_CHECKING:
     from ebook_translator.pipeline.context import PhaseStats
@@ -23,19 +24,19 @@ class TransitionContext:
     la transition d'une phase à une autre.
     """
 
-    store_manager: "StoreManager"
+    store_manager: StoreManager
     """Gestionnaire de stores pour accéder aux caches"""
 
-    validation_pool: "ValidationWorkerPool"
+    validation_pool: ValidationWorkerPool
     """Pool de validation (peut être reconfiguré par la transition)"""
 
-    previous_stats: dict[str, "PhaseStats"]
+    previous_stats: dict[PhaseName, PhaseStats]
     """Statistiques de toutes les phases exécutées jusqu'ici"""
 
-    glossary: "Glossary | None" = None
+    glossary: Glossary | None = None
     """Glossaire optionnel"""
 
-    def get_stats(self, phase_name: str) -> "PhaseStats | None":
+    def get_stats(self, phase_name: PhaseName) -> PhaseStats | None:
         """
         Récupère les stats d'une phase spécifique.
 
@@ -88,7 +89,7 @@ class TransitionBase(ABC):
 
     # === Singleton ===
 
-    _instances: ClassVar[dict[type["TransitionBase"], "TransitionBase"]] = {}
+    _instances: ClassVar[dict[type[TransitionBase], TransitionBase]] = {}
 
     def __new__(cls):
         if cls not in cls._instances:

@@ -123,7 +123,7 @@ skip_glob = ["**/migrations/*", "**/__pycache__/*"]
 [tool.ruff]
 # Configuration Ruff pour linting moderne
 line-length = 88
-target-version = "py312"
+target-version = "py314"
 src = ["src", "tests"]
 exclude = [
     ".git",

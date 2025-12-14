@@ -9,6 +9,7 @@ from ebooklib import epub
 
 from ebook_translator.glossary import Glossary
 from ebook_translator.llm import LLM
+from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.segmentation import Chunk
 from ebook_translator.validation import ValidationWorkerPool
@@ -98,12 +99,12 @@ class PhaseContext:
     glossary: "Glossary"
     """Glossaire optionnel pour cohérence terminologique"""
 
-    previous_phases: dict[str, PhaseStats] = field(
-        default_factory=dict[str, PhaseStats]
+    previous_phases: dict[PhaseName, PhaseStats] = field(
+        default_factory=dict[PhaseName, PhaseStats]
     )
     """Statistiques des phases précédentes (clé: nom de phase)"""
 
-    def get_previous_stats(self, phase_name: str) -> PhaseStats | None:
+    def get_previous_stats(self, phase_name: PhaseName) -> PhaseStats | None:
         """
         Récupère les stats d'une phase précédente.
 

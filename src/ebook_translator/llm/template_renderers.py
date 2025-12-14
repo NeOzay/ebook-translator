@@ -27,7 +27,7 @@ from .template_params import (
 
 if TYPE_CHECKING:
     from ..glossary import Glossary
-    from ..stores.multi_store import Store
+    from ..stores import Store
 
 
 class TemplateRenderer:

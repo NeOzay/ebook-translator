@@ -5,6 +5,7 @@ Ce module orchestre l'exécution séquentielle des checks avec
 correction inline et retry automatique.
 """
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from ..logger import get_logger
@@ -58,7 +59,7 @@ class ValidationPipeline:
         ...     logger.error("Validation échouée", results)
     """
 
-    def __init__(self, checks: list[Check[Any]]) -> None:
+    def __init__(self, checks: Sequence[Check[Any]]) -> None:
         """
         Initialise le pipeline avec une liste de checks.
 
@@ -71,7 +72,7 @@ class ValidationPipeline:
             ...     FragmentCountCheck(),  # Puis nombre de fragments
             ... ])
         """
-        self.checks: list[Check[ErrorData]] = checks
+        self.checks: Sequence[Check[ErrorData]] = checks
 
     def validate_and_correct(
         self, context: ValidationContext

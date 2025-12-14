@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from ebooklib import epub
 
 from ebook_translator.logger import get_logger
-from ebook_translator.pipeline.base import PhaseBase
+from ebook_translator.pipeline.base import PhaseBase, PhaseName
 from ebook_translator.pipeline.context import PhaseContext, PhaseStats
 from ebook_translator.pipeline.executor import PhaseExecutor
 from ebook_translator.pipeline.phases.dummy_phase import DummyPhase
@@ -142,7 +142,7 @@ class Pipeline:
         self,
         prev_phase_class: PhaseBase,
         phase_class: PhaseBase,
-        stats: dict[str, PhaseStats],
+        stats: dict[PhaseName, PhaseStats],
     ) -> None:
         """
         Exécute la transition entre deux phases si définie.
@@ -197,7 +197,7 @@ class Pipeline:
         output_epub: str | Path,
         glossary: "Glossary | None" = None,
         max_retries: int = 3,
-    ) -> dict[str, PhaseStats]:
+    ) -> dict[PhaseName, PhaseStats]:
         """
         Exécute toutes les phases.
 
@@ -282,7 +282,7 @@ class Pipeline:
             # =================================================================
             # EXÉCUTION DES PHASES
             # =================================================================
-            stats: dict[str, PhaseStats] = {}
+            stats: dict[PhaseName, PhaseStats] = {}
 
             for i, phase_object in enumerate(self.phases):
                 logger.info("\n" + "=" * 70)

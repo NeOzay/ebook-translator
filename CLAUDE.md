@@ -174,14 +174,14 @@ Ceci est un outil de traduction d'ebooks qui utilise des API LLM (compatibles Op
 
 ### Caractéristiques principales
 
-- **Phase 0 - Analyse littéraire** : Extraction automatique du contexte narratif et glossaire pré-rempli (-67% tokens LLM)
+- **Phase 0 - Analyse littéraire** : Extraction automatique du contexte narratif et glossaire pré-rempli (-67% tokens LLM), intégration auto dans Phase 1-2 (v0.12.0)
 - **Détection automatique des chapitres** : SequentialChapterDetector via EPUB spine avec contexte narratif
 - **Segmentation intelligente** : Découpe le contenu en chunks de 2000 tokens avec chevauchement configurable
 - **Traduction parallèle** : Utilise ThreadPoolExecutor pour traductions concurrentes
 - **Validation automatique** : Système de validation structurelle avec retry progressif (mode reasoning)
 - **Templates refactorisés** : Architecture DRY avec bases communes (-73% duplication)
 - **Logging par session** : Organisation claire des logs avec nommage contextuel
-- **Rétrocompatibilité** : 0 breaking changes sur 11 versions (0.2.0 → 0.11.0)
+- **Rétrocompatibilité** : 0 breaking changes sur 12 versions (0.2.0 → 0.12.0)
 
 ## 🚀 Démarrage rapide
 
@@ -288,6 +288,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et [docs/LITERARY_ANALYSIS.md]
 - Extraction contexte narratif + glossaire automatique
 - Format simplifié `ContexteTraduction` (-67% tokens LLM)
 - Population automatique du glossaire avec `validate_translation()`
+- **Intégration automatique** (v0.12.0) : Contexte littéraire passé aux prompts Phase 1-2
 
 **Segmentator** ([src/ebook_translator/segmentation/segmentator.py](src/ebook_translator/segmentation/segmentator.py)) :
 - Découpe le contenu en chunks de 2000 tokens (configurable)

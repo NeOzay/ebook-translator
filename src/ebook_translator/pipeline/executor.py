@@ -38,7 +38,7 @@ class PhaseExecutor:
         stats = executor.run()
     """
 
-    def __init__(self, phase: "PhaseBase", context: PhaseContext):
+    def __init__(self, phase: PhaseBase, context: PhaseContext):
         """
         Initialise l'exécuteur.
 
@@ -72,6 +72,11 @@ class PhaseExecutor:
 
         # 2. Segmentation
         chunks = self.phase.get_chunks()
+        if any(not isinstance(c, self.phase.chunk_type) for c in chunks):
+            raise TypeError(
+                f"Chunks returned by get_chunks() must be of type "
+                f"{self.phase.chunk_type.__name__}"
+            )
         self.stats.chunks_total = len(chunks)
 
         logger.info(f"Segmentation: {self.stats.chunks_total} chunks generated")

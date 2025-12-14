@@ -5,7 +5,6 @@ Ce package fournit:
 - MultiStore: Gestionnaire de stores pour initial/refined
 """
 
-from .multi_store import MultiStore
 from .store import Store
 
-__all__ = ["MultiStore", "Store"]
+__all__ = ["Store"]

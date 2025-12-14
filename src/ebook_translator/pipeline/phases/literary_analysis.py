@@ -15,13 +15,12 @@ from ebook_translator.validation.validation_queue import SaveItem
 
 if TYPE_CHECKING:
     from ebook_translator.llm.llm_config import LLMConfig
-    from ebook_translator.segmentation.chunk import Chunk
 
 logger = get_logger(__name__)
 
 
 @dataclass
-class LiteraryAnalysisPhase(PhaseBase):
+class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
     """
     Phase 0 : Analyse littéraire simplifiée pour contexte de traduction.
 
@@ -34,6 +33,7 @@ class LiteraryAnalysisPhase(PhaseBase):
     """
 
     name = PhaseName.LITERARY_ANALYSIS
+    chunk_type = ChapterPartChunk
     max_tokens: int = field(  # Un seul bloc par chapitre (vs 4000 multi-blocs avant)
         default=70000
     )
@@ -44,17 +44,17 @@ class LiteraryAnalysisPhase(PhaseBase):
         default=1, init=False
     )  # Analyse séquentielle pour cohérence
 
-    checks = [AnalysisChecks()]
+    checks = (AnalysisChecks(),)
 
     @override
-    def get_chunks(self) -> "Sequence[Chunk]":
+    def get_chunks(self) -> Sequence[ChapterPartChunk]:
         """
         Retourne un chunk unique par chapitre pour analyse complète.
 
         Note: Le nouveau template simplifié traite le chapitre complet en un seul
         appel LLM (vs approche incrémentale multi-blocs de l'ancien système).
         """
-        all_chunks: list[Chunk] = []
+        all_chunks: list[ChapterPartChunk] = []
         for chapter in Segmentator(
             self.context.html_items, self.max_tokens, self.overlap_ratio
         ).get_all_chapters_by_spine():
@@ -63,7 +63,9 @@ class LiteraryAnalysisPhase(PhaseBase):
         return all_chunks
 
     @override
-    def get_translation_cache(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
+    def get_translation_cache(
+        self, chunk: ChapterPartChunk
+    ) -> tuple[dict[int, str], bool]:
         """
         Récupère l'analyse JSON depuis le store si elle existe.
 
@@ -72,8 +74,6 @@ class LiteraryAnalysisPhase(PhaseBase):
             - résultat: dict avec l'analyse (ou vide si pas trouvée)
             - has_missing: True si l'analyse est manquante, False sinon
         """
-        if not isinstance(chunk, ChapterPartChunk):
-            raise ValueError("chunk must be ChapterChunk")
         store = self.context.store_manager.get_store(self.store_key())
         chapter_name = chunk.chapter.name
         keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
@@ -83,7 +83,7 @@ class LiteraryAnalysisPhase(PhaseBase):
         return ({0: cached_json}, False)  # Analyse trouvée
 
     @override
-    def render_prompt(self, chunk: "Chunk", context: "ChunkContext") -> str:
+    def render_prompt(self, chunk: ChapterPartChunk, context: ChunkContext) -> str:
         """Génère le prompt d'analyse simplifiée."""
         if not isinstance(chunk, ChapterChunk):
             raise ValueError("chunk must be ChapterChunk")
@@ -94,18 +94,18 @@ class LiteraryAnalysisPhase(PhaseBase):
         )
 
     @override
-    def source_content(self, chunk: "Chunk", context: "ChunkContext") -> str:
+    def source_content(self, chunk: ChapterPartChunk, context: ChunkContext) -> str:
         """Retourne le contenu du chunk pour analyse."""
         return chunk.mark_lines_to_numbered([])
 
     @override
-    def llm_config(self, chunk: "Chunk", context: "ChunkContext") -> "LLMConfig":
+    def llm_config(self, chunk: ChapterPartChunk, context: ChunkContext) -> LLMConfig:
         """Active le mode JSON pour parsing structuré."""
         return {"use_json_mode": True}
 
     @override
     def process_llm_response(
-        self, chunk: "Chunk", response: str, context: "ChunkContext"
+        self, chunk: ChapterPartChunk, response: str, context: ChunkContext
     ) -> dict[int, str]:
         """
         Valide la réponse JSON et peuple le glossaire.
@@ -163,18 +163,15 @@ class LiteraryAnalysisPhase(PhaseBase):
 
     @override
     def save_item_builder(
-        self, chunk: "Chunk", final_result: dict[int, str]
-    ) -> "SaveItem":
+        self, chunk: ChapterPartChunk, final_result: dict[int, str]
+    ) -> SaveItem:
         """Construit l'item de sauvegarde pour le store."""
-        if not isinstance(chunk, ChapterPartChunk):
-            raise ValueError("chunk must be ChapterChunk")
-
         result = final_result[0]  # ChapterChunk a toujours index 0
         store = self.context.store_manager.get_store(self.store_key())
         name = chunk.chapter.name
         keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
 
-        def on_save(item: "SaveItem") -> None:
+        def on_save(item: SaveItem) -> None:
             analysis = AnalysisValidator.load(item.final_result[0])
             # Peupler le glossaire global
             self._populate_glossary(

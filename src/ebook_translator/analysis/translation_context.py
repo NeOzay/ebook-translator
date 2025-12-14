@@ -99,17 +99,7 @@ class ContexteTraduction(TypedDict):
     """Glossaire des termes importants avec traductions proposées"""
 
 
-VALID_GLOSSARY_TYPES: list[
-    Literal[
-        "personnage",
-        "lieu",
-        "creature",
-        "titre",
-        "objet",
-        "terme_technique",
-        "reference_culturelle",
-    ]
-] = [
+VALID_GLOSSARY_TYPES = (
     "personnage",
     "lieu",
     "creature",
@@ -117,24 +107,15 @@ VALID_GLOSSARY_TYPES: list[
     "objet",
     "terme_technique",
     "reference_culturelle",
-]
+)
 
-VALID_SEXES: list[Literal["m", "f", "nc"]] = ["m", "f", "nc"]
+VALID_SEXES = ("m", "f", "nc")
 
-REQUIRED_TERME_FIELDS: list[
-    Literal[
-        "terme",
-        "type",
-        "sexe",
-        "description_role",
-        "notes_traduction",
-        "proposition_traduction",
-    ]
-] = [
+REQUIRED_TERME_FIELDS = (
     "terme",
     "type",
     "sexe",
     "description_role",
     "notes_traduction",
     "proposition_traduction",
-]
+)

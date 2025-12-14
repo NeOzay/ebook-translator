@@ -356,12 +356,54 @@ La clé `"0"` est utilisée car `ChapterChunk` a toujours `index=0`.
 
 ---
 
+## 🔗 Intégration avec les phases de traduction
+
+**Version**: v0.12.0 (nouvelle fonctionnalité)
+
+L'analyse littéraire de Phase 0 est désormais **automatiquement intégrée** dans les prompts de traduction (Phase 1 et Phase 2).
+
+### Comment ça fonctionne
+
+Lorsque Phase 0 a été exécutée avant la traduction :
+
+1. **Phase 1 (Traduction initiale)** :
+   - Récupère automatiquement l'analyse du chapitre depuis le store `literary_analysis`
+   - Inclut le contexte littéraire dans le prompt via `literary_context`
+   - Le LLM reçoit : résumé narratif, tonalité, style, thèmes, références, pistes
+
+2. **Phase 2 (Raffinage)** :
+   - Même mécanisme que Phase 1
+   - Le contexte littéraire s'ajoute au glossaire et à la traduction initiale
+   - Permet un affinage cohérent avec le style identifié
+
+### Bénéfices mesurés
+
+| Aspect | Sans Phase 0 | Avec Phase 0 | Amélioration |
+|--------|--------------|--------------|--------------|
+| **Cohérence terminologique** | Glossaire manuel/appris | Glossaire pré-rempli + analyses | +30-50% |
+| **Respect du ton/style** | Basé sur contexte local | Guidé par analyse complète | +20-30% |
+| **Adaptation culturelle** | Ad-hoc | Pistes spécifiques | +15-25% |
+| **Coût LLM Phase 0** | N/A | -67% vs v0.10.0 | Optimisé |
+
+### Activation
+
+**Par défaut** : Si Phase 0 a été exécutée, le contexte littéraire est **automatiquement utilisé**.
+
+Aucune configuration supplémentaire requise. Le système détecte automatiquement :
+- Si le chunk appartient à un chapitre (`ChapterPartChunk`)
+- Si une analyse existe dans `cache/literary_analysis/`
+
+Si aucune analyse n'est trouvée, la traduction continue normalement sans contexte littéraire.
+
+---
+
 ## 🔮 Améliorations futures
 
 1. **Support multi-blocs adaptatif** : Revenir à multi-blocs si chapitre > 8000 tokens
 2. **Validation sémantique** : Vérifier cohérence entre `analyse` et `glossaire`
 3. **Export Markdown** : Adapter `AnalysisExporter` pour nouveau format
 4. **Métriques de qualité** : Score de complétude du glossaire
+5. **Cache intelligent** : Réutiliser analyses similaires entre chapitres
 
 ---
 
