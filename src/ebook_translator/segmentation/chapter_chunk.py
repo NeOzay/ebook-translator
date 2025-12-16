@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from ebook_translator.config import Config
 from ebook_translator.segmentation.helper import count_tokens
@@ -11,21 +11,21 @@ from ..segmentation import Chunk
 if TYPE_CHECKING:
     from ebooklib import epub
 
-    from ..segmentation.sequential_detector import ChapterGroup
+    from .chapter_detector import ChapterGroup
 
 
 @dataclass(kw_only=True)
 class ChapterPartChunk(Chunk):
     total_parts: int
-    chapter: "ChapterChunk"
+    chapter: ChapterChunk
 
     @classmethod
     def from_chunk(
         cls,
-        chunk: "Chunk",
-        chapter: "ChapterChunk",
+        chunk: Chunk,
+        chapter: ChapterChunk,
         total_parts: int,
-    ) -> "ChapterPartChunk":
+    ) -> ChapterPartChunk:
         """
         Crée un ChapterPartChunk à partir d'un Chunk générique.
 
@@ -58,12 +58,12 @@ class ChapterPartChunk(Chunk):
 @dataclass
 class ChapterChunk(Chunk):
     name: str = field(init=False)
-    files: list["epub.EpubHtml"] = field(init=False)
+    files: list[epub.EpubHtml] = field(init=False)
     files_names: list[str] = field(init=False)
 
     def __init__(
         self,
-        chapter_group: "ChapterGroup",
+        chapter_group: ChapterGroup,
         token_encoding: str = Config.DEFAULT_ENCODING,
     ):
         super().__init__(
@@ -79,6 +79,7 @@ class ChapterChunk(Chunk):
             self.body[tag_key] = text
             self.token_count += count_tokens(text, token_encoding)
 
+    @override
     def split_chunk(
         self, max_tokens: int, overlap_ratio: float
     ) -> Iterator[ChapterPartChunk]:

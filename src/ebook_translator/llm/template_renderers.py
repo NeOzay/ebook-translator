@@ -90,7 +90,9 @@ class TemplateRenderer:
         template = self.env.get_template(template_name.value)
         return template.render(**kwargs)
 
-    def render_translate(self, target_language: str) -> str:
+    def render_translate(
+        self, target_language: str, literary_context: dict[str, Any] | None = None
+    ) -> str:
         """
         Rend le template translate_base.jinja (Phase 1 - Traduction initiale).
 
@@ -99,6 +101,7 @@ class TemplateRenderer:
 
         Args:
             target_language: Code langue cible ISO 639-1 (ex: "fr", "en", "es")
+            literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
 
         Returns:
             Prompt système rendu prêt pour envoi au LLM
@@ -110,14 +113,17 @@ class TemplateRenderer:
         params: TranslateParams = {
             "target_language": target_language,
         }
+        if literary_context is not None:
+            params["literary_context"] = literary_context
         return self.render_prompt(TemplateNames.First_Pass_Template, **params)
 
     def render_refine(
         self,
-        chunk: "Chunk",
-        store: "Store",
-        glossary: "Glossary",
+        chunk: Chunk,
+        store: Store,
+        glossary: Glossary,
         target_language: str,
+        literary_context: dict[str, Any] | None = None,
     ) -> str:
         """
         Rend le template refine.jinja (Phase 2 - Affinage avec glossaire).
@@ -138,6 +144,7 @@ class TemplateRenderer:
             multi_store: MultiStore pour accès initial_store et refined_store
             glossary: Glossary appris en Phase 1
             target_language: Code langue cible ISO 639-1
+            literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
 
         Returns:
             Prompt système rendu prêt pour envoi au LLM
@@ -182,11 +189,14 @@ class TemplateRenderer:
             "expected_count": expected_count,
         }
 
+        if literary_context is not None:
+            params["literary_context"] = literary_context
+
         return self.render_prompt(TemplateNames.Refine_Template, **params)
 
     def render_missing_lines(
         self,
-        chunk: "Chunk",
+        chunk: Chunk,
         missing_indices: list[int],
         target_language: str,
     ) -> str:
@@ -367,10 +377,10 @@ class TemplateRenderer:
 
     def render_retry_sentence(
         self,
-        chunk: "Chunk",
+        chunk: Chunk,
         target_language: str,
         missing_indices: list[int],
-        previous_translation: "TranslatedChunk | None" = None,
+        previous_translation: TranslatedChunk | None = None,
     ) -> str:
         """
         Rend le template retry_sentence.jinja (Correction nombre de phrases).

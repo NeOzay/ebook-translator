@@ -32,10 +32,10 @@ class ValidationItem:
         ... )
     """
 
-    chunk: "Chunk"
-    chunk_info: "ChunkContext"
+    chunk: Chunk
+    chunk_info: ChunkContext
     translated_texts: dict[int, str]
-    previous_translated_texts: "TranslatedChunk | None" = None
+    previous_translated_texts: TranslatedChunk | None = None
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
@@ -70,10 +70,10 @@ class SaveItem:
         ... )
     """
 
-    chunk: "Chunk"
+    chunk: Chunk
     final_result: dict[int, str]
     source_files: dict[str, dict[str, str]]  # Clés de ligne sont des strings (JSON)
-    on_save: Callable[["SaveItem"], None] | None = None
+    on_save: Callable[[SaveItem], None] | None = None
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""

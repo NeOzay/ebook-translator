@@ -71,7 +71,7 @@ class Pipeline:
 
     def __init__(
         self,
-        llm: "LLM",
+        llm: LLM,
         epub_path: str | Path,
         phases: list[PhaseBase],
         cache_dir: str | Path | None = None,
@@ -195,7 +195,7 @@ class Pipeline:
         self,
         target_language: str,
         output_epub: str | Path,
-        glossary: "Glossary | None" = None,
+        glossary: Glossary | None = None,
         max_retries: int = 3,
     ) -> dict[PhaseName, PhaseStats]:
         """

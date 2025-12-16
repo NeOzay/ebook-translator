@@ -316,7 +316,7 @@ class Store:
 
         return result
 
-    def get_from_chunk(self, chunk: "Chunk") -> tuple[dict[int, str], bool]:
+    def get_from_chunk(self, chunk: Chunk) -> tuple[dict[int, str], bool]:
         """Récupère les traductions pour tous les textes du body d'un chunk.
 
         Utilise la méthode `chunk.fetch()` pour parcourir efficacement les fichiers
@@ -362,7 +362,7 @@ class Store:
 
         return result, has_missing
 
-    def get_all_from_chunk(self, chunk: "Chunk") -> tuple[dict["TagKey", str], bool]:
+    def get_all_from_chunk(self, chunk: Chunk) -> tuple[dict[TagKey, str], bool]:
         """
         Récupère toutes les traductions pour les textes d'un chunk (Head + Body + Tail).
 
@@ -396,7 +396,23 @@ class Store:
 
         return result, has_missing
 
-    def _load_translations_for_file(self, html_page: "HtmlPage") -> dict[str, str]:
+    def get_from_file(
+        self,
+        file_name: str ,
+    ) -> dict[str, str]:
+        """
+        Récupère toutes les traductions pour un fichier HTML donné.
+
+        Args:
+            html_page: L'objet HtmlPage contenant le fichier source
+
+        Returns:
+            Dictionnaire {clé: texte_traduit} où clé peut être int ou str
+            Les clés sont soit des index de ligne, soit un identifiant de texte original
+        """
+        return self._load_cache(self._get_cache_file(file_name))
+
+    def _load_translations_for_file(self, html_page: HtmlPage) -> dict[str, str]:
         """
         Charge les traductions depuis le cache pour un fichier HTML donné.
 

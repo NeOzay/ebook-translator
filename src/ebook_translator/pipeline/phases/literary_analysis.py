@@ -59,7 +59,6 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
             self.context.html_items, self.max_tokens, self.overlap_ratio
         ).get_all_chapters_by_spine():
             all_chunks.extend(chapter.split_chunk(self.max_tokens, self.overlap_ratio))
-        # Retourner directement les ChapterChunk (pas de split en parties)
         return all_chunks
 
     @override

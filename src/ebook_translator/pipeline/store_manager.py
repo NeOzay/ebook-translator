@@ -32,7 +32,7 @@ class StoreManager:
         translation = manager.get_with_fallback(chunk, ["refined", "initial"])
     """
 
-    def __init__(self, cache_dir: Path, phases: list["PhaseBase"]):
+    def __init__(self, cache_dir: Path, phases: list[PhaseBase]):
         """
         Initialise le gestionnaire de stores.
 

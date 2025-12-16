@@ -83,20 +83,20 @@ class PhaseContext:
     target_language: str
     """Langue cible de la traduction (ex: 'français', 'english')"""
 
-    html_items: list["epub.EpubHtml"]
+    html_items: list[epub.EpubHtml]
     """Liste des items HTML à traiter (filename, content)"""
 
     # Imports retardés pour éviter les cycles
-    llm: "LLM"
+    llm: LLM
     """Instance LLM pour les requêtes de traduction"""
 
-    store_manager: "StoreManager"
+    store_manager: StoreManager
     """Gestionnaire de stores pour accéder aux caches"""
 
-    validation_pool: "ValidationWorkerPool"
+    validation_pool: ValidationWorkerPool
     """Pool de validation pour traiter les traductions"""
 
-    glossary: "Glossary"
+    glossary: Glossary
     """Glossaire optionnel pour cohérence terminologique"""
 
     previous_phases: dict[PhaseName, PhaseStats] = field(
@@ -136,13 +136,13 @@ class ChunkContext:
     """Index du chunk dans la segmentation"""
 
     # Imports retardés pour éviter les cycles
-    llm: "LLM"
+    llm: LLM
     """Instance LLM pour les requêtes de traduction"""
 
-    store_manager: "StoreManager"
+    store_manager: StoreManager
     """Gestionnaire de stores pour accéder aux caches"""
 
-    glossary: "Glossary"
+    glossary: Glossary
     """Glossaire optionnel pour cohérence terminologique"""
 
     def get_previous_translation(

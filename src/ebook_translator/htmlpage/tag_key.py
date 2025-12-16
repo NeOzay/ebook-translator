@@ -46,16 +46,6 @@ class TagKey:
         self._id = id(tag)
         self.index = str(index)  # Toujours string pour cohérence avec Store
         self.page = page
-        self.chapter_name = ""  # Initialisé à une chaîne vide
-
-    def set_chapter(self, chapter_name: str) -> None:
-        """
-        Définit le nom du chapitre pour ce TagKey.
-
-        Args:
-            chapter_name: Le nom du chapitre à associer
-        """
-        self.chapter_name = chapter_name
 
     def __hash__(self) -> int:
         """Retourne le hash basé sur l'identité de l'objet."""

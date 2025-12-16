@@ -28,6 +28,42 @@ INCLUDE COMMON TRANSLATION RULES
 ======================================== -#}
 {% include 'common_translate_rules.jinja' %}
 {# ========================================
+SECTION : LITERARY CONTEXT (Optional, from Phase 0)
+======================================== #}
+{% if literary_context %}
+## 📚 Contexte littéraire du chapitre
+
+Pour t'aider à produire une traduction fidèle au style et à l'ambiance du texte, voici l'analyse littéraire de ce chapitre :
+
+**Résumé narratif** :
+{{ literary_context.resume_narratif }}
+
+**Tonalité et ambiance** :
+{{ literary_context.tonalite_ambiance }}
+
+**Style d'écriture** :
+{{ literary_context.style_ecriture }}
+
+**Thèmes et images clés** :
+{{ literary_context.themes_images_cles }}
+
+**Références culturelles** :
+{{ literary_context.references_culturelles }}
+
+### 🎯 Pistes pour la traduction
+
+Voici des recommandations spécifiques pour ce chapitre :
+
+{% for piste in literary_context.pistes_traduction %}
+- {{ piste }}
+{% endfor %}
+
+**💡 Important** : Utilise ce contexte pour guider tes choix de traduction, en préservant le ton, le style et les nuances culturelles identifiées.
+
+---
+
+{% endif %}
+{# ========================================
 SECTION : PHASE 1 SPECIFIC INSTRUCTIONS
 ======================================== #}
 ## 📌 Instructions spécifiques à la Phase 1

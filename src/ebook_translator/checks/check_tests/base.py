@@ -262,14 +262,14 @@ class ValidationContext:
         ... )
     """
 
-    chunk: "Chunk"
+    chunk: Chunk
     translated_texts: dict[int, str]
     original_texts: dict[int, str]
-    llm: "LLM | None"
+    llm: LLM | None
     target_language: str
-    chunk_info: "ChunkContext"
+    chunk_info: ChunkContext
     max_retries: int = 2
-    previous_translated_texts: "TranslatedChunk | None" = None
+    previous_translated_texts: TranslatedChunk | None = None
     filtered_lines: list[FilteredLine] = field(default_factory=list[FilteredLine])
 
 

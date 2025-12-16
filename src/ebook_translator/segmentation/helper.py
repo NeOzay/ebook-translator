@@ -11,7 +11,13 @@ if TYPE_CHECKING:
     from ebook_translator.segmentation import Chunk
 
 
-def chunk_generator() -> Callable[[], "Chunk"]:
+def chunk_generator() -> Callable[[], Chunk]:
+    """
+    Retourne une fonction générant des chunks avec index séquentiel.
+
+    Returns:
+        Fonction qui crée des Chunk avec index incrémental
+    """
     from ebook_translator.segmentation import Chunk
 
     counter = count(0)
@@ -52,15 +58,14 @@ def count_tokens(text: str, encoding_name: str) -> int:
 
 
 def turn_resource_to_chunks(
-    resource_iterable: "Iterator[tuple[TagKey, str]]",
+    resource_iterable: Iterator[tuple[TagKey, str]],
     max_tokens: int,
     overlap_ratio: float = 0,
-    encoding_name: str | None = None,
-) -> Iterator["Chunk"]:
-    encoding_name = encoding_name or Config.DEFAULT_ENCODING
+    encoding_name: str = Config.DEFAULT_ENCODING,
+) -> Iterator[Chunk]:
 
     def add_fragment_to_body(
-        chunk: "Chunk", tag_key: "TagKey", text: str, token_count: int = 0
+        chunk: Chunk, tag_key: TagKey, text: str, token_count: int = 0
     ) -> None:
         chunk.body[tag_key] = text
         chunk.token_count += (
@@ -68,7 +73,7 @@ def turn_resource_to_chunks(
         )
 
     def fill_head_from_previous(
-        previous_chunks: "dict[Chunk, int]", current_chunk: "Chunk"
+        previous_chunks: dict[Chunk, int], current_chunk: Chunk
     ) -> None:
         """
         Remplit le head du chunk actuel avec du contexte des chunks précédents.
@@ -157,17 +162,3 @@ def turn_resource_to_chunks(
     # Yield le chunk actuel seulement s'il n'a pas déjà été yielded via la queue
     if current_chunk not in chunk_queue:
         yield current_chunk
-
-
-def safe_copy[K](value: K) -> K:
-    """Copie récursive qui ignore les objets non copiables."""
-    if isinstance(value, dict):
-        return {k: safe_copy(v) for k, v in value.items()}  # type: ignore
-    elif isinstance(value, list):
-        return [safe_copy(v) for v in value]  # type: ignore
-    elif isinstance(value, tuple):
-        return tuple(safe_copy(v) for v in value)  # type: ignore
-    elif isinstance(value, set):
-        return {safe_copy(v) for v in value}  # type: ignore
-    else:
-        return value

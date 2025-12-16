@@ -12,7 +12,7 @@ class TranslatedChunk(Chunk):
     Contient le texte original, le texte traduit, et des métadonnées associées.
     """
 
-    def __init__(self, chunk: Chunk, store: "Store"):
+    def __init__(self, chunk: Chunk, store: Store):
         super().__init__(chunk.index)
         self.original_chunk = chunk
         translations, self.has_missing = store.get_all_from_chunk(chunk)

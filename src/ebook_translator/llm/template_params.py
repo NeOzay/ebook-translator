@@ -6,7 +6,7 @@ permettant une vérification de type stricte et une documentation claire
 des paramètres requis pour chaque template.
 """
 
-from typing import TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class AnalyzeSimplifiedParams(TypedDict):
@@ -27,9 +27,11 @@ class TranslateParams(TypedDict):
 
     Attributes:
         target_language: Code langue cible (ex: "fr", "en", "es")
+        literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
     """
 
     target_language: str
+    literary_context: NotRequired[dict[str, Any]]  # Optional - AnalyseLitteraire depuis Phase 0
 
 
 class RefineParams(TypedDict):
@@ -42,6 +44,7 @@ class RefineParams(TypedDict):
         initial_translation: Traduction Phase 1 formatée (head + body + tail)
         glossaire: Export du glossaire appris en Phase 1
         expected_count: Nombre de lignes numérotées <N/> attendues dans le body
+        literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
     """
 
     target_language: str
@@ -49,6 +52,7 @@ class RefineParams(TypedDict):
     initial_translation: str
     glossaire: str
     expected_count: int
+    literary_context: NotRequired[dict[str, Any]]  # Optional - AnalyseLitteraire depuis Phase 0
 
 
 class MissingLinesParams(TypedDict):

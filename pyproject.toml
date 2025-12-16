@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Utilities",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "ebooklib (>=0.19,<0.20)",
@@ -95,7 +95,7 @@ reportUnnecessaryContains = true
 
 [tool.black]
 line-length = 88
-target-version = ["py312"]
+target-version = ["py313"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -123,7 +123,7 @@ skip_glob = ["**/migrations/*", "**/__pycache__/*"]
 [tool.ruff]
 # Configuration Ruff pour linting moderne
 line-length = 88
-target-version = "py314"
+target-version = "py313"
 src = ["src", "tests"]
 exclude = [
     ".git",
@@ -155,6 +155,7 @@ ignore = [
     "E501",   # Line too long (géré par black)
     "PLR0913", # Too many arguments to function call
     "PLR2004", # Magic value used in comparison
+    "F821", # Checks for uses of undefined names.
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -181,11 +182,11 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
-    "pytest (>=8.4.2,<9.0.0)",
+    "pytest (>=9.0.2,<10.0.0)",
     "pytest-cov (>=7.0.0,<8.0.0)",
-    "pyright (>=1.1.406,<2.0.0)",
-    "black (>=24.0.0,<25.0.0)",
-    "isort (>=5.13.0,<6.0.0)",
-    "ruff (>=0.8.0,<1.0.0)",
-    "pre-commit (>=3.0.0)",
+    "pyright (>=1.1.407)",
+    "black (>=25.12.0,<26.0.0)",
+    "isort (>=7.0.0,<8.0.0)",
+    "ruff (>=0.14.9,<1.0.0)",
+    "pre-commit (>=4.5.0,<5.0.0)",
 ]

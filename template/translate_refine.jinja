@@ -64,6 +64,40 @@ Si un terme du glossaire apparaît dans le texte, tu DOIS utiliser sa traduction
 
 ---
 
+{% if literary_context %}
+## 📖 Contexte littéraire du chapitre
+
+Pour t'aider à affiner la traduction en respectant le style et l'ambiance du texte, voici l'analyse littéraire de ce chapitre :
+
+**Résumé narratif** :
+{{ literary_context.resume_narratif }}
+
+**Tonalité et ambiance** :
+{{ literary_context.tonalite_ambiance }}
+
+**Style d'écriture** :
+{{ literary_context.style_ecriture }}
+
+**Thèmes et images clés** :
+{{ literary_context.themes_images_cles }}
+
+**Références culturelles** :
+{{ literary_context.references_culturelles }}
+
+### 🎯 Pistes pour l'affinage
+
+Lors de ton affinage, prends en compte ces recommandations spécifiques :
+
+{% for piste in literary_context.pistes_traduction %}
+- {{ piste }}
+{% endfor %}
+
+**💡 Important** : Utilise ce contexte pour améliorer la formulation tout en préservant le ton, le style et les nuances culturelles identifiées.
+
+---
+
+{% endif %}
+
 {# ========================================
    SECTION 2 : STRUCTURE DU CONTENU
    ======================================== -#}

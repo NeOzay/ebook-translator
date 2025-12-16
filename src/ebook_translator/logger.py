@@ -15,7 +15,6 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from .config import Logger_Level
 
@@ -39,7 +38,7 @@ class LogSession:
     Crée un répertoire unique par session : logs/run_YYYYMMDD_HHMMSS/
     """
 
-    _instance: Optional["LogSession"] = None
+    _instance: LogSession | None = None
     _session_dir: Path | None = None
 
     def __new__(cls):

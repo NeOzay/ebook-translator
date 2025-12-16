@@ -106,7 +106,7 @@ class FileAnalysis:
     """Justification de la décision (pour debugging/logging)"""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ChapterGroup:
     """
     Représente un groupe de fichiers HTML formant un chapitre.
@@ -115,14 +115,17 @@ class ChapterGroup:
     chapter_index: int
     chapter_name: str
     html_files: list[epub.EpubHtml]
-    is_multi_file: bool
+    is_multi_file: bool = field(init=False)
+
+    def __post_init__(self):
+        self.is_multi_file = len(self.html_files) > 1
 
     def get_file_names(self) -> list[str]:
         """Retourne la liste des noms de fichiers."""
         return [html.get_name() for html in self.html_files]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SequentialDetectorConfig:
     """Configuration pour le détecteur séquentiel."""
 
@@ -510,7 +513,6 @@ class SequentialChapterDetector:
             chapter_index=self.context.chapter_index,
             chapter_name=self.context.current_chapter_name,
             html_files=self.context.current_files.copy(),
-            is_multi_file=len(self.context.current_files) > 1,
         )
 
         self.context.chapter_index += 1

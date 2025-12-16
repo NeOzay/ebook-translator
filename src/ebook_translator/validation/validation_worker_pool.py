@@ -102,11 +102,11 @@ class ValidationWorkerPool:
     def __init__(
         self,
         num_workers: int,
-        pipeline: "ValidationPipeline",
-        store: "Store",
-        llm: "LLM",
+        pipeline: ValidationPipeline,
+        store: Store,
+        llm: LLM,
         target_language: str,
-        phase: "PhaseBase",
+        phase: PhaseBase,
         max_retries: int = 1,
     ):
         """
@@ -256,7 +256,7 @@ class ValidationWorkerPool:
 
         logger.info("ValidationWorkerPool terminé (validation + sauvegarde)")
 
-    def switch_phase(self, phase: "PhaseBase", store: "Store") -> None:
+    def switch_phase(self, phase: PhaseBase, store: Store) -> None:
         """
         Change la phase de tous les workers (Validation + Save).
 

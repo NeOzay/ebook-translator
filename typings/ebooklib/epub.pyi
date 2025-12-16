@@ -232,7 +232,7 @@ class EpubHtml(EpubItem):
         """
         ...
 
-    def get_links(self) -> Generator[dict[str, str], None, None]:
+    def get_links(self) -> Generator[dict[str, str]]:
         """
         Returns list of additional links defined for this document.
 
@@ -243,7 +243,7 @@ class EpubHtml(EpubItem):
 
     def get_links_of_type(
         self, link_type: str
-    ) -> Generator[dict[str, str], None, None]:
+    ) -> Generator[dict[str, str]]:
         """
         Returns list of additional links of specific type.
 
@@ -493,7 +493,7 @@ class EpubBook:
         """
         ...
 
-    def get_items(self) -> Generator[EpubItem, None, None]:
+    def get_items(self) -> Generator[EpubItem]:
         """
         Returns all items attached to this book.
 
@@ -502,7 +502,7 @@ class EpubBook:
         """
         ...
 
-    def get_items_of_type(self, item_type: int) -> Generator[EpubItem, None, None]:
+    def get_items_of_type(self, item_type: int) -> Generator[EpubItem]:
         """
         Returns all items of specified type.
 
@@ -518,7 +518,7 @@ class EpubBook:
 
     def get_items_of_media_type(
         self, media_type: str
-    ) -> Generator[EpubItem, None, None]:
+    ) -> Generator[EpubItem]:
         """
         Returns all items of specified media type.
 

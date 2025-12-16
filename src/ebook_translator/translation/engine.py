@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def build_translation_map(
-    chunk: "Chunk", translated_texts: dict[int, str]
+    chunk: Chunk, translated_texts: dict[int, str]
 ) -> dict[str, dict[str, str]]:
     """
     Construit un mapping {fichier_source: {line_index: texte_traduit}}.

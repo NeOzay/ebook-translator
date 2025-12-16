@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 
 def default_save_item_builder(
-    chunk: "Chunk",
+    chunk: Chunk,
     final_result: dict[int, str],
 ) -> SaveItem:
     # Préparer SaveItem pour sauvegarde asynchrone
@@ -77,9 +77,9 @@ class ValidationWorker:
         validation_queue: ValidationQueue,
         save_queue: SaveQueue,
         pipeline: ValidationPipeline,
-        llm: "LLM",
+        llm: LLM,
         target_language: str,
-        phase: "PhaseBase",
+        phase: PhaseBase,
         stop_event: threading.Event,
         max_retries: int = 1,
     ):

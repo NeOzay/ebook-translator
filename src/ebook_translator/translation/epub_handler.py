@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def copy_epub_metadata(
-    source_book: "EpubBook", target_book: "EpubBook", target_language: str
+    source_book: EpubBook, target_book: EpubBook, target_language: str
 ) -> None:
     """
     Copie les métadonnées d'un EPUB source vers un EPUB cible.
@@ -50,8 +50,8 @@ def copy_epub_metadata(
 
 
 def extract_html_items_in_spine_order(
-    book: "EpubBook",
-) -> tuple[list["EpubHtml"], "EpubBook"]:
+    book: EpubBook,
+) -> tuple[list[EpubHtml], EpubBook]:
     """
     Extrait les items HTML d'un EPUB dans l'ordre du spine et prépare un nouveau livre.
 
@@ -83,7 +83,7 @@ def extract_html_items_in_spine_order(
     return sorted_html_items, new_book
 
 
-def reconstruct_html_item(item: "EpubHtml") -> None:
+def reconstruct_html_item(item: EpubHtml) -> None:
     """
     Reconstruit le contenu HTML d'un item EPUB après traduction.
 

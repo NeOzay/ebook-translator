@@ -7,7 +7,7 @@ contexte entre les chunks via un système de chevauchement (overlap).
 """
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ebooklib import epub
 
@@ -21,7 +21,7 @@ from .chunk import Chunk
 
 if TYPE_CHECKING:
     from ..segmentation.chapter_chunk import ChapterChunk
-    from ..segmentation.sequential_detector import SequentialDetectorConfig
+    from .chapter_detector import SequentialDetectorConfig
 
 logger = get_logger(__name__)
 
@@ -89,7 +89,12 @@ class Segmentator:
                 f"Cela augmentera significativement la consommation de tokens et le coût des traductions."
             )
 
-    def get_all_segments(self) -> Iterator[Chunk]:
+    def get_all_segments(
+        self,
+        segmentation_logic: Literal[
+            "stop_chunk_end_of_chapter", "continue"
+        ] = "continue",
+    ) -> Iterator[Chunk]:
         """
         Génère tous les chunks en segmentant le contenu de l'EPUB.
 
@@ -122,6 +127,19 @@ class Segmentator:
             ...     # Le head contient ~4000 tokens de contexte des chunks précédents
             ...     print(f"Chunk {chunk.index}: head={len(chunk.head)}, body={len(chunk.body)}, tail={len(chunk.tail)}")
         """
+        if segmentation_logic == "stop_chunk_end_of_chapter":
+            for chapter in self.get_all_chapters_by_spine():
+                logger.debug(
+                    f"Segmentation du chapitre {chapter.index} "
+                    f"({len(chapter.body)} fragments, {chapter.token_count} tokens)"
+                )
+                yield from turn_resource_to_chunks(
+                    get_texts(chapter.files),
+                    self.max_tokens,
+                    self.overlap_ratio,
+                    self.encoding,
+                )
+            return
         yield from turn_resource_to_chunks(
             get_texts(self.epub_htmls),
             self.max_tokens,
@@ -150,8 +168,8 @@ class Segmentator:
 
     def get_all_chapters_by_spine(
         self,
-        config: "SequentialDetectorConfig|None" = None,
-    ) -> Iterator["ChapterChunk"]:
+        config: SequentialDetectorConfig|None = None,
+    ) -> Iterator[ChapterChunk]:
         """
         Génère chunks par chapitre basé sur analyse de la spine EPUB.
 
@@ -162,11 +180,8 @@ class Segmentator:
         - Fallback LLM pour cas ambigus (ancien détecteur uniquement)
 
         Args:
-            llm: Instance LLM optionnelle pour résolution cas ambigus (ancien détecteur)
-            config: ChapterDetectorConfig ou None (utilise config par défaut)
-            use_sequential: Si True, utilise nouveau détecteur séquentiel (défaut: True)
-                           Si False, utilise ancien détecteur 4-pass (deprecated)
-
+            config: Configuration du détecteur séquentiel
+                (voir SequentialDetectorConfig pour les options)
         Yields:
             Un Chunk par chapitre détecté
 
@@ -186,7 +201,7 @@ class Segmentator:
             L'ancien détecteur est conservé pour rétrocompatibilité mais sera supprimé dans v0.11.0.
         """
         from ..segmentation.chapter_chunk import ChapterChunk
-        from .sequential_detector import SequentialChapterDetector
+        from .chapter_detector import SequentialChapterDetector
 
         detector = SequentialChapterDetector(self.epub_htmls, config=config)
 

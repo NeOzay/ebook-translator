@@ -76,7 +76,7 @@ class SaveWorker:
     def __init__(
         self,
         save_queue: SaveQueue,
-        store: "Store",
+        store: Store,
         stop_event: threading.Event | None = None,
     ):
         """

@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from pytest import MonkeyPatch
+
 from src.ebook_translator.logger import (
     LazyFileHandler,
     LogSession,
@@ -21,7 +22,7 @@ from src.ebook_translator.logger import (
 
 
 @pytest.fixture(autouse=True)
-def reset_log_session() -> Generator[None, None, None]:
+def reset_log_session() -> Generator[None]:
     """Reset la session de logs entre chaque test."""
     LogSession.reset()
     yield
@@ -29,7 +30,7 @@ def reset_log_session() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def temp_logs_dir(monkeypatch: MonkeyPatch) -> Generator[Path, None, None]:
+def temp_logs_dir(monkeypatch: MonkeyPatch) -> Generator[Path]:
     """Crée un répertoire temporaire pour les logs."""
     temp_dir = tempfile.mkdtemp()
     # Rediriger le répertoire de session vers temp

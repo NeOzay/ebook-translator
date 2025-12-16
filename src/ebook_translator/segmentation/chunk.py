@@ -174,7 +174,7 @@ class Chunk:
 
         return "\n\n".join(parts)
 
-    def split_chunk(self, max_tokens: int, overlap_ratio: float) -> Iterator["Chunk"]:
+    def split_chunk(self, max_tokens: int, overlap_ratio: float) -> Iterator[Chunk]:
         yield from turn_resource_to_chunks(
             iter(self.body.items()),
             max_tokens,

@@ -38,9 +38,9 @@ class HtmlPage:
     """
 
     # Cache global des pages déjà parsées
-    _cache: dict[epub.EpubHtml, "HtmlPage"] = {}
+    _cache: dict[epub.EpubHtml, HtmlPage] = {}
 
-    def __new__(cls, epub_html: epub.EpubHtml) -> "HtmlPage":
+    def __new__(cls, epub_html: epub.EpubHtml) -> HtmlPage:
         """
         Implémente le pattern Singleton pour chaque EpubHtml.
 
