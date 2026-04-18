@@ -3,8 +3,8 @@ Tests pour la validation du nombre de lignes dans les traductions.
 """
 
 import pytest
-
 from ebook_translator.checks.line_count_check import count_expected_lines
+
 from ebook_translator.translation.parser import parse_llm_translation_output
 
 

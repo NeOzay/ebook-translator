@@ -6,17 +6,18 @@ from ebook_translator.config import Config
 from ebook_translator.segmentation.helper import count_tokens
 
 from ..htmlpage.page import get_texts
-from ..segmentation import Chunk
+from ..segmentation.chunk import Chunk
 
 if TYPE_CHECKING:
     from ebooklib import epub
 
-    from .chapter_detector import ChapterGroup
+    from .chapter_detector import ChapterInfo
 
 
 @dataclass(kw_only=True)
 class ChapterPartChunk(Chunk):
     total_parts: int
+    part: int
     chapter: ChapterChunk
 
     @classmethod
@@ -37,8 +38,17 @@ class ChapterPartChunk(Chunk):
         Returns:
             ChapterPartChunk avec tous les attributs du Chunk source
         """
+        if chapter.index >= 100:
+            raise ValueError(
+                "Chapter index must be less than 100 for proper global indexing."
+            )
+
+        index = (
+            chapter.index * 100 + chunk.index
+        )  # Index global pour tri correct (ex: chapitre 2 partie 3 => 203)
         return cls(
-            index=chunk.index,
+            index=index,
+            part=chunk.index,
             head=chunk.head.copy(),
             body=chunk.body.copy(),
             tail=chunk.tail.copy(),
@@ -49,10 +59,10 @@ class ChapterPartChunk(Chunk):
         )
 
     def is_first(self) -> bool:
-        return self.index == 0
+        return self.part == 0
 
     def is_last(self) -> bool:
-        return self.index == self.total_parts - 1
+        return self.part == self.total_parts - 1
 
 
 @dataclass
@@ -63,19 +73,17 @@ class ChapterChunk(Chunk):
 
     def __init__(
         self,
-        chapter_group: ChapterGroup,
+        chapter_info: ChapterInfo,
         token_encoding: str = Config.DEFAULT_ENCODING,
     ):
-        super().__init__(
-            index=chapter_group.chapter_index, token_encoding=token_encoding
-        )
+        super().__init__(index=chapter_info.index, token_encoding=token_encoding)
         # Métadonnées du chapitre
-        self.name = chapter_group.chapter_name
-        self.files = chapter_group.html_files.copy()
-        self.files_names = chapter_group.get_file_names()
+        self.name = chapter_info.name
+        self.files = chapter_info.files.copy()
+        self.files_names = chapter_info.file_names
 
         # Extraire texte de tous les fichiers du chapitre
-        for tag_key, text in get_texts(chapter_group.html_files):
+        for tag_key, text in get_texts(chapter_info.files):
             self.body[tag_key] = text
             self.token_count += count_tokens(text, token_encoding)
 

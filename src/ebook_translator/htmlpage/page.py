@@ -154,7 +154,7 @@ class HtmlPage:
         self,
         tag_key: TagKey,
         translated_text: str,
-        bilingual_format: BilingualFormat = BilingualFormat.DISABLE,
+        bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
         original_text: str = "",
     ) -> None:
         """
@@ -336,6 +336,14 @@ class HtmlPage:
             prefix = " " if leading > 0 else ""
             suffix = " " if trailing > 0 else ""
             return prefix + core + suffix
+
+    def save(self) -> None:
+        """Force la sauvegarde du contenu HTML dans l'EpubHtml.
+
+        À appeler explicitement quand certains fragments n'ont pas été traduits
+        et que la sauvegarde automatique dans replace_text() n'a pas eu lieu.
+        """
+        self._save_content()
 
     def _save_content(self) -> None:
         """Sauvegarde le contenu HTML modifié dans l'EpubHtml."""

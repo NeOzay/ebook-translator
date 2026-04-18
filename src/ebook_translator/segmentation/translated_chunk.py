@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .chunk import Chunk
@@ -6,11 +7,18 @@ if TYPE_CHECKING:
     from ebook_translator.stores import Store
 
 
+@dataclass
 class TranslatedChunk(Chunk):
     """
     Représente un segment de texte traduit.
     Contient le texte original, le texte traduit, et des métadonnées associées.
     """
+
+    store: Store = field(init=False, repr=False)
+    has_missing: bool = field(
+        init=False,
+    )
+    original_chunk: Chunk = field(init=False, repr=False)
 
     def __init__(self, chunk: Chunk, store: Store):
         super().__init__(chunk.index)

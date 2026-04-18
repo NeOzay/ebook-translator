@@ -1,9 +1,7 @@
 from typing import override
 
 from ...logger import get_logger
-from ..retry_helper import retry_with_reasoning
 from .base import (
-    Check,
     CheckResult,
     FailedResult,
     SentenceErrorData,
@@ -11,6 +9,7 @@ from .base import (
     SuccessResult,
     ValidationContext,
 )
+from .intermediate import BatchCheck
 from .line_count_check import validate_retry_indices
 
 logger = get_logger(__name__)
@@ -128,7 +127,7 @@ def _check_length_similarity(a: str, b: str, threshold: float) -> bool:
     return ratio >= threshold
 
 
-class SentenceCheck(Check[SentenceErrorData]):
+class SentenceCheck(BatchCheck[SentenceErrorData]):
     """
     Vérifie que le nombre de phrases est cohérent entre original et traduction.
 
@@ -226,119 +225,11 @@ class SentenceCheck(Check[SentenceErrorData]):
         if not errors:
             return SuccessResult(check_name=self.name)
 
-        error_data = SentenceErrorData(errors=errors)
         return FailedResult(
             check_name=self.name,
             error_message="Nombre de phrases incorrect",
-            error_data=error_data,
+            error_data=SentenceErrorData(errors=errors),
         )
-
-    @override
-    def correct(
-        self, context: ValidationContext, error_data: SentenceErrorData
-    ) -> dict[int, str]:
-        """
-        Corrige les lignes avec nombre de phrases incorrect.
-
-        Utilise le système de retry à 2 niveaux:
-        1. Tentative avec deepseek-chat (mode normal)
-        2. Tentative avec deepseek-reasoner (mode reasoning) si échec
-
-        Args:
-            context: Contexte de validation
-            error_data: Erreurs détectées par validate()
-
-        Returns:
-            Traductions corrigées (ou originales si échec)
-
-        Raises:
-            ValueError: Si context.llm est None (mode lecture seule)
-        """
-        # Vérifier que LLM est disponible (requis pour correction)
-        if context.llm is None:
-            raise ValueError(
-                "Correction impossible: context.llm est None (mode lecture seule)"
-            )
-
-        # Extraire les indices des lignes à corriger
-        lines_to_correct = sorted(list(self.get_invalid_lines(context, error_data)))
-        logger.info(
-            f"[SentenceCheck] Correction de {len(lines_to_correct)} ligne(s) "
-            f"pour chunk {context.chunk.index}"
-        )
-
-        # Stocker les corrections réussies (rempli par validate_result)
-        corrected_translations: dict[int, str] = {}
-
-        def render_prompt(_attempt: int, _use_reasoning: bool) -> str:
-            """
-            Génère le prompt de correction.
-
-            Note: Les paramètres _attempt et _use_reasoning sont requis par
-            retry_with_reasoning mais pas utilisés ici car le prompt est
-            identique pour les deux tentatives (seul le modèle change).
-            """
-            if context.llm is None:
-                raise ValueError("LLM is None")
-            return context.llm.renderer.render_retry_sentence(
-                chunk=context.chunk,
-                target_language=context.target_language,
-                previous_translation=context.previous_translated_texts,
-                missing_indices=lines_to_correct,
-            )
-
-        def validate_result(llm_output: str) -> bool:
-            """
-            Valide la sortie LLM et stocke les corrections si valide.
-
-            Returns:
-                True si la sortie est valide et parsée avec succès, False sinon
-            """
-            try:
-                from ...translation.parser import parse_llm_translation_output
-
-                # Parser la sortie LLM
-                parsed = parse_llm_translation_output(llm_output)
-
-                # Vérifier que toutes les lignes demandées sont présentes
-                is_retry_valid, retry_error = validate_retry_indices(
-                    parsed, lines_to_correct
-                )
-
-                if is_retry_valid:
-                    # Stocker les corrections pour utilisation après retry_with_reasoning
-                    corrected_translations.update(parsed)
-                    return True
-                else:
-                    logger.warning(f"[SentenceCheck] Validation échouée: {retry_error}")
-                    return False
-            except Exception as e:
-                logger.error(f"[SentenceCheck] ❌ Erreur parsing: {e}")
-                return False
-
-        # Exécuter retry avec reasoning (2 tentatives max)
-        success, _ = retry_with_reasoning(
-            context=context,
-            render_prompt=render_prompt,
-            validate_result=validate_result,
-            context_name="sentence_lines",
-            max_attempts=2,
-        )
-
-        # Merger les corrections avec les traductions existantes
-        result = dict(context.translated_texts)
-
-        if not success:
-            logger.error(
-                f"[SentenceCheck] ❌ Échec correction chunk {context.chunk.index}, "
-                f"lignes {lines_to_correct} après 2 tentatives"
-            )
-            # Retourner traductions originales (seront filtrées par pipeline)
-            return result
-
-        # Succès: merger les corrections
-        result.update(corrected_translations)
-        return result
 
     @override
     def get_invalid_lines(
@@ -354,5 +245,50 @@ class SentenceCheck(Check[SentenceErrorData]):
         Returns:
             Set des indices de lignes avec nombre de phrases incorrect
         """
-        # Extraire line_idx de chaque erreur
         return {detail["line_idx"] for detail in error_data.errors}
+
+    # =========================================================================
+    # Implémentations des méthodes abstraites de BatchCheck
+    # =========================================================================
+
+    @override
+    def _render_batch_prompt(
+        self,
+        context: ValidationContext,
+        lines_to_correct: list[int],
+        attempt: int,
+        use_reasoning: bool,
+    ) -> tuple[str, str]:
+        if context.llm is None:
+            raise ValueError("LLM is None")
+        return context.llm.renderer.render_retry_sentence(
+            chunk=context.chunk,
+            target_language=context.target_language,
+            previous_translation=context.previous_translated_texts,
+            missing_indices=lines_to_correct,
+        )
+
+    @override
+    def _validate_batch_output(
+        self,
+        llm_output: str,
+        lines_to_correct: list[int],
+        corrected: dict[int, str],
+    ) -> bool:
+        try:
+            from ...translation.parser import parse_llm_translation_output
+
+            parsed = parse_llm_translation_output(llm_output)
+            is_valid, retry_error = validate_retry_indices(parsed, lines_to_correct)
+            if is_valid:
+                corrected.update(parsed)
+                return True
+            logger.warning(f"[SentenceCheck] Validation échouée: {retry_error}")
+            return False
+        except Exception as e:
+            logger.error(f"[SentenceCheck] ❌ Erreur parsing: {e}")
+            return False
+
+    @override
+    def _get_batch_context_name(self) -> str:
+        return "sentence_lines"

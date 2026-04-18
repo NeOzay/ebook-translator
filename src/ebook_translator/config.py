@@ -25,28 +25,42 @@ class ConfigBase:
         super().__setattr__(name, value)
 
 
-class TemplateNames(StrEnum):
-    # Phase 0: Analyse littéraire
-    Analyze_Incremental = "analyze_chapter_incremental.jinja"
-    Analyze_Simplified_Template = "analyze_chapter_simplified.jinja"
-    Chapter_Grouping_Template = "chapter_grouping.jinja"
-    Retry_Analysis_Invalid_Json_Template = "retry_correct_analysis_invalid_json.jinja"
-    Retry_Analysis_Missing_Sections_Template = (
-        "retry_correct_analysis_missing_sections.jinja"
-    )
+class Template(StrEnum):
+    def __init__(self, s: str) -> None:
+        self.prefix = ""
 
-    # Phase 1: Traduction initiale
-    First_Pass_Template = "translate_base.jinja"
-    Retry_Fragments_Template = "retry_correct_fragments.jinja"
-    Retry_Fragments_Flexible_Template = "retry_correct_fragments_flexible.jinja"
-    Retry_Missing_Lines_Targeted_Template = (
-        "retry_translate_missing_lines_targeted.jinja"
-    )
-    Retry_Sentence_Template = "retry_translate_sentence.jinja"
+    def get_templates(self) -> tuple[str, str]:
+        prefix = self.prefix
+        return prefix + self + "_system.jinja", prefix + self + "_user.jinja"
 
-    # Phase 2: Raffinement
-    Refine_Template = "translate_refine.jinja"
-    Retry_Punctuation_Template = "retry_correct_punctuation.jinja"
+    def get_system(self) -> str:
+        return self.prefix + self + "_system.jinja"
+
+    def get_user(self) -> str:
+        return self.prefix + self + "_user.jinja"
+
+
+class PhaseTemplate(Template):
+    def __init__(self, s: str) -> None:
+        self.prefix = "phase/"
+
+    Analyze_Incremental = "analyze_chapter_incremental"
+    Analyze_Simplified_Template = "analyze_chapter_simplified"
+    First_Pass_Template = "translate_base"
+    Refine_Template = "translate_refine"
+    Glossary = "test_glossary"
+
+
+class RetryTemplate(Template):
+    def __init__(self, s: str) -> None:
+        self.prefix = "retry/"
+
+    Retry_Analysis_Invalid_Json_Template = "retry_correct_analysis_invalid_json"
+    Retry_Analysis_Missing_Sections_Template = "retry_correct_analysis_missing_sections"
+    Retry_Fragments_Template = "retry_correct_fragments"
+    Retry_Missing_Lines_Targeted_Template = "retry_translate_missing_lines_targeted"
+    Retry_Sentence_Template = "retry_translate_sentence"
+    Retry_Punctuation_Template = "retry_correct_punctuation"
 
 
 class Logger_Level(ConfigBase):

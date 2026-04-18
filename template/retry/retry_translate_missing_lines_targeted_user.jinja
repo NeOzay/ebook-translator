@@ -1,0 +1,26 @@
+{#- ================================================================
+RETRY_TRANSLATE_MISSING_LINES_TARGETED_USER.JINJA (User)
+
+Purpose: User prompt with missing lines to translate.
+
+Input variables:
+  - error_message
+  - missing_indices (list of integers)
+  - source_content
+  - target_language
+
+Pair: retry_translate_missing_lines_targeted_system.jinja
+================================================================ -#}
+
+La sortie précédente était incomplète :
+{{ error_message }}
+
+Lignes manquantes à traduire ({{ missing_indices|length }}) :
+
+```
+{{ source_content }}
+```
+
+Indices attendus : {% for idx in missing_indices %}`<{{ idx }}/>`{% if not loop.last %}, {% endif %}{% endfor %}
+
+Produis exactement **{{ missing_indices|length }}** ligne(s) traduite(s) en {{ target_language }} :

@@ -3,13 +3,10 @@ Gestionnaire de stores pour les phases.
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from ebook_translator.pipeline.base import PhaseProtocol
 from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.stores.store import Store
-
-if TYPE_CHECKING:
-    from ebook_translator.pipeline.base import PhaseBase
 
 
 class StoreManager:
@@ -20,51 +17,51 @@ class StoreManager:
     Une phase peut lire depuis les stores des phases précédentes.
 
     Example:
+    ```python
         manager = StoreManager(Path("cache"), [InitialPhase, RefinedPhase])
-
         # Accéder au store d'une phase
         initial_store = manager.get_store("initial")
-
         # Lire depuis une phase
         translation = manager.get("initial", chunk)
-
         # Lire avec fallback (refined → initial → None)
         translation = manager.get_with_fallback(chunk, ["refined", "initial"])
+    ```
     """
 
-    def __init__(self, cache_dir: Path, phases: list[PhaseBase]):
+    def __init__(self, cache_dir: Path, phases: list[PhaseProtocol]):
         """
         Initialise le gestionnaire de stores.
 
-        Args:
-            cache_dir: Répertoire racine du cache
-            phases: Liste des classes de phases (pour créer les stores)
+        - Args:
+            * `cache_dir`: Répertoire racine du cache
+            * `phases`: Liste des classes de phases (pour créer les stores)
         """
         self.cache_dir = cache_dir
         self._stores: dict[str, Store] = {}
 
         # Créer un store par phase
         for phase_class in phases:
-            phase_name = phase_class.name
+            phase_name = phase_class.store_key()
             if phase_name in self._stores:
                 raise RuntimeError(f"Duplicate phase name: {phase_name}")
             store_path = cache_dir / phase_name
             store_path.mkdir(parents=True, exist_ok=True)
             self._stores[phase_name] = Store(store_path)
 
-    def get_store(self, phase_name: str) -> Store:
+    def get_store(self, phase_name: str | PhaseProtocol) -> Store:
         """
         Récupère le store d'une phase.
 
-        Args:
-            phase_name: Nom de la phase (ex: 'initial', 'refined')
-
-        Returns:
-            Instance Store pour cette phase
-
-        Raises:
-            KeyError: Si la phase n'existe pas
+        - Args:
+            * `phase_name`: Nom de la phase (ex: 'initial', 'refined')
+        - Return:
+            * Instance `Store` pour cette phase
+        - Raises:
+            * `KeyError`: Si la phase n'existe pas
         """
+        if not isinstance(phase_name, str):
+            phase_name = phase_name.store_key()
+
         if phase_name not in self._stores:
             raise KeyError(
                 f"Store for phase '{phase_name}' not found. "
@@ -78,14 +75,13 @@ class StoreManager:
         """
         Helper: lit la traduction d'un chunk depuis le store d'une phase.
 
-        Args:
-            - phase_name: Nom de la phase
-            - chunk: Chunk dont on veut la traduction
-
-        Returns:
-            Tuple contenant:
-            - Dictionnaire {line_index: texte_traduit ou chaine vide}
-            - Boolean indiquant si au moins une traduction est manquante
+        - Args:
+            * phase_name: Nom de la phase
+            * chunk: Chunk dont on veut la traduction
+        - Returns:
+            `tuple` contenant:
+            * `dict[line_index: texte_traduit ou chaine vide]`
+            * `bool` indiquant si au moins une traduction est manquante
         """
         try:
             store = self.get_store(phase_name)
@@ -107,17 +103,16 @@ class StoreManager:
         Essaie de lire depuis la première phase, puis la seconde, etc.
         jusqu'à trouver une traduction ou épuiser la liste.
 
-        Args:
-            chunk: Chunk dont on veut la traduction
-            phase_order: Liste des phases dans l'ordre de priorité
-                        (ex: ['refined', 'initial'] = refined d'abord, sinon initial)
-
-        Returns:
-            Mapping line_index -> translated_text, ou None si pas trouvé
-
-        Example:
-            Lors de la reconstruction EPUB, essayer refined puis initial
+        - Args:
+            * `chunk`: Chunk dont on veut la traduction
+            * `phase_order``: Liste des phases dans l'ordre de priorité
+            (ex: ['refined', 'initial'] = refined d'abord, sinon initial)
+        - Return:
+            * `dict[line_index, translated_text]`, ou `None` si pas trouvé
+        - Example:
+        ```python
             translation = manager.get_with_fallback(chunk, ["refined", "initial"])
+        ```
         """
         for phase_name in phase_order:
             result, has_missing = self.get_translate(phase_name, chunk)
@@ -132,7 +127,7 @@ class StoreManager:
         Args:
             phase_name: Nom de la phase
 
-        Returns:
+        Return:
             True si le store existe
         """
         return phase_name in self._stores

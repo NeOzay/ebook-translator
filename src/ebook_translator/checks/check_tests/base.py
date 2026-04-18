@@ -37,7 +37,13 @@ class LineCountErrorData:
     actual_count: int
 
 
-class FragmentErrorDetail(TypedDict):
+class HasLineIdx(TypedDict):
+    """TypedDict minimal pour les détails d'erreur possédant un index de ligne."""
+
+    line_idx: int
+
+
+class FragmentErrorDetail(HasLineIdx):
     """
     Détail d'une erreur de fragment pour FragmentCountCheck.
 
@@ -49,7 +55,6 @@ class FragmentErrorDetail(TypedDict):
         actual_fragments: Nombre de fragments reçu (basé sur traduction)
     """
 
-    line_idx: int
     original_text: str
     translated_text: str
     expected_fragments: int
@@ -69,10 +74,9 @@ class FragmentCountErrorData:
     errors: list[FragmentErrorDetail]
 
 
-class PunctuationErrorDetail(TypedDict):
+class PunctuationErrorDetail(HasLineIdx):
     """Détails d'une erreur de ponctuation sur une ligne."""
 
-    line_idx: int
     original_text: str
     translated_text: str
     expected_pairs: int
@@ -87,10 +91,9 @@ class PunctuationErrorData:
     errors: list[PunctuationErrorDetail]
 
 
-class SentenceErrorDetail(TypedDict):
+class SentenceErrorDetail(HasLineIdx):
     """Détails d'une erreur de nombre de phrases sur une ligne."""
 
-    line_idx: int
     original_text: str
     translated_text: str
     previous_translated_text: str
@@ -110,6 +113,14 @@ class AnalysisErrorData:
 
     name: Literal["analysis"] = "analysis"
     missing_sections: list[str]
+    invalid_json: bool
+    json_error_message: str = ""
+
+
+class GlossaryErrorData:
+    """Données d'erreur pour validation du glossaire."""
+
+    name: Literal["glossary"] = "glossary"
     invalid_json: bool
     json_error_message: str = ""
 

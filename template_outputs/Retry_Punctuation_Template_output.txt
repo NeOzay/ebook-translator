@@ -1,157 +1,64 @@
-⚠️ ATTENTION : Nombre de paires de guillemets INCORRECT
+--- SYSTEM ---
+Tu es un correcteur structurel de traductions. Ta seule tâche est de corriger le nombre de paires de guillemets dans une traduction. Ne modifie ni le sens, ni le style, ni le vocabulaire.
 
-Tu es un traducteur professionnel. Ta traduction précédente a échoué car tu n'as PAS préservé le nombre de paires de guillemets.
+### Principe de correction
 
----
+Une correction corrige UNIQUEMENT l'erreur structurelle détectée.
+Tu ne dois PAS re-traduire, améliorer le style, changer le vocabulaire, ni modifier le sens.
+Préserve intégralement la traduction existante sauf à l'endroit précis de l'erreur.
 
-## 📊 ANALYSE DE L'ERREUR
+### Balises
 
-**Texte original** :
-"Hello," she said, "world"
+- `<N/>` : balise de numérotation. Chaque ligne corrigée commence par la même balise `<N/>` que dans le texte source. Ne change ni l'ordre ni le nombre de lignes.
+- `</>` : balise de formatage. Conserve-la aux positions appropriées. Ne la supprime pas, ne la déplace pas, n'en ajoute pas sauf si c'est l'objet de la correction.
 
-**Ta traduction INCORRECTE** :
-« Bonjour, dit-elle, monde »
+### Format de sortie
 
-❌ **ERREUR DÉTECTÉE** :
-- Paires de guillemets attendues : 2
-- Paires dans ta traduction : 1
-
-
-💡 Il te manque **1 paire(s)** de guillemets.
-→ Tu as probablement **fusionné** plusieurs dialogues en un seul bloc.
-
-
----
-
-## 🎯 Philosophie de correction
-
-**Ce qu'EST une correction** :
-- ✅ Corriger l'erreur structurelle détectée (balises, ponctuation)
-- ✅ Préserver la qualité et le sens de la traduction existante
-- ✅ Maintenir tous les autres aspects de la traduction
-
-**Ce qu'elle N'EST PAS** :
-- ❌ Une re-traduction complète depuis zéro
-- ❌ Une amélioration du vocabulaire ou du style
-- ❌ Un changement du sens ou du registre
-- ❌ Un ajout ou suppression de contenu
-
-**Objectif** : Corriger UNIQUEMENT l'erreur structurelle spécifique, rien d'autre.
-
----
-
-### 🧩 Gestion des balises :
-
-- `<N/>` : Balise de **numérotation de ligne**.
-  Chaque ligne corrigée doit **commencer par la même balise `<N/>`** que dans le texte source.
-  Ne change ni l'ordre ni le nombre de ces lignes.
-
-- `</>` : Balise de **formatage**.
-  Tu dois la **conserver exactement** aux positions appropriées dans la correction.
-  Ces balises peuvent apparaître isolées ou entourer du texte.
-
----
-
-### 🧾 Format de sortie :
-
-Tu dois produire ta correction **en texte brut**, sans aucun commentaire, sans balise additionnelle et sans notes.
-À la toute fin de ta correction, ajoute sur une ligne le marqueur `[=[END]=]`
-
-Utilise strictement la structure suivante :
+Texte brut uniquement. Pas de commentaire, pas de note, pas de balise additionnelle.
+Termine par une ligne contenant uniquement `[=[END]=]`.
 
 ```txt
 <N/>Texte corrigé...
 <N+1/>Texte corrigé avec </>balises</> aux bonnes positions...
-<N+2/>Texte corrigé...
 [=[END]=]
 ```
 
----
+## Règle de correction
 
-## ✅ Checklist de vérification POST-CORRECTION
+Le texte original contient exactement **2 paires** de guillemets.
+La correction doit contenir exactement 2 paires `« ... »`.
 
-**CRITIQUE** : Après avoir écrit ta correction, tu DOIS MANUELLEMENT VÉRIFIER :
+Règles critiques :
+- Dialogue interrompu par le narrateur (`"A," he said, "B"`) : chaque segment a sa propre paire → `« A », dit-il, « B »`
+- Plusieurs personnages : chaque réplique a sa propre paire
+- Ne fusionne jamais plusieurs paires en une seule
 
-### Vérifications générales (toutes corrections)
-1. **Marqueur de fin** : `[=[END]=]` est présent sur sa propre ligne
-2. **Structure des lignes** : Toutes les balises `<N/>` sont préservées
-3. **Contenu préservé** : Pas de changement de sens par rapport à la traduction incorrecte
-4. **Qualité maintenue** : Vocabulaire et style de la traduction incorrecte conservés
+## Exemples
 
-### Vérifications spécifiques## 🔴 RÈGLE ABSOLUE : Préserver EXACTEMENT le nombre de paires
-
-
-Le texte original contient **EXACTEMENT 2 paires de guillemets**.
-
-Ta traduction DOIT contenir **EXACTEMENT 2 paires**.
-
-✅ **Structure attendue** :
-- **Dialogue interrompu** : `"A," he said, "B"` → `« A », dit-il, « B »` (2 paires)
-- **Multiples dialogues** : `"A" she said. "B" he replied.` → `« A », dit-elle. « B », répondit-il.` (2 paires)
-
-🎯 **Points critiques** :
-1. Si le narrateur interrompt le dialogue (`"A," he said, "B"`), tu DOIS préserver cette interruption
-2. Chaque dialogue séparé DOIT avoir sa propre paire de guillemets
-3. Ne fusionne PAS plusieurs dialogues en un seul bloc
-
-❌ **INTERDIT** :
-- Fusionner dialogues interrompus : `"A," he said, "B"` → `« A, dit-il, B »` ❌
-- Supprimer des paires de guillemets
-- Diviser un dialogue continu en plusieurs paires
-
-
-
----
-
-## 💡 Exemples de correction
-
-**Exemple 1 : Dialogue interrompu (2 paires)**
+**Dialogue interrompu (2 paires)** :
 ```
-Original : <0/>"You can think," she said, "after you arrest him!"
+Original :  <0/>"You can think," she said, "after you arrest him!"
 ```
+Correct :   `<0/>« Tu peux penser », dit-elle, « après l'avoir arrêté ! »` (2 paires)
+Incorrect : `<0/>« Tu peux penser, dit-elle, après l'avoir arrêté ! »` (1 paire — fusion)
 
-✅ **CORRECT** (2 paires préservées) :
+**Dialogues multiples (2 paires)** :
 ```
-<0/>« Tu peux penser », dit-elle, « après l'avoir arrêté ! »
+Original :  <0/>"A," she said. "B," he replied.
 ```
+Correct :   `<0/>« A », dit-elle. « B », répondit-il.` (2 paires)
+Incorrect : `<0/>« A, dit-elle. B », répondit-il.` (1 paire — fusion)
 
-❌ **INCORRECT** (1 seule paire, dialogue fusionné) :
-```
-<0/>« Tu peux penser, dit-elle, après l'avoir arrêté ! »
-```
-→ ERREUR : L'interruption narrative `she said` n'est plus encadrée par des guillemets
+--- USER ---
+**Texte original** :
+"Hello," she said, "world"
 
-**Exemple 2 : Multiples dialogues (2 paires)**
-```
-Original : <0/>"A," she said. "B," he replied.
-```
+**Traduction incorrecte** :
+« Bonjour, dit-elle, monde »
 
-✅ **CORRECT** (2 paires, 2 dialogues séparés) :
-```
-<0/>« A », dit-elle. « B », répondit-il.
-```
+Paires de guillemets attendues : **2**
+Paires dans la traduction : **1**
 
-❌ **INCORRECT** (1 paire, dialogues fusionnés) :
-```
-<0/>« A, dit-elle. B », répondit-il.
-```
+Il manque 1 paire(s). Des dialogues ont probablement été fusionnés.
 
----
-
-## ✅ CHECKLIST SPÉCIFIQUE (PONCTUATION)
-
-Avant de finaliser, VÉRIFIE MANUELLEMENT :
-
-1. **Compte les paires `" "` dans l'original** : 2
-2. **Compte les paires `« »` dans ta correction** : _______
-3. **Vérifie l'égalité** : Si différent → ERREUR, corrige immédiatement !
-4. **Vérifie les interruptions narratives** : Si `"A," he said, "B"` → 2 paires obligatoires
-
-**💡 Méthode de comptage** :
-- Compte les guillemets ouvrants `«` : _______
-- Compte les guillemets fermants `»` : _______
-- Ils doivent être égaux et égaux à 2
-
----
-
-Produis maintenant la correction avec 2 paires de guillemets :
+Produis la correction avec exactement **2** paire(s) de guillemets :

@@ -75,7 +75,7 @@ def test_save_and_get_from_chunk(tmp_path: Path, chunk: Chunk):
     """Test récupération des traductions pour un chunk."""
     store = Store(cache_dir=tmp_path)
 
-    translated = {i: f"Traduction {i+1}" for i in range(len(chunk.body))}
+    translated = {i: f"Traduction {i + 1}" for i in range(len(chunk.body))}
 
     savemap = build_translation_map(chunk, translated)
     # Sauvegarder des traductions pour le chunk

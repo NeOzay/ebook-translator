@@ -43,17 +43,17 @@
 - [ ] Tests unitaires ajoutés pour nouveau code
 - [ ] Tests unitaires mis à jour pour code modifié
 - [ ] Tests d'intégration ajoutés (si applicable)
-- [ ] Tous les tests passent localement (`poetry run pytest`)
+- [ ] Tous les tests passent localement (`uv run pytest`)
 - [ ] Coverage ≥ 80% pour nouveau code
 
 **Commandes exécutées :**
 
 ```bash
 # Tests
-poetry run pytest
+uv run pytest
 
 # Coverage (si applicable)
-poetry run pytest --cov=src/ebook_translator --cov-report=term-missing
+uv run pytest --cov=src/ebook_translator --cov-report=term-missing
 ```
 
 ## Checklist qualité code
@@ -65,7 +65,7 @@ poetry run pytest --cov=src/ebook_translator --cov-report=term-missing
 - [ ] Tous les paramètres de fonction sont typés
 - [ ] Tous les retours de fonction sont typés (`-> Type` ou `-> None`)
 - [ ] Variables complexes explicitement typées
-- [ ] Pyright strict sans erreurs (`poetry run pyright src/`)
+- [ ] basedpyright strict sans erreurs (`uv run basedpyright src/`)
 
 ### Documentation
 
@@ -77,10 +77,10 @@ poetry run pytest --cov=src/ebook_translator --cov-report=term-missing
 
 ### Style et formatage
 
-- [ ] Code formaté avec black (`poetry run black src/ tests/`)
-- [ ] Imports triés avec isort (`poetry run isort src/ tests/`)
-- [ ] Ruff linting OK (`poetry run ruff check src/ tests/`)
-- [ ] Pre-commit hooks OK (`poetry run pre-commit run --all-files`)
+- [ ] Code formaté avec black (`uv run black src/ tests/`)
+- [ ] Imports triés avec isort (`uv run isort src/ tests/`)
+- [ ] Ruff linting OK (`uv run ruff check src/ tests/`)
+- [ ] Pre-commit hooks OK (`uv run pre-commit run --all-files`)
 
 ### Qualité générale
 
@@ -128,15 +128,15 @@ poetry run pytest --cov=src/ebook_translator --cov-report=term-missing
 
 ```bash
 # Tests
-poetry run pytest
+uv run pytest
 # Résultat : ✅ XX passed
 
 # Type checking
-poetry run pyright src/
+uv run basedpyright src/
 # Résultat : ✅ 0 errors, 0 warnings
 
 # Pre-commit
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 # Résultat : ✅ All hooks passed
 ```
 
@@ -176,6 +176,6 @@ poetry run pre-commit run --all-files
 - [ ] J'ai testé localement tous les changements
 - [ ] J'ai vérifié qu'il n'y a pas de breaking changes non documentés
 - [ ] Tous les tests passent
-- [ ] Pyright strict sans erreurs
+- [ ] basedpyright strict sans erreurs
 - [ ] Pre-commit hooks OK
 - [ ] Documentation à jour

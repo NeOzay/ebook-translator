@@ -10,11 +10,10 @@ logger = get_logger(__name__)
 
 def retry_with_reasoning(
     context: ValidationContext,
-    render_prompt: Callable[[int, bool], str],
+    render_prompt: Callable[[int, bool], tuple[str, str]],
     validate_result: Callable[[str], bool],
     context_name: str,
     max_attempts: int = 2,
-    llm_content: str = "",
 ) -> tuple[bool, str | None]:
     """
     Exécute une correction avec retry automatique (normal → reasoning).
@@ -47,7 +46,7 @@ def retry_with_reasoning(
         use_reasoning = attempt == max_attempts
 
         # Générer le prompt (même template, paramètre use_reasoning pour contexte)
-        prompt = render_prompt(attempt, use_reasoning)
+        system, user = render_prompt(attempt, use_reasoning)
 
         # Construire le contexte de log
         llm_context = (
@@ -70,8 +69,8 @@ def retry_with_reasoning(
         # Appeler le LLM
         try:
             llm_output = context.llm.query(
-                system_prompt=prompt,
-                content=llm_content,
+                system_prompt=system,
+                content=user,
                 log_name=llm_context,
                 config={"use_reasoning": use_reasoning},
             )

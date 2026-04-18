@@ -4,6 +4,7 @@ Configuration pytest pour les tests ebook-translator.
 Ce fichier contient les fixtures communes à tous les tests.
 """
 
+import os
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -18,11 +19,13 @@ from ebook_translator.segmentation import Chunk
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
 
-source_epub = Path("tests/Saint-Exupery-Le_Petit_Prince.epub")
+source_epub = Path(
+    os.environ.get("TEST_EPUB", "tests/Saint-Exupery-Le_Petit_Prince.epub")
+)
 source_book = epub.read_epub(source_epub)
 html_items, target_book = extract_html_items_in_spine_order(source_book)
 
-segmentator = Segmentator(html_items, 150)
+segmentator = Segmentator(source_book, 150)
 
 a_chunk = segmentator.get_all_segments().__next__()
 

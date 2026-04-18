@@ -27,7 +27,7 @@ class TagKey:
         page: La page HTML contenant ce tag
     """
 
-    __slots__ = ("tag", "_id", "index", "page", "chapter_name")
+    __slots__ = ("tag", "_id", "index", "page")
 
     def __init__(self, index: int, tag: Tag, page: HtmlPage) -> None:
         """
@@ -71,4 +71,4 @@ class TagKey:
 
     def __repr__(self) -> str:
         """Représentation en chaîne pour le debug."""
-        return f"TagKey(index={self.index}, tag={self.tag.name}, page={self.page.epub_html.file_name}, chapter={self.chapter_name})"
+        return f"TagKey(index={self.index}, tag={self.tag.name}, page={self.page.epub_html.file_name})"

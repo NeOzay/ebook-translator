@@ -6,9 +6,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ebook_translator.pipeline.glossary_validator import GlossaryValidator
 
 from ebook_translator.glossary import Glossary
-from ebook_translator.pipeline.glossary_validator import GlossaryValidator
 
 
 @pytest.fixture

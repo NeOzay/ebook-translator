@@ -6,6 +6,12 @@ from ebook_translator.segmentation.helper import turn_resource_to_chunks
 
 from ..htmlpage import HtmlPage, TagKey
 
+type Scope = list[tuple[str, int]]
+"""
+Liste de tuples (file_name, line_number) où line_number est -1 pour "tout le fichier".
+Premier tuple : début, dernier tuple : fin, tuples intermédiaires : fichiers traversés.
+"""
+
 
 @dataclass
 class Chunk:
@@ -29,23 +35,37 @@ class Chunk:
         head: Liste de textes de contexte provenant du chunk précédent
         body: Dictionnaire TagKey -> texte des fragments à traduire
         tail: Liste de textes de contexte pour le chunk suivant
-        chapter_name: Nom optionnel du chapitre (pour segmentation par chapitre)
-        file_range: Dictionnaire HtmlPage -> nombre de fragments dans cette page
+        scope: Portée du chunk (liste de tuples (file_name, line_number))
+        token_count: Nombre de tokens dans le body
+        token_encoding: Encodage utilisé pour le comptage de tokens
     """
 
     index: int
     head: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
     body: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
     tail: dict[TagKey, str] = field(default_factory=dict[TagKey, str])
-    token_count: int = 0
+
+    token_count: int = field(default=0)
     token_encoding: str = field(default=Config.DEFAULT_ENCODING)
+
+    @property
+    def scope(self) -> Scope:
+        """
+        Portée du chunk (liste de tuples (file_name, line_number)).
+
+        Le résultat est mis en cache après le premier calcul pour éviter
+        les recalculs coûteux lors d'accès répétés.
+
+        Returns:
+            Liste de tuples (file_name, line_number) représentant la portée du chunk
+        """
+        if not hasattr(self, "_scope_cache"):
+            self._scope_cache = self.calculate_scope()
+        return self._scope_cache
 
     def fetch_body(self) -> Iterator[tuple[HtmlPage, TagKey, str]]:
         """
         Génère des tuples (page, tag_key, texte) pour chaque fragment du body.
-
-        Cette méthode associe chaque fragment de texte à sa page source
-        en utilisant file_range pour déterminer les frontières.
 
         Yields:
             Tuples (HtmlPage, TagKey, texte original)
@@ -92,87 +112,47 @@ class Chunk:
         Returns:
             Représentation textuelle formatée du chunk
         """
+        return self.prepare_for_prompt()
+
+    def prepare_for_prompt(
+        self,
+        index_to_mark: list[int] | None = None,
+        include_head: bool = True,
+        include_tail: bool = True,
+    ) -> str:
         parts: list[str] = []
 
         # Ajouter le contexte du head
-        if self.head:
+        if include_head and self.head:
             parts.extend(self.head.values())
 
-        # Ajouter le body avec indices
         for index, text in enumerate(self.body.values()):
-            parts.append(f"<{index}/>{text}")
-
-        # Ajouter le contexte du tail
-        if self.tail:
-            parts.extend(self.tail.values())
-
-        return "\n\n".join(parts)
-
-    def mark_lines_to_numbered(self, indices_to_mark: list[int]) -> str:
-        """
-        Génère une représentation du chunk avec numérotation sélective des lignes.
-
-        Cette méthode renvoie le chunk COMPLET (head + body + tail) mais numérote
-        UNIQUEMENT les lignes dont les indices sont spécifiés. Les autres lignes
-        sont incluses comme contexte non numéroté.
-
-        Utilisé principalement pour les retries de traduction : le LLM voit tout
-        le contenu pour maintenir la cohérence, mais sait précisément quelles
-        lignes doivent être (re)traduites.
-
-        Args:
-            indices_to_mark: Liste des indices (positions dans body) à numéroter
-                avec le format <N/>. Les indices absents ne seront pas numérotés.
-
-        Returns:
-            String contenant :
-            - head (contexte non numéroté)
-            - body avec numérotation sélective : <N/>texte pour indices_to_mark
-            - tail (contexte non numéroté)
-
-        Example:
-            >>> chunk = Chunk(
-            ...     body={
-            ...         TagKey(...): "First line",
-            ...         TagKey(...): "Second line",
-            ...         TagKey(...): "Third line",
-            ...     },
-            ...     head=["Context before"],
-            ...     tail=["Context after"],
-            ... )
-            >>> print(chunk.mark_lines_to_numbered([0, 2]))
-            Context before
-
-            <0/>First line
-
-            Second line
-
-            <2/>Third line
-
-            Context after
-
-        Note:
-            Le nom "mark_lines_to_numbered" signifie "marquer (numéroter) les lignes
-            spécifiées", pas "renvoyer seulement les lignes numérotées".
-        """
-        parts: list[str] = []
-
-        # Ajouter le contexte du head
-        if self.head:
-            parts.extend(self.head.values())
-
-        # Ajouter le body avec indices
-        for index, text in enumerate(self.body.values()):
-            if index in indices_to_mark:
+            if index_to_mark is None or index in index_to_mark:
                 parts.append(f"<{index}/>{text}")
             else:
                 parts.append(text)
 
         # Ajouter le contexte du tail
-        if self.tail:
+        if include_tail and self.tail:
             parts.extend(self.tail.values())
 
         return "\n\n".join(parts)
+
+    def prepare_for_prompt_split(
+        self, index_to_mark: list[int] | None = None
+    ) -> tuple[str, str, str]:
+        head_str = "\n\n".join(self.head.values()) if self.head else ""
+
+        body: list[str] = []
+        for index, text in enumerate(self.body.values()):
+            if not index_to_mark or index in index_to_mark:
+                body.append(f"<{index}/>{text}")
+            else:
+                body.append(text)
+        body_str = "\n\n".join(body)
+
+        tail_str = "\n\n".join(self.tail.values()) if self.tail else ""
+        return head_str, body_str, tail_str
 
     def split_chunk(self, max_tokens: int, overlap_ratio: float) -> Iterator[Chunk]:
         yield from turn_resource_to_chunks(
@@ -181,6 +161,55 @@ class Chunk:
             overlap_ratio,
             self.token_encoding,
         )
+
+    def calculate_scope(self) -> Scope:
+        """
+        Calcule la portée du chunk (position début/fin).
+
+        Format : Liste de tuples (file_name, line_number) où :
+        - Premier tuple : début (file_name, line_number)
+        - Tuples intermédiaires : fichiers traversés (file_name, -1 pour "tout le fichier")
+        - Dernier tuple : fin (file_name, line_number)
+
+        Returns:
+            Liste de tuples représentant la portée du chunk
+
+        Example:
+            >>> chunk = Chunk(index=0, body={...})
+            >>> scope = chunk.calculate_scope()
+            >>> # [("chapter01.xhtml", 0), ("chapter01.xhtml", 150)]
+        """
+        if not self.body:
+            return []
+
+        # Obtenir le premier et dernier TagKey
+        first_tag_key = next(iter(self.body.keys()))
+        last_tag_key = next(reversed(self.body.keys()))
+
+        # Extraire file_name et line_number
+        debut_file = first_tag_key.page.epub_html.file_name
+        debut_line = int(first_tag_key.index)
+
+        fin_file = last_tag_key.page.epub_html.file_name
+        fin_line = int(last_tag_key.index)
+
+        # Construire la liste de tuples
+        scope: list[tuple[str, int]] = [(debut_file, debut_line)]
+
+        # Collecter tous les fichiers intermédiaires
+        seen_files: set[str] = {debut_file}
+        for tag_key in self.body:
+            file_name = tag_key.page.epub_html.file_name
+            if file_name not in seen_files and file_name != fin_file:
+                # Fichier intermédiaire : -1 pour "tout le fichier"
+                scope.append((file_name, -1))
+                seen_files.add(file_name)
+
+        # Ajouter la fin si différente du début
+        if debut_file != fin_file or debut_line != fin_line:
+            scope.append((fin_file, fin_line))
+
+        return scope
 
     def calculate_chunk_hash(self) -> str:
         """Calcule un hash unique basé sur le contenu du chunk."""

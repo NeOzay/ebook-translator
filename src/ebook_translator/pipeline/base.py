@@ -5,20 +5,23 @@ Classes de base pour le système de phases.
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum
-from typing import TYPE_CHECKING, Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ebook_translator.checks import Check, ValidationPipeline
-from ebook_translator.segmentation.segmentator import Chunk, Segmentator
+from ebook_translator.segmentation.chunk import Chunk
+from ebook_translator.segmentation.segmentator import Segmentator
+from ebook_translator.stores.store import Store
 from ebook_translator.translation.parser import parse_llm_translation_output
 
 if TYPE_CHECKING:
     from ebook_translator.llm.llm_config import LLMConfig
     from ebook_translator.pipeline.context import ChunkContext, PhaseContext, PhaseStats
     from ebook_translator.validation import SaveItem
+    from ebook_translator.validator.translation_context import ContexteTraduction
 
 
-class ExecutionMode(Enum):
+class ExecutionMode(StrEnum):
     """Mode d'exécution d'une phase."""
 
     PARALLEL = "parallel"
@@ -30,8 +33,52 @@ class PhaseName(StrEnum):
 
     DUMMY = "dummy"
     LITERARY_ANALYSIS = "literary analysis"
+    GLOSSARY = "glossary"
     INITIAL = "initial"
     REFINEMENT = "refinement"
+
+
+class PhaseProtocol(Protocol):
+    """Interface structurelle des phases du pipeline.
+
+    Utilisée par Pipeline, PhaseExecutor, StoreManager et ValidationWorkerPool
+    pour éviter l'invariance des génériques de PhaseBase. PhaseBase satisfait
+    implicitement ce protocole.
+
+    Les overrides de méthodes avec chunk dans les sous-classes de PhaseBase
+    doivent déclarer ``chunk: Chunk`` (pas ``ChunkType``) pour garantir la
+    conformité LSP.
+    """
+
+    name: PhaseName
+    execution_mode: ExecutionMode
+    max_tokens: int
+    overlap_ratio: float
+    chunk_type: type[Any]
+    depends_on: tuple[Any, ...]
+    checks: tuple[Check[Any], ...]
+
+    def store_key(self) -> str: ...
+    def put_context(self, context: PhaseContext) -> None: ...
+    def validation_pipeline(self) -> ValidationPipeline: ...
+    def before_phase(self) -> None: ...
+    def after_phase(self, stats: PhaseStats) -> None: ...
+    def get_chunks(self) -> Sequence[Chunk]: ...
+    def get_store(self) -> Store: ...
+    def get_worker_count(self) -> int: ...
+    def get_translation_cache(self, chunk: Chunk) -> tuple[dict[int, str], bool]: ...
+    def before_chunk(self, chunk: Chunk, context: ChunkContext) -> None: ...
+    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]: ...
+    def get_llm_config(self, chunk: Chunk, context: ChunkContext) -> LLMConfig: ...
+    def process_llm_response(
+        self, chunk: Chunk, response: str, context: ChunkContext
+    ) -> dict[int, str]: ...
+    def after_chunk(
+        self, chunk: Chunk, result: dict[int, str], context: ChunkContext
+    ) -> None: ...
+    def save_item_builder(
+        self, chunk: Chunk, final_result: dict[int, str]
+    ) -> SaveItem: ...
 
 
 @dataclass
@@ -43,6 +90,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     Configuration déclarative via champs de classe.
 
     Exemple d'implémentation:
+    ```python
         class InitialTranslationPhase(PhaseBase):
             name = "initial"
             max_tokens = 1500
@@ -54,6 +102,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
 
             def render_prompt(cls, chunk: Chunk, context: ChunkContext) -> str:
                 return context.llm.renderer.render_translate(context.target_language)
+    ```
     """
 
     # === Configuration obligatoire (à définir dans les sous-classes) ===
@@ -67,14 +116,16 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     max_tokens: int = field(default=0)
     """Nombre maximum de tokens par segment"""
 
+    llm_config: LLMConfig = field(default_factory=lambda: {})
+
     overlap_ratio: float = field(default=0.0)
     """Ratio de chevauchement entre segments (0.15 = 15%)"""
 
     execution_mode: ExecutionMode = field(init=False)
     """Mode d'exécution: PARALLEL ou SEQUENTIAL"""
 
-    # template_name: ClassVar[TemplateNames]
-    """Nom du template Jinja2 à utiliser"""
+    checks: tuple[Check[Any], ...] = field(init=False)
+    """Liste des checks de validation pour cette phase"""
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
@@ -83,20 +134,14 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     )
     """Liste des phases dont cette phase dépend"""
 
-    checks: tuple[Check[Any], ...] = field(init=False)
-    """Liste des checks de validation pour cette phase"""
-
     max_workers: int = field(default=4)
     """Nombre de workers (None = auto, utilisé uniquement en mode PARALLEL)"""
-
-    store_readonly: bool = False
-    """Si True, le store de cette phase est en lecture seule"""
 
     context: PhaseContext = field(init=False)
 
     # === Validation de configuration ===
 
-    def __init_subclass__(cls, **kwargs: Any):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         """Valide que tous les champs obligatoires sont définis."""
         super().__init_subclass__(**kwargs)
 
@@ -117,30 +162,38 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     # === Hooks (méthodes de classe avec implémentation par défaut) ===
 
     def get_chunks(self) -> Sequence[Chunk]:
+        """
+        Retourne la liste des chunks à traiter pour cette phase.
+
+        Doit être surchargé si chunk_type n'est pas Chunk.
+
+        Returns:
+            Sequence[Chunk]: Liste des chunks à traiter
+        """
         if self.chunk_type != Chunk:
             raise TypeError("get_chunks must be overridden for non-Chunk types")
-        return list(
+
+        return list[Chunk](
             Segmentator(
-                self.context.html_items,
+                epub_source=self.context.html_items,
                 max_tokens=self.max_tokens,
                 overlap_ratio=self.overlap_ratio,
             ).get_all_segments()
         )
 
-    def get_translation_cache(self, chunk: ChunkType) -> tuple[dict[int, str], bool]:
+    @classmethod
+    def get_translation_cache(cls, chunk: Chunk) -> tuple[dict[int, str], bool]:
         """
-        Helper: lit la traduction d'un chunk depuis le store d'une phase.
+        Helper : lit la traduction d'un chunk depuis le store d'une phase.
 
-        Args:
-            - phase_name: Nom de la phase
-            - chunk: Chunk dont on veut la traduction
-
-        Returns:
-            Tuple contenant:
-            - Dictionnaire {line_index: texte_traduit ou chaine vide}
-            - Boolean indiquant si au moins une traduction est manquante
+        - Args:
+            - `chunk` : Chunk dont on veut la traduction
+        - Returns:
+            - `Tuple` contenant :
+            1. Dictionnaire `{line_index: texte_traduit ou chaine vide}`
+            2. Boolean indiquant si au moins une traduction est manquante
         """
-        return self.context.store_manager.get_translate(self.store_key(), chunk)
+        return cls.get_store().get_from_chunk(chunk)
 
     def before_phase(self) -> None:  # noqa: B027
         """
@@ -150,15 +203,10 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         - Initialisation de ressources globales
         - Logging du début de phase
         - Préparation du glossaire
-
-        Args:
-            context: Contexte global de la phase
         """
         pass
 
-    def before_chunk(  # noqa: B027
-        self, chunk: ChunkType, context: ChunkContext
-    ) -> None:
+    def before_chunk(self, chunk: Chunk, context: ChunkContext) -> None:  # noqa: B027
         """
         Hook appelé avant le traitement d'un chunk.
 
@@ -173,8 +221,32 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         """
         pass
 
+    def get_literary_context(
+        self, chunk: Chunk, context: ChunkContext
+    ) -> ContexteTraduction | None:
+        """
+        Récupère l'analyse littéraire du chapitre depuis Phase 0 si disponible.
+
+        Délègue à Chapters.get_literary_analysis() qui gère automatiquement :
+        - Le mapping Chunk → Chapitre
+        - La récupération depuis le store
+        - Le filtrage par portée
+
+        Args:
+            chunk: Chunk à traduire
+            context: Contexte du chunk (non utilisé, requis par signature)
+
+        Returns:
+            Analyse littéraire (AnalyseLitteraire) ou None si non disponible
+        """
+        if not self.context.get_previous_stats(PhaseName.LITERARY_ANALYSIS):
+            return None
+
+        # Déléguer à Chapters singleton
+        return self.context.chapters.get_literary_analysis(chunk)
+
     @abstractmethod
-    def render_prompt(self, chunk: ChunkType, context: ChunkContext) -> str:
+    def render_prompt(self, chunk: ChunkType, context: ChunkContext) -> tuple[str, str]:
         """
         Génère le prompt LLM pour ce chunk.
 
@@ -185,28 +257,11 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
             context: Contexte du chunk (contient llm.renderer, glossary, etc.)
 
         Returns:
-            Prompt formaté pour le LLM
-
-        Example:
-
-            def render_prompt(cls, chunk: Chunk, context: ChunkContext) -> str:
-                return context.llm.renderer.render_translate(context.target_language)
+            Prompts (system, user) formaté pour le LLM
         """
         ...
 
-    def source_content(self, chunk: ChunkType, context: ChunkContext) -> str:
-        """
-        Retourne le contenu source du chunk sous forme de chaîne de caractères.
-
-        Args:
-            chunk: Chunk à traiter
-
-        Returns:
-            Contenu source du chunk en tant que string
-        """
-        return str(chunk)
-
-    def llm_config(self, chunk: ChunkType, context: ChunkContext) -> LLMConfig:
+    def get_llm_config(self, chunk: ChunkType, context: ChunkContext) -> LLMConfig:
         """
         Retourne la configuration spécifique du LLM pour cette phase.
 
@@ -216,7 +271,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Returns:
             Dictionnaire de configuration LLM
         """
-        return {}
+        return self.llm_config
 
     def process_llm_response(
         self, chunk: ChunkType, response: str, context: ChunkContext
@@ -225,7 +280,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Traite la réponse brute du LLM pour ce chunk.
 
         Par défaut, parse la réponse avec parse_llm_translation_output().
-        Peut être surchargé pour parser la réponse et extraire les traductions.
+        Peut être surchargé pour un traitement personnalisé.
 
         Args:
             chunk: Chunk traité
@@ -259,7 +314,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
 
     def after_chunk(  # noqa: B027
         self,
-        chunk: ChunkType,
+        chunk: Chunk,
         result: dict[int, str],
         context: ChunkContext,
     ) -> None:
@@ -295,7 +350,8 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
 
     # === Propriétés calculées ===
 
-    def store_key(self) -> str:
+    @classmethod
+    def store_key(cls) -> str:
         """
         Clé du store pour cette phase.
 
@@ -305,7 +361,16 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Returns:
             Clé du store (ex: 'initial', 'refined')
         """
-        return self.name
+        return cls.name
+
+    @classmethod
+    def get_store(cls) -> Store:
+        """
+        Récupère le store associé à cette phase.
+        Returns:
+            Instance Store pour cette phase
+        """
+        return cls.context.store_manager.get_store(cls.store_key())
 
     def validation_pipeline(self) -> ValidationPipeline:
         """
@@ -323,20 +388,21 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Nombre de workers à utiliser (mode PARALLEL uniquement).
 
         Returns:
-            Nombre de workers (défaut: 4 si max_workers est None)
+            Nombre de workers (défaut: 4) ou 1 si mode SEQUENTIAL
         """
         if self.execution_mode == ExecutionMode.SEQUENTIAL:
             return 1
         return self.max_workers
 
-    def put_context(self, context: PhaseContext) -> None:
+    @classmethod
+    def put_context(cls, context: PhaseContext) -> None:
         """
         Assigne le contexte de la phase à l'instance.
 
         Args:
             context: Contexte global de la phase
         """
-        self.context = context
+        cls.context = context
 
     def __repr__(self) -> str:
         return (

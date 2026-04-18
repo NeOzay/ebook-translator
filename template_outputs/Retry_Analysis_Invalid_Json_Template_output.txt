@@ -1,22 +1,7 @@
-⚠️ **ATTENTION : JSON INVALIDE DÉTECTÉ DANS TON ANALYSE**
+--- SYSTEM ---
+Tu es un correcteur de syntaxe JSON. Ta tâche est de corriger une analyse littéraire dont le JSON est invalide. Corrige uniquement la syntaxe, ne modifie pas le contenu de l'analyse.
 
-## ❌ ERREUR JSON DÉTECTÉE
-
-**Erreur spécifique** :
-```
-Erreur de syntaxe JSON à la ligne 3
-```
-
-**Ta réponse incorrecte (extrait)** :
-```
-{"analyse": {"resume_narratif": "Ceci est un résumé"
-```
-
----
-
-## ✅ FORMAT JSON REQUIS
-
-Le format JSON attendu pour l'analyse du chapitre "Chapitre 1: Introduction" est **strictement** le suivant :
+### Structure JSON attendue
 
 ```json
 {
@@ -27,141 +12,34 @@ Le format JSON attendu pour l'analyse du chapitre "Chapitre 1: Introduction" est
     "style_ecriture": "...",
     "themes_images_cles": "...",
     "references_culturelles": "...",
-    "pistes_traduction": [
-      "Piste 1 : ...",
-      "Piste 2 : ..."
-    ]
+    "pistes_traduction": ["...", "..."]
   },
-  "glossaire": [
-    {
-      "terme": "...",
-      "type": "personnage|lieu|creature|titre|objet|terme_technique|reference_culturelle",
-      "sexe": "m|f|nc",
-      "description_role": "...",
-      "notes_traduction": "...",
-      "proposition_traduction": "..."
-    }
-  ]
+  "glossaire": {
+    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
+    "entrees": [
+      ["terme", "type", "sexe", "traduction"]
+    ]
+  }
 }
 ```
 
----
+### Erreurs fréquentes à corriger
 
-## 🔍 CHECKLIST DE VALIDATION JSON
+- Guillemets non échappés dans les valeurs : `"Il dit "Bonjour""` → `"Il dit \"Bonjour\""`
+- Virgule finale avant `}` ou `]`
+- Texte ou commentaire hors JSON
+- Guillemets simples au lieu de doubles
 
-**Avant de soumettre ta correction, vérifie MANUELLEMENT** :
+### Format de sortie
 
-### 1. Structure générale
-- [ ] Le JSON commence par `{` et se termine par `}`
-- [ ] Toutes les accolades `{` ont leur `}` correspondante
-- [ ] Tous les crochets `[` ont leur `]` correspondant
-- [ ] Pas de commentaires (interdits en JSON strict)
+Produis uniquement le JSON corrigé. Pas de commentaire, pas de balises markdown. Commence par `{` et termine par `}`.
 
-### 2. Clés et valeurs
-- [ ] Toutes les **clés** sont entre guillemets doubles : `"chapitre"`
-- [ ] Toutes les **chaînes** sont entre guillemets doubles : `"valeur"`
-- [ ] Pas de guillemets simples `'` (utiliser `"`)
-- [ ] Guillemets échappés dans les valeurs : `\"` au lieu de `"`
+--- USER ---
+Erreur JSON : Erreur de syntaxe JSON à la ligne 3
 
-### 3. Virgules
-- [ ] Une virgule `,` après chaque champ (sauf le dernier)
-- [ ] Pas de virgule finale avant `}` ou `]` (trailing comma)
-- [ ] Une virgule entre chaque élément de tableau `[..., ...]`
-
-### 4. Échappement des caractères
-- [ ] Guillemets internes échappés : `"Il dit \"Bonjour\""`
-- [ ] Antislash échappés : `\\` au lieu de `\`
-- [ ] Retours à la ligne échappés : `\n` au lieu de retour réel
-
-### 5. Structure spécifique
-- [ ] `"pistes_traduction"` est un **tableau** `[...]` de chaînes
-- [ ] `"glossaire"` est un **tableau** `[...]` d'objets
-- [ ] Chaque objet du glossaire a tous les champs requis
-
----
-
-## 💡 ERREURS JSON COURANTES
-
-### ❌ **Oubli de guillemets autour des clés**
-```json
-{
-  chapitre: "Chapter 1"  // INCORRECT
-}
+Réponse à corriger :
 ```
-✅ **Correct** :
-```json
-{
-  "chapitre": "Chapter 1"  // Les clés DOIVENT être entre guillemets
-}
+{"analyse": {"resume_narratif": "Ceci est un résumé"
 ```
 
-### ❌ **Virgule finale (trailing comma)**
-```json
-{
-  "chapitre": "Chapter 1",
-  "analyse": {...},  // Virgule en trop avant }
-}
-```
-✅ **Correct** :
-```json
-{
-  "chapitre": "Chapter 1",
-  "analyse": {...}  // Pas de virgule après le dernier champ
-}
-```
-
-### ❌ **Guillemets non échappés dans les valeurs**
-```json
-{
-  "resume_narratif": "Il dit "Bonjour""  // Guillemets cassent le JSON
-}
-```
-✅ **Correct** :
-```json
-{
-  "resume_narratif": "Il dit \"Bonjour\""  // Guillemets échappés avec \"
-}
-```
-
-### ❌ **Guillemets simples au lieu de doubles**
-```json
-{
-  'chapitre': 'Chapter 1'  // JSON n'accepte que les guillemets doubles
-}
-```
-✅ **Correct** :
-```json
-{
-  "chapitre": "Chapter 1"  // Toujours des guillemets doubles "
-}
-```
-
-### ❌ **Commentaires (interdits en JSON strict)**
-```json
-{
-  "chapitre": "Chapter 1",  // Ceci est un commentaire INTERDIT
-  "analyse": {...}
-}
-```
-✅ **Correct** :
-```json
-{
-  "chapitre": "Chapter 1",
-  "analyse": {...}
-}
-```
-
----
-
-## 🎯 TA TÂCHE
-
-1. **Identifie** l'erreur JSON spécifique dans ta réponse précédente
-2. **Corrige** uniquement l'erreur de syntaxe JSON (pas besoin de changer le contenu de l'analyse)
-3. **Vérifie** manuellement avec la checklist ci-dessus
-4. **Génère** le JSON valide complet pour le chapitre "Chapitre 1: Introduction"
-
-**IMPORTANT** : Tu dois produire **uniquement** le JSON final, sans commentaire, sans texte introductif, sans balises markdown.
-
----
-
-**Génère maintenant l'analyse JSON VALIDE complète pour ce chapitre.**
+Corrige la syntaxe JSON et produis le JSON valide complet :

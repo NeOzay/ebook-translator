@@ -1,0 +1,20 @@
+{#- ================================================================
+RETRY_CORRECT_ANALYSIS_INVALID_JSON_USER.JINJA (User)
+
+Purpose: User prompt with the invalid JSON and error message.
+
+Input variables:
+  - json_error_message
+  - invalid_response
+
+Pair: retry_correct_analysis_invalid_json_system.jinja
+================================================================ -#}
+
+Erreur JSON : {{ json_error_message }}
+
+Réponse à corriger :
+```
+{{ invalid_response }}
+```
+
+Corrige la syntaxe JSON et produis le JSON valide complet :

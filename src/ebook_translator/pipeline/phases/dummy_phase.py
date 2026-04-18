@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import override
 
 from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.pipeline.context import ChunkContext
@@ -18,5 +19,6 @@ class DummyPhase(PhaseBase):
     store_readonly: bool = field(default=True, init=False)
     checks = ()
 
-    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> str:
-        return ""
+    @override
+    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
+        return "", ""

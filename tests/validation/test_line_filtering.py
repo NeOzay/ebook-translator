@@ -140,8 +140,7 @@ def test_fragment_count_filtering(val_context: ValidationContext):
     }
 
     translated_texts = {
-        i: f"Texte{i}"
-        for i in range(10)  # Pas de </> → mauvais pour 2 et 5
+        i: f"Texte{i}" for i in range(10)  # Pas de </> → mauvais pour 2 et 5
     }
 
     val_context.llm = create_mock_llm()

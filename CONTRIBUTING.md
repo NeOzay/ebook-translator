@@ -79,13 +79,13 @@ def load_glossary() -> dict[str, dict[str, int]]:
     ...
 ```
 
-**Configuration Pyright : Mode strict activé**
+**Configuration basedpyright : Mode strict activé**
 
-Le projet utilise Pyright en mode strict. Toutes les erreurs de typage doivent être corrigées.
+Le projet utilise basedpyright en mode strict. Toutes les erreurs de typage doivent être corrigées.
 
 ```bash
 # Vérifier les types
-poetry run pyright src/
+uv run basedpyright src/
 
 # Ne devrait retourner AUCUNE erreur
 ```
@@ -148,16 +148,16 @@ def validate_translation(
 
 ```bash
 # Formater automatiquement le code
-poetry run black src/ tests/
+uv run black src/ tests/
 
 # Trier les imports
-poetry run isort src/ tests/
+uv run isort src/ tests/
 
 # Linting
-poetry run ruff check src/ tests/
+uv run ruff check src/ tests/
 
 # Tout en une fois via pre-commit
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 **Conventions de nommage :**
@@ -271,7 +271,7 @@ touch tests/test_quotation_mark_check.py
 # ... test ...
 
 # 4. Valider que ça fonctionne
-poetry run pytest tests/test_quotation_mark_check.py -v
+uv run pytest tests/test_quotation_mark_check.py -v
 
 # 5. Commit atomique
 git add src/ebook_translator/checks/check_tests/quotation_mark_check.py tests/test_quotation_mark_check.py
@@ -366,7 +366,7 @@ test: ValidationPipeline - Tests d'intégration pour retry progressif
 
 docs: CONTRIBUTING - Guide de développement incrémental
 
-chore: pyproject.toml - Configuration pyright mode strict
+chore: pyproject.toml - Configuration basedpyright mode strict
 ```
 
 **Messages descriptifs et concis :**
@@ -386,9 +386,9 @@ feat: Ajout d'un système de retry à deux niveaux avec utilisation du mode reas
 
 **Avant de créer une PR :**
 
-1. ✅ Tous les tests passent (`poetry run pytest`)
-2. ✅ Pyright mode strict sans erreurs (`poetry run pyright src/`)
-3. ✅ Pre-commit hooks passent (`poetry run pre-commit run --all-files`)
+1. ✅ Tous les tests passent (`uv run pytest`)
+2. ✅ basedpyright mode strict sans erreurs (`uv run basedpyright src/`)
+3. ✅ Pre-commit hooks passent (`uv run pre-commit run --all-files`)
 4. ✅ Code formaté (black + isort)
 5. ✅ Coverage ≥ 80% pour nouveau code
 6. ✅ Documentation à jour (docstrings, CHANGELOG.md si applicable)
@@ -423,7 +423,7 @@ feat: Ajout d'un système de retry à deux niveaux avec utilisation du mode reas
 
 ## Checklist qualité
 
-- [ ] Code typé (pyright strict OK)
+- [ ] Code typé (basedpyright strict OK)
 - [ ] Docstrings à jour
 - [ ] Pre-commit hooks OK
 - [ ] Pas de breaking changes (ou documentés)
@@ -445,19 +445,19 @@ git clone https://github.com/NeOzay/ebook-translator.git
 cd ebook-translator
 
 # 2. Installer les dépendances (avec dev)
-poetry install --with dev
+uv sync --group dev
 
 # 3. Copier et configurer .env
 cp .env.example .env
 # Éditer .env et ajouter votre clé API DeepSeek
 
 # 4. Installer pre-commit hooks
-poetry run pre-commit install
+uv run pre-commit install
 
 # 5. Vérifier que tout fonctionne
-poetry run pytest
-poetry run pyright src/
-poetry run pre-commit run --all-files
+uv run pytest
+uv run basedpyright src/
+uv run pre-commit run --all-files
 ```
 
 ### Outils de développement
@@ -466,22 +466,22 @@ poetry run pre-commit run --all-files
 
 ```bash
 # Tests
-poetry run pytest                                    # Tous les tests
-poetry run pytest tests/test_specific.py -v         # Test spécifique
-poetry run pytest --cov=src/ebook_translator        # Avec coverage
+uv run pytest                                    # Tous les tests
+uv run pytest tests/test_specific.py -v         # Test spécifique
+uv run pytest --cov=src/ebook_translator        # Avec coverage
 
 # Type checking
-poetry run pyright src/                             # Mode strict
+uv run basedpyright src/                             # Mode strict
 
 # Formatage et linting
-poetry run black src/ tests/                        # Formatage
-poetry run isort src/ tests/                        # Tri imports
-poetry run ruff check src/ tests/                   # Linting
-poetry run ruff check --fix src/ tests/             # Auto-fix
+uv run black src/ tests/                        # Formatage
+uv run isort src/ tests/                        # Tri imports
+uv run ruff check src/ tests/                   # Linting
+uv run ruff check --fix src/ tests/             # Auto-fix
 
 # Pre-commit (tout en une fois)
-poetry run pre-commit run --all-files               # Tous les fichiers
-poetry run pre-commit run --files src/module.py     # Fichier spécifique
+uv run pre-commit run --all-files               # Tous les fichiers
+uv run pre-commit run --files src/module.py     # Fichier spécifique
 ```
 
 **Configuration VSCode (recommandée) :**
@@ -513,10 +513,10 @@ Créer `.vscode/settings.json` :
 - [ ] Tous les paramètres de fonction sont typés
 - [ ] Tous les retours de fonction sont typés
 - [ ] Variables complexes explicitement typées
-- [ ] Pyright strict sans erreurs (`poetry run pyright src/`)
-- [ ] Code formaté avec black (`poetry run black src/ tests/`)
-- [ ] Imports triés avec isort (`poetry run isort src/ tests/`)
-- [ ] Ruff linting OK (`poetry run ruff check src/ tests/`)
+- [ ] basedpyright strict sans erreurs (`uv run basedpyright src/`)
+- [ ] Code formaté avec black (`uv run black src/ tests/`)
+- [ ] Imports triés avec isort (`uv run isort src/ tests/`)
+- [ ] Ruff linting OK (`uv run ruff check src/ tests/`)
 
 ### Documentation
 
@@ -529,8 +529,8 @@ Créer `.vscode/settings.json` :
 
 - [ ] Tests unitaires pour nouveau code
 - [ ] Tests d'intégration pour features multi-composants
-- [ ] Tous les tests passent (`poetry run pytest`)
-- [ ] Coverage ≥ 80% (`poetry run pytest --cov`)
+- [ ] Tous les tests passent (`uv run pytest`)
+- [ ] Coverage ≥ 80% (`uv run pytest --cov`)
 - [ ] Tests suivent le développement incrémental (une sous-tâche = un test)
 
 ### Git
@@ -539,7 +539,7 @@ Créer `.vscode/settings.json` :
 - [ ] Messages de commit descriptifs
 - [ ] Branche nommée correctement (feature/, bugfix/, etc.)
 - [ ] Pas de conflits avec master
-- [ ] Pre-commit hooks OK (`poetry run pre-commit run --all-files`)
+- [ ] Pre-commit hooks OK (`uv run pre-commit run --all-files`)
 
 ### Qualité
 

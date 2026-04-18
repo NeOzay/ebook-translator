@@ -3,13 +3,10 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 from openai import APIError, APITimeoutError, OpenAI, OpenAIError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
-
-from ebook_translator.config import TemplateNames
 
 from ..logger import get_logger, get_session_log_path
 from .llm_config import LLMConfig
@@ -59,6 +56,7 @@ class LLM:
         temperature: float = 0.5,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        glossary_max_terms: int = 25,
     ):
         self.model_name = model_name
         self.reasoning_name = reasoning_name
@@ -73,35 +71,7 @@ class LLM:
         self._log_counter = 0
 
         # Renderer encapsulé pour templates typés (API recommandée)
-        self.renderer = TemplateRenderer(prompt_dir)
-
-    # -----------------------------------
-    # 🔹 Rendu du template
-    # -----------------------------------
-    @DeprecationWarning
-    def render_prompt(self, template_name: TemplateNames, **kwargs: Any) -> str:
-        """
-        Rend un template Jinja2 avec les variables données.
-
-        Note:
-            Cette méthode est conservée pour rétrocompatibilité.
-            Pour une API typée et simplifiée, utilisez `self.renderer.render_XXX()`.
-
-        Example:
-            >>> # API recommandée (typée)
-            >>> prompt = llm.renderer.render_translate(target_language="fr")
-            >>>
-            >>> # API legacy (non typée, conservée pour compatibilité)
-            >>> prompt = llm.render_prompt("translate_base.jinja", target_language="fr")
-
-        Args:
-            template_name: Nom du fichier template (ex: "translate_base.jinja")
-            **kwargs: Variables à passer au template
-
-        Returns:
-            Prompt rendu
-        """
-        return self.renderer.render_prompt(template_name, **kwargs)
+        self.renderer = TemplateRenderer(prompt_dir, glossary_max_terms)
 
     # -----------------------------------
     # 🔹 Gestion du log
@@ -141,7 +111,7 @@ class LLM:
             f"Timestamp : {timestamp}\n"
             f"Model     : {self.model_name}\n"
             f"Prompt len: {len(prompt)} chars\n"
-            f"{'-'*40}\n\n"
+            f"{'-' * 40}\n\n"
             f"--- PROMPT ---\n{prompt}\n\n"
             f"--- CONTENT ---\n{content}\n\n"
             f"--- RESPONSE ---\n"
@@ -234,11 +204,8 @@ class LLM:
                 # Extraire le raisonnement si présent (deepseek-reasoner)
                 reasoning_text: str = ""
                 if hasattr(resp.choices[0].message, "reasoning_content"):
-                    reasoning_content = getattr(
-                        resp.choices[0].message, "reasoning_content", None
-                    )
-                    reasoning_text = (
-                        reasoning_content if reasoning_content is not None else ""
+                    reasoning_text = getattr(
+                        resp.choices[0].message, "reasoning_content", ""
                     )
 
                 if attempt > 0:
@@ -252,14 +219,14 @@ class LLM:
                 # Logger avec raisonnement séparé si présent
                 if reasoning_text:
                     log_content = f"""
-{'=' * 80}
+{"=" * 80}
 🧠 REASONING (deepseek-reasoner):
-{'=' * 80}
+{"=" * 80}
 {reasoning_text}
 
-{'=' * 80}
+{"=" * 80}
 📝 RESPONSE:
-{'=' * 80}
+{"=" * 80}
 {response_text}
 """
                     self._append_response(log_path, log_content)

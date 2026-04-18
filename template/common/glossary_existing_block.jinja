@@ -1,0 +1,60 @@
+{#- ================================================================
+GLOSSARY_EXISTING_BLOCK.JINJA - Existing glossary reinjection (analysis)
+
+Included by:
+  - analyze_chapter_simplified_system.jinja (Phase 0 - first pass)
+  - analyze_chapter_incremental_system.jinja (Phase 0 - incremental)
+  - test_glossary_system.jinja (glossary behavior tests)
+
+Input variable:
+  - existing_glossary: list of GlossaryMultipleValueEntry objects
+      - terme (str): original term
+      - traductions: list of (str, int) tuples — translation + weight
+      - sexes: list of (str, int) tuples — gender + weight
+      - types: list of (str, int) tuples — type + weight
+      - weight (int): total weight
+      - confidence (str): "low", "medium", or "high"
+        (computed on translations only)
+
+Purpose: Render existing glossary entries in two groups:
+  - Validated (high confidence): shown for context, excluded from output
+  - To arbitrate (medium/low): must be included in output with chosen values
+================================================================ -#}
+{%- if existing_glossary and existing_glossary|length > 0 -%}
+
+{%- set validated = existing_glossary | selectattr('confidence', 'equalto', 'high') | list -%}
+{%- set to_arbitrate = existing_glossary | rejectattr('confidence', 'equalto', 'high') | list -%}
+
+### Glossaire existant
+
+{% if validated|length > 0 -%}
+**Termes validés** (confiance haute) — NE PAS inclure dans la sortie :
+
+Ces termes sont stables. Ils sont listés ici pour que tu connaisses la terminologie établie, mais tu ne dois PAS les reproduire dans ton glossaire de sortie.
+
+{% for entry in validated -%}
+- {{ entry.terme }} → {{ entry.traductions[0][0] }} ({{ entry.types[0][0] }}, {{ entry.sexes[0][0] }})
+{% endfor %}
+{% endif -%}
+
+{% if to_arbitrate|length > 0 -%}
+**Termes à arbitrer** (confiance moyenne ou basse) — À inclure dans la sortie :
+
+Pour chaque terme ci-dessous rencontré dans le bloc courant, choisis les valeurs les plus adaptées au contexte et inclus-les dans ton glossaire de sortie.
+
+Règles :
+- S'il y a une proposition dominante : réutilise-la sauf erreur factuelle manifeste.
+- S'il y a un conflit : choisis la proposition la plus adaptée au contexte, ou proposes-en une nouvelle si aucune n'est satisfaisante.
+- Les modifications sont réservées aux erreurs factuelles (genre grammatical, type erroné, traduction inadaptée). Pas de modifications stylistiques.
+
+{% for entry in to_arbitrate -%}
+- **{{ entry.terme }}** (w={{ entry.weight }}, {{ entry.confidence }})
+  - traductions : {% for t, w in entry.traductions %}`{{ t }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+  - sexes : {% for s, w in entry.sexes %}`{{ s }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+  - types : {% for ty, w in entry.types %}`{{ ty }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endfor -%}
+{% endif -%}
+
+Pour les termes non listés ci-dessus, ajoute-les au glossaire comme nouvelles entrées.
+{%- endif %}

@@ -5,7 +5,7 @@ Ce module fournit une architecture flexible pour définir et exécuter des phase
 de traduction avec validation, transitions, et gestion de cache.
 """
 
-from .base import ExecutionMode, PhaseBase, PhaseName
+from .base import ExecutionMode, PhaseBase, PhaseName, PhaseProtocol
 from .context import ChunkContext, PhaseContext, PhaseStats
 from .executor import PhaseExecutor
 from .pipeline import Pipeline
@@ -13,6 +13,7 @@ from .store_manager import StoreManager
 
 __all__ = [
     "PhaseBase",
+    "PhaseProtocol",
     "ExecutionMode",
     "PhaseName",
     "PhaseContext",

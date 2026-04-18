@@ -6,7 +6,14 @@
       "Bash(poetry run python:*)",
       "Bash(iconv:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(rtk ls:*)",
+      "Bash(rtk pytest:*)",
+      "Bash(rtk find:*)",
+      "Bash(rtk read:*)",
+      "Bash(rtk grep:*)",
+      "Bash(uv run:*)",
+      "Bash(rtk git *)"
     ],
     "deny": [],
     "ask": []

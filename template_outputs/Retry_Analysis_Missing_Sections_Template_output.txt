@@ -1,108 +1,53 @@
-⚠️ **ATTENTION : ANALYSE INCOMPLÈTE DÉTECTÉE**
+--- SYSTEM ---
+Tu es un correcteur d'analyses littéraires. Une analyse du chapitre "Chapitre 1: Introduction" est incomplète : des sections obligatoires sont absentes. Ta tâche est de compléter les sections manquantes sans modifier les sections existantes.
 
-## ❌ SECTIONS MANQUANTES
-
-Tu as oublié **2 section(s) obligatoire(s)** dans ton analyse du chapitre "Chapitre 1: Introduction" :
-  1. `analyse.resume_narratif`
-  2. `glossaire[0].sexe`
-
----
-
-## 📋 STRUCTURE COMPLÈTE REQUISE
-
-Voici la structure JSON **complète** avec indication des sections manquantes :
+### Structure JSON complète requise
 
 ```json
 {
   "chapitre": "Chapitre 1: Introduction",
   "analyse": {
-    "resume_narratif": "❌ MANQUANT",
-    "tonalite_ambiance": "✅",
-    "style_ecriture": "✅",
-    "themes_images_cles": "✅",
-    "references_culturelles": "✅",
-    "pistes_traduction": ✅
+    "resume_narratif": "Résumé narratif, max 5 lignes",
+    "tonalite_ambiance": "Atmosphère générale",
+    "style_ecriture": "Techniques narratives, rythme, registre",
+    "themes_images_cles": "Thèmes principaux et images récurrentes",
+    "references_culturelles": "Références historiques, littéraires, culturelles",
+    "pistes_traduction": ["Piste concrète 1", "Piste concrète 2"]
   },
-  "glossaire": ✅
+  "glossaire": {
+    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
+    "entrees": [
+      ["terme", "type", "sexe", "traduction"]
+    ]
+  }
 }
 ```
 
----
+### Contraintes glossaire
 
-## 🎯 FOCUS : COMPLÉTER LES SECTIONS MANQUANTES
+- `type` : personnage, lieu, creature, titre, objet, terme_technique, reference_culturelle
+- `sexe` : m, f, nc
+- `proposition_traduction` : exactement un seul terme
+- `pistes_traduction` : tableau JSON de chaînes
 
+### Format de sortie
 
-### Section `analyse.resume_narratif`
+Produis le JSON complet (sections existantes + sections ajoutées). Pas de commentaire, pas de balises markdown. Commence par `{` et termine par `}`.
 
+--- USER ---
+Chapitre : "Chapitre 1: Introduction"
 
-**Description** : Résumé narratif du chapitre (max. 5 lignes)
-**Format** : Chaîne de caractères
-**Exemple** : `"Le protagoniste découvre un secret qui changera sa vie..."`
+Sections manquantes (2) :
+- `analyse.resume_narratif`
+- `glossaire[0].sexe`
 
+Analyse incomplète :
+```json
+{"analyse": {}, "glossaire": [{"terme": "Sakamoto", "definition": "Un personnage important."}]}
+```
 
+Texte du chapitre :
 
+Je suis un texte de chapitre à analyser pour en extraire le genre et faire un résumé narratif.
 
-### Section `glossaire[0].sexe`
-
-**Description** : Champ manquant dans un élément du glossaire
-**Action** : Ajouter le champ manquant à cet élément du glossaire
-
-
-**Champ** : `sexe` (obligatoire)
-**Type** : Chaîne de caractères
-**Valeurs autorisées** : m (masculin), f (féminin), nc (non concerné)
-**Description** : Sexe grammatical pour accords
-
-
-
-
-
-
-
----
-
-## ✅ CHECKLIST DE COMPLÉTUDE
-
-**Avant de soumettre ta correction, vérifie MANUELLEMENT** :
-
-### Structure de premier niveau
-- [ ] `"chapitre"` : présent (valeur : `"Chapitre 1: Introduction"`)
-- [ ] `"analyse"` : présent (objet avec 6 champs)
-- [ ] `"glossaire"` : présent (tableau d'objets)
-
-### Champs de "analyse"
-- [ ] `"resume_narratif"` : chaîne de caractères (max 5 lignes)
-- [ ] `"tonalite_ambiance"` : chaîne de caractères
-- [ ] `"style_ecriture"` : chaîne de caractères
-- [ ] `"themes_images_cles"` : chaîne de caractères
-- [ ] `"references_culturelles"` : chaîne de caractères
-- [ ] `"pistes_traduction"` : **TABLEAU** de chaînes (minimum 2-3 pistes)
-
-### Validation du glossaire
-- [ ] `"glossaire"` est un **tableau** `[...]`
-- [ ] Chaque élément du glossaire est un **objet** `{...}`
-- [ ] Chaque objet a **tous les 6 champs** requis :
-  - `terme`, `type`, `sexe`, `description_role`, `notes_traduction`, `proposition_traduction`
-- [ ] Valeurs `type` autorisées : personnage, lieu, creature, titre, objet, terme_technique, reference_culturelle
-- [ ] Valeurs `sexe` autorisées : m, f, nc
-- [ ] `proposition_traduction` contient **UN SEUL terme** (pas de virgule, pas de `/`)
-
-### Validation JSON
-- [ ] JSON syntaxiquement valide (guillemets, virgules, accolades)
-- [ ] Pas de virgule finale (trailing comma)
-- [ ] Pas de commentaires
-
----
-
-## 🎯 TA TÂCHE
-
-1. **Identifie** les sections manquantes listées ci-dessus
-2. **Complète** ces sections avec du contenu approprié basé sur le texte du chapitre
-3. **Vérifie** manuellement avec la checklist de complétude
-4. **Génère** le JSON complet et valide pour le chapitre "Chapitre 1: Introduction"
-
-**IMPORTANT** : Tu dois produire **uniquement** le JSON final complet, sans commentaire, sans texte introductif, sans balises markdown.
-
----
-
-**Génère maintenant l'analyse JSON COMPLÈTE pour ce chapitre.**
+Complète les sections manquantes à partir du texte ci-dessus et produis le JSON complet :

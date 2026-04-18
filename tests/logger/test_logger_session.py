@@ -11,7 +11,6 @@ from typing import Any
 
 import pytest
 from pytest import MonkeyPatch
-
 from src.ebook_translator.logger import (
     LazyFileHandler,
     LogSession,

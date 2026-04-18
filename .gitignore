@@ -26,7 +26,7 @@ ENV/
 env/
 .venv
 
-# Poetry
+# Poetry (remplacé par uv)
 poetry.lock
 
 # IDEs

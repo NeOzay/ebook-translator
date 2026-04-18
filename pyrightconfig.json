@@ -1,5 +1,6 @@
 {
-    "venvPath": "C:\\Users\\colpa\\AppData\\Local\\pypoetry\\Cache\\virtualenvs",
+    "venvPath": ".",
+    "venv": ".venv",
     "executionEnvironments": [
         {
             "root": "src"

@@ -14,11 +14,127 @@ Utilisé à la fois pour :
 """
 
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal, NotRequired, Self, TypedDict
+
+from ebook_translator.validator.translation_context import (
+    SexeType,
+    TermeGlossaire,
+    TermType,
+)
+
+
+def _get_most_frequent(d: dict[str, int]) -> str | None:
+    if not d:
+        return None
+    return max(d, key=lambda k: d[k])
+
+
+def _compute_confidence(d: list[int]) -> float:
+    if not d or sum(d) == 0:
+        return 0.0
+
+    total = sum(d)
+    max_val = max(d)
+    ratio = max_val / total
+    dominance = math.pow(ratio, 0.5)
+    k = 2
+    masse = total / (total + k)
+    score = dominance * masse
+    return round(score, 2)
+
+
+def _compute_dominance(d: list[int]) -> float:
+    """Stabilité pure, sans facteur de masse."""
+    if not d or sum(d) == 0:
+        return 0.0
+    total = sum(d)
+    max_val = max(d)
+    return round(math.pow(max_val / total, 0.5), 2)
+
+
+def _get_possible_translations(
+    d: dict[str, int], threshold: float = 0.7
+) -> list[tuple[str, int]]:
+    """
+    Retourne les traductions possibles en ajoutant des propositions
+    jusqu'à ce que la confiance cumulée atteigne le seuil.
+    Utilise la même formule que compute_confidence, appliquée
+    sur la fraction couverte de la distribution originale.
+    """
+    if not d:
+        return []
+
+    total = sum(d.values())
+    d_sorted = sorted(d.items(), key=lambda t: t[1], reverse=True)
+    collected: list[tuple[str, int]] = []
+    covered = 0
+
+    for name, occurrence in d_sorted:
+        collected.append((name, occurrence))
+        covered += occurrence
+        # ratio couvert de la distribution originale
+        ratio = covered / total
+        # même transformation que compute_confidence
+        dominance = math.pow(ratio, 0.5)
+        k = 2
+        masse = total / (total + k)
+        score = dominance * masse
+        if score >= threshold:
+            return collected
+
+    return collected
+
+
+def _get_confidence_level(score: float) -> Literal["low", "medium", "high"]:
+    if score >= 0.7:
+        return "high"
+    elif score >= 0.6:
+        return "medium"
+    else:
+        return "low"
+
+
+class GlossaryEntry(TypedDict):
+    terme: str
+    traduction: str
+    sexe: str
+    type: str
+    weight: NotRequired[int]
+    confiance: Literal["low", "medium", "high"]
+
+
+class GlossaryMultipleValueEntry(TypedDict):
+    terme: str
+    traductions: list[tuple[str, int]]  # Traductions possibles avec leurs poids
+    sexes: list[tuple[str, int]]
+    types: list[tuple[str, int]]
+    weight: int
+    confidence: Literal["low", "medium", "high"]
+
+
+class GlossaryStatistics(TypedDict):
+    total_terms: int
+    user_terms: int
+    conflicting_terms: int
 
 
 class Glossary:
+    class _Entry(TypedDict):
+        translations: dict[str, int]
+        term_types: dict[str, int]
+        sexes: dict[str, int]
+
+    @staticmethod
+    def _new_entry() -> Glossary._Entry:
+        return {
+            "translations": defaultdict(int),
+            "term_types": defaultdict(int),
+            "sexes": defaultdict(int),
+        }
+
     """
     Glossaire unifié pour cohérence terminologique.
 
@@ -47,63 +163,55 @@ class Glossary:
         >>> # 'Matrix → Matrice, Sakamoto → Sakamoto'
     """
 
-    def __init__(self, cache_path: Path | None = None):
+    def __init__(self, cache_path: Path | str | None = None):
         """
         Initialise le glossaire.
 
         Args:
             cache_path: Chemin optionnel pour sauvegarder/charger le glossaire
         """
-        self.cache_path = cache_path
-        # {terme_source: {traduction: count}}
-        self._glossary: dict[str, dict[str, int]] = defaultdict(
-            lambda: defaultdict(int)
-        )
+        self._glossary: dict[str, Glossary._Entry] = defaultdict(self._new_entry)
         # {terme_source: traduction_validée}
-        self._validated: dict[str, str] = {}
+        self._user: dict[str, GlossaryEntry] = {}
+        self._entries_cache: dict[str, GlossaryEntry] = {}
+        cache_path = Path(cache_path) if cache_path else None
 
+        self.cache_path: Path | None = None
         if cache_path and cache_path.exists():
+            self.cache_path = cache_path
             self._load_from_cache()
 
     # =========================================================================
     # API basique : Apprentissage et récupération
     # =========================================================================
 
-    def learn(self, source_term: str, translated_term: str) -> None:
+    def learn(self, term: TermeGlossaire) -> None:
         """
         Enregistre une traduction observée.
 
-        Filtre automatiquement les mots grammaticaux et mots très courts
-        pour éviter la pollution du glossaire.
-
         Args:
-            source_term: Terme dans la langue source
-            translated_term: Traduction observée
-
-        Example:
-            >>> glossary.learn("Matrix", "Matrice")
-            >>> glossary.learn("Matrix", "Matrice")  # Renforce
-            >>> glossary.learn("Matrix", "Système")  # Conflit détecté
-            >>> glossary.learn("the", "le")  # Ignoré (stopword)
+            term: Dictionnaire avec les clés "terme", "proposition_traduction", "type", "sexe"
         """
-        from .glossary_filters import should_exclude_from_glossary
+        if term["terme"] in self._user:
+            return
 
-        # Filtrer mots grammaticaux et mots courts automatiquement
-        if should_exclude_from_glossary(source_term):
-            return  # Ignorer silencieusement
+        source_term = term["terme"].lower()
+        translated_term = term["proposition_traduction"].lower()
+        term_type = term["type"].lower()
+        sexe = term["sexe"].lower()
 
-        # Ignorer si identiques (ex: noms propres gardés tels quels)
-        # if source_term == translated_term:
-        #     return
-
+        entry = self._glossary[source_term]
         # Incrémenter le compteur
-        self._glossary[source_term][translated_term] += 1
+        entry["translations"][translated_term] += 1
+        entry["term_types"][term_type] += 1
+        entry["sexes"][sexe] += 1
+
+        self._entries_cache.pop(source_term, None)
 
     def get_translation(
         self,
         source_term: str,
-        min_confidence: float = 0.5,
-    ) -> str | None:
+    ) -> GlossaryEntry | None:
         """
         Récupère la traduction recommandée d'un terme.
 
@@ -124,34 +232,73 @@ class Glossary:
             None
         """
         # 1. Vérifier s'il y a une traduction validée manuellement
-        if source_term in self._validated:
-            return self._validated[source_term]
+        # if source_term in self._validated:
+        #     return self._validated[source_term]
 
         # 2. Sinon, chercher dans les traductions apprises
         if source_term not in self._glossary:
             return None
 
-        translations = self._glossary[source_term]
-        if not translations:
+        if source_term in self._entries_cache:
+            return self._entries_cache[source_term]
+
+        term = self._glossary[source_term]
+        translation = _get_most_frequent(term["translations"])
+        if not translation:
             return None
 
-        # Trouver la traduction la plus fréquente
-        total = sum(translations.values())
-        most_frequent = max(translations, key=lambda t: translations[t])
-        frequency = translations[most_frequent]
-        confidence = frequency / total
+        translation_weigths = list(term["translations"].values())
+        confiance = _get_confidence_level(_compute_confidence(translation_weigths))
+        if confiance == "low" and _compute_dominance(translation_weigths) < 0.95:
+            return None
+        term_type = _get_most_frequent(term["term_types"]) or ""
+        sexe = _get_most_frequent(term["sexes"]) or ""
+        weight = sum(term["translations"].values())
 
-        # Vérifier le seuil de confiance
-        if confidence >= min_confidence:
-            return most_frequent
+        entry: GlossaryEntry = {
+            "terme": source_term,
+            "traduction": translation,
+            "type": term_type,
+            "sexe": sexe,
+            "weight": weight,
+            "confiance": confiance,
+        }
+        self._entries_cache[source_term] = entry
+        return entry
 
-        return None
+    def get_translations_until_confidence(
+        self, source_term: str, confidence: float
+    ) -> GlossaryMultipleValueEntry | None:
+        """
+        Revoir les traductions possibles d'un terme jusqu'à atteindre un seuil de confiance cumulé.
+        """
+        if source_term not in self._glossary:
+            return None
+        if source_term in self._user:
+            return None  # Les entrées user sont considérées comme fiables à 100% (pas de conflit)
 
-    def validate_translation(
+        term = self._glossary[source_term]
+        weight = sum(term["translations"].values())
+        translations = _get_possible_translations(term["translations"], confidence)
+
+        v = _compute_confidence(list(term["translations"].values()))
+
+        return {
+            "terme": source_term,
+            "traductions": translations,
+            "types": _get_possible_translations(term["term_types"], confidence),
+            "sexes": _get_possible_translations(term["sexes"], confidence),
+            "weight": weight,
+            "confidence": _get_confidence_level(v),
+        }
+
+    def add_user_translation(
         self,
-        source_term: str,
-        validated_translation: str,
-    ) -> None:
+        terme: str,
+        translation: str,
+        sexe: SexeType,
+        terme_type: TermType,
+    ) -> Self:
         """
         Valide manuellement une traduction.
 
@@ -165,137 +312,153 @@ class Glossary:
             >>> glossary.validate_translation("Matrix", "Matrice")
             >>> # Cette traduction sera toujours utilisée
         """
-        self._validated[source_term] = validated_translation
+        term: GlossaryEntry = {
+            "terme": terme.lower(),
+            "traduction": translation.lower(),
+            "type": terme_type,
+            "sexe": sexe,
+            "confiance": "high",
+        }
+
+        self._user[terme] = term
+        return self
 
     # =========================================================================
     # Export et validation
     # =========================================================================
 
-    def export_for_prompt(
-        self, max_terms: int = 50, min_confidence: float = 0.5
-    ) -> str:
+    def collect_entry(self, text: str, max_terms: int = 25) -> list[GlossaryEntry]:
         """
-        Exporte le glossaire au format texte pour injection dans un prompt.
+        Collecte les entrées de glossaire à partir d'un texte.
 
-        Format: "term1 → translation1, term2 → translation2, ..."
+        Les entrées user sont incluses en priorité (sans tri).
+        Les entrées apprises sont triées par : occurrences dans le texte (desc),
+        puis poids historique (desc).
 
         Args:
-            max_terms: Nombre maximum de termes à exporter (défaut: 50)
-            min_confidence: Seuil de confiance minimum (défaut: 0.5)
+            text: Texte à analyser
+            max_terms: Nombre maximum de termes à retourner
 
         Returns:
-            String formaté pour injection dans le prompt
+            Liste d'entrées de glossaire extraites
 
         Example:
-            >>> print(glossary.export_for_prompt())
-            'Matrix → Matrice, Dr. Sakamoto → Dr Sakamoto, DNA → ADN'
+            >>> entries = glossary.collect_entry(chunk)
+            >>> # [GlossaryEntry(term='Matrix', traduction='Matrice', ...), ...]
         """
-        terms: list[str] = []
+        text = text.lower()
+        result: list[GlossaryEntry] = []
+        for terme in self._user:
+            if terme in text:
+                result.append(self._user[terme])
 
-        # Trier par fréquence (termes les plus utilisés en premier)
-        for source_term in sorted(
-            self._glossary.keys(),
-            key=lambda t: sum(self._glossary[t].values()),
-            reverse=True,
-        ):
-            translation = self.get_translation(
-                source_term, min_confidence=min_confidence
-            )
-            if translation:
-                terms.append(f"{source_term} → {translation}")
+        if len(result) >= max_terms:
+            return result
 
-            if len(terms) >= max_terms:
-                break
+        entries: list[tuple[int, GlossaryEntry]] = []
+        for terme in self._glossary:
+            terme_lower = terme.lower()
+            if terme_lower in self._user:
+                continue
+            count = text.count(terme_lower)
+            if count == 0:
+                continue
+            entry = self.get_translation(terme)
+            if entry:
+                entries.append((count, entry))
 
-        return ", ".join(terms)
+        entries.sort(key=lambda t: (t[0], t[1].get("weight", 0)), reverse=True)
+        result.extend(e for _, e in entries[: max_terms - len(result)])
+        return result
 
-    def get_conflicts(self) -> dict[str, list[str]]:
+    def collect_entry_with_conflicts(
+        self, text: str, confidence_accumulate: float = 0.7, min_weight: int = 3
+    ) -> list[GlossaryMultipleValueEntry]:
+        text = text.lower()
+        result: list[GlossaryMultipleValueEntry] = []
+        for terme in self._glossary:
+            terme_lower = terme.lower()
+            if terme_lower in self._user:
+                continue
+            count = text.count(terme_lower)
+            if count == 0:
+                continue
+            entry = self.get_translations_until_confidence(terme, confidence_accumulate)
+            if entry and entry["weight"] >= min_weight:
+                result.append(entry)
+
+        return result
+
+    def get_conflicts(self) -> dict[str, GlossaryMultipleValueEntry]:
         """
         Identifie les termes avec des traductions conflictuelles.
 
-        Retourne les termes qui ont plusieurs traductions fréquentes
-        (aucune ne domine à >70%).
+        Retourne les termes dont au moins un champ (traductions, types, sexes) est
+        ambigu — aucune valeur ne domine à >70%. Chaque champ conflictuel est
+        inclus avec ses compteurs d'occurrences, triés par fréquence décroissante.
 
         Returns:
-            Dictionnaire {terme: [traductions_conflictuelles]}
+            Dictionnaire {terme: ConflictDetail} où ConflictDetail contient
+            uniquement les champs en conflit avec leurs compteurs.
 
         Example:
             >>> conflicts = glossary.get_conflicts()
-            >>> # {'Matrix': ['Matrice', 'Système']} si traductions équilibrées
+            >>> # {'matrix': {'translations': {'matrice': 5, 'système': 4}}}
         """
-        conflicts: dict[str, list[str]] = {}
+        conflicts: dict[str, GlossaryMultipleValueEntry] = {}
 
-        for source_term, translations in self._glossary.items():
-            # Ignorer si déjà validé
-            if source_term in self._validated:
+        for source_term in self._glossary:
+            if source_term in self._user:
                 continue
+            detail = self.get_translations_until_confidence(source_term, confidence=1)
 
-            # Besoin d'au moins 2 traductions
-            if len(translations) < 2:
-                continue
-
-            # Calculer les ratios
-            total = sum(translations.values())
-            max_frequency = max(translations.values())
-            dominant_ratio = max_frequency / total
-
-            # Si aucune traduction ne domine à >70%, c'est un conflit
-            if dominant_ratio < 0.7:
-                conflicts[source_term] = sorted(
-                    translations.keys(),
-                    key=lambda t: translations[t],
-                    reverse=True,
-                )
+            if detail and detail["confidence"] != "high":
+                conflicts[source_term] = detail
 
         return conflicts
 
-    def get_high_confidence_terms(self, min_confidence: float = 0.8) -> dict[str, str]:
-        """
-        Récupère les termes avec haute confiance.
-
-        Args:
-            min_confidence: Seuil de confiance (défaut: 0.8)
-
-        Returns:
-            Dictionnaire {terme_source: traduction}
-
-        Example:
-            >>> high_conf = glossary.get_high_confidence_terms(min_confidence=0.9)
-            >>> # Seulement les termes traduits de manière très cohérente
-        """
-        result: dict[str, str] = {}
-        for source_term in self._glossary:
-            translation = self.get_translation(
-                source_term, min_confidence=min_confidence
+    def print_valided(self) -> None:
+        for _term in sorted(
+            self._glossary.items(),
+            key=lambda t: sum(t[1]["translations"].values()),
+            reverse=True,
+        ):
+            term = self.get_translation(_term[0])
+            if not term:
+                continue
+            print(
+                f"{term['terme']} ({term['confiance']}, {term.get('weight', '?')}) → {term['traduction']} (type: {term['type']}, sexe: {term['sexe']})"
             )
-            if translation:
-                result[source_term] = translation
-        return result
 
-    def to_dict(self) -> dict[str, str]:
+    def print_conflicts(self) -> None:
         """
-        Exporte le glossaire sous forme de dictionnaire simple.
+        Affiche les conflits terminologiques sous forme lisible.
 
-        Returns:
-            Dictionnaire {terme_source: traduction_recommandée}
+        Pour chaque terme conflictuel, liste les valeurs en compétition
+        avec leur nombre d'occurrences.
 
         Example:
-            >>> glossary_dict = glossary.to_dict()
-            >>> # {'Matrix': 'Matrice', 'DNA': 'ADN', ...}
+            >>> glossary.print_conflicts()
+            >>> # matrix:
+            >>> #   traductions: matrice (5), système (4)
         """
-        result: dict[str, str] = {}
+        conflicts = self.get_conflicts()
+        if not conflicts:
+            print("Aucun conflit détecté.")
+            return
 
-        # Ajouter les traductions validées
-        result.update(self._validated)
+        def _fmt(counts: list[tuple[str, int]]) -> str:
+            return ", ".join(f"{v} ({n})" for (v, n) in counts)
 
-        # Ajouter les traductions apprises (si pas déjà validées)
-        for source_term in self._glossary:
-            if source_term not in result:
-                translation = self.get_translation(source_term)
-                if translation:
-                    result[source_term] = translation
-
-        return result
+        for term in sorted(conflicts.values(), key=lambda d: d["weight"], reverse=True):
+            print(f"{term['terme']} ({term['confidence']}): w = {term['weight']}")
+            if "traductions" in term:
+                print(f"  traductions: {_fmt(term['traductions'])}")
+            if "types" in term:
+                print(f"  types: {_fmt(term['types'])}")
+            if "sexes" in term:
+                print(f"  sexes: {_fmt(term['sexes'])}")
+            print()
 
     # =========================================================================
     # Statistiques et utilitaires
@@ -310,7 +473,7 @@ class Glossary:
         """
         return len(self._glossary)
 
-    def get_statistics(self) -> dict[str, int]:
+    def get_statistics(self) -> GlossaryStatistics:
         """
         Retourne des statistiques sur le glossaire.
 
@@ -321,127 +484,15 @@ class Glossary:
             >>> stats = glossary.get_statistics()
             >>> print(f"Termes: {stats['total_terms']}, Conflits: {stats['conflicting_terms']}")
         """
-        return {
-            "total_terms": len(self._glossary),
-            "validated_terms": len(self._validated),
-            "conflicting_terms": len(self.get_conflicts()),
-            "unique_translations": sum(
-                len(translations) for translations in self._glossary.values()
-            ),
-        }
+        return GlossaryStatistics(
+            total_terms=len(self._glossary),
+            user_terms=len(self._user),
+            conflicting_terms=len(self.get_conflicts()),
+        )
 
     # =========================================================================
     # Nettoyage du glossaire
     # =========================================================================
-
-    def clean_stopwords(self) -> int:
-        """
-        Retire les mots grammaticaux du glossaire existant.
-
-        Utilise should_exclude_from_glossary() pour identifier les termes
-        à supprimer (articles, pronoms, prépositions, etc.).
-
-        Returns:
-            Nombre de termes supprimés
-
-        Example:
-            >>> removed_count = glossary.clean_stopwords()
-            >>> print(f"{removed_count} stopwords supprimés")
-        """
-        from .glossary_filters import should_exclude_from_glossary
-
-        terms_to_remove = [
-            term for term in self._glossary if should_exclude_from_glossary(term)
-        ]
-
-        for term in terms_to_remove:
-            del self._glossary[term]
-            # Supprimer aussi des validations si présent
-            if term in self._validated:
-                del self._validated[term]
-
-        return len(terms_to_remove)
-
-    def remove_low_confidence_terms(self, min_occurrences: int = 2) -> int:
-        """
-        Retire les termes avec très peu d'occurrences (probables erreurs d'extraction).
-
-        Args:
-            min_occurrences: Nombre minimum d'occurrences total (défaut: 2)
-
-        Returns:
-            Nombre de termes supprimés
-
-        Example:
-            >>> removed_count = glossary.remove_low_confidence_terms(min_occurrences=2)
-            >>> print(f"{removed_count} termes à faible confiance supprimés")
-        """
-        terms_to_remove: list[str] = []
-
-        for source_term, translations in self._glossary.items():
-            total_occurrences = sum(translations.values())
-            if total_occurrences < min_occurrences:
-                terms_to_remove.append(source_term)
-
-        for term in terms_to_remove:
-            del self._glossary[term]
-            # Supprimer aussi des validations si présent
-            if term in self._validated:
-                del self._validated[term]
-
-        return len(terms_to_remove)
-
-    def clean_all(
-        self, min_occurrences: int = 2, verbose: bool = True
-    ) -> dict[str, int]:
-        """
-        Nettoie le glossaire en appliquant tous les filtres.
-
-        Applique dans l'ordre :
-        1. Suppression des stopwords grammaticaux
-        2. Suppression des termes à faible confiance
-
-        Args:
-            min_occurrences: Seuil minimum pour remove_low_confidence_terms (défaut: 2)
-            verbose: Affiche les statistiques de nettoyage (défaut: True)
-
-        Returns:
-            Dictionnaire avec le nombre de suppressions par catégorie
-
-        Example:
-            >>> stats = glossary.clean_all()
-            >>> # {'stopwords': 123, 'low_confidence': 45, 'total': 168}
-        """
-        from .logger import get_logger
-
-        logger = get_logger(__name__)
-
-        if verbose:
-            stats_before = self.get_statistics()
-            logger.info("🧹 Nettoyage du glossaire...")
-            logger.info(f"  Avant : {stats_before['total_terms']} termes")
-
-        # Étape 1 : Stopwords
-        stopwords_removed = self.clean_stopwords()
-        if verbose:
-            logger.info(f"  Stopwords supprimés : {stopwords_removed}")
-
-        # Étape 2 : Faible confiance
-        low_conf_removed = self.remove_low_confidence_terms(min_occurrences)
-        if verbose:
-            logger.info(f"  Faible confiance supprimés : {low_conf_removed}")
-
-        if verbose:
-            stats_after = self.get_statistics()
-            total_removed = stopwords_removed + low_conf_removed
-            logger.info(f"  Après : {stats_after['total_terms']} termes")
-            logger.info(f"✅ Total supprimé : {total_removed} termes")
-
-        return {
-            "stopwords": stopwords_removed,
-            "low_confidence": low_conf_removed,
-            "total": stopwords_removed + low_conf_removed,
-        }
 
     # =========================================================================
     # Persistance
@@ -468,33 +519,75 @@ class Glossary:
                 source: dict(translations)
                 for source, translations in self._glossary.items()
             },
-            "validated": self._validated,
+            "user": self._user,
         }
 
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
+    def clean_all(self) -> None:
+        """Vide toutes les entrées apprises du glossaire."""
+        self._glossary.clear()
+        self._entries_cache.clear()
+
+    def import_from_volume(self, path: Path, decay: float = 0.1) -> None:
+        """
+        Importe un glossaire d'un volume précédent en appliquant un decay aux poids.
+
+        Les counts de chaque traduction sont multipliés par `decay`, puis arrondis
+        à l'entier supérieur (min 1) pour préserver la confiance relative sans
+        gonfler les poids face aux nouveaux termes du volume courant.
+        Les entrées user sont fusionnées sans decay (priorité absolue).
+
+        Args:
+            path: Chemin vers le glossaire JSON du volume précédent
+            decay: Facteur multiplicatif appliqué aux counts (défaut: 0.1)
+
+        Raises:
+            ValueError: Si decay n'est pas dans ]0, 1]
+
+        Example:
+            >>> glossary = Glossary(Path("cache/vol2/glossary.json"))
+            >>> glossary.import_from_volume(Path("cache/vol1/glossary.json"), decay=0.1)
+        """
+        import math
+
+        if not (0 < decay <= 1):
+            raise ValueError(f"decay must be in ]0, 1], got {decay}")
+
+        if not path.exists():
+            return
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"⚠️ Erreur lors du chargement du glossaire précédent: {e}")
+            return
+
+        for source, entry in data.get("glossary", {}).items():
+            for trans, count in entry.get("translations", {}).items():
+                decayed = max(1, math.ceil(count * decay))
+                self._glossary[source]["translations"][trans] += decayed
+            for term_type, count in entry.get("term_types", {}).items():
+                decayed = max(1, math.ceil(count * decay))
+                self._glossary[source]["term_types"][term_type] += decayed
+            for sexe, count in entry.get("sexes", {}).items():
+                decayed = max(1, math.ceil(count * decay))
+                self._glossary[source]["sexes"][sexe] += decayed
+
+        # Entrées user : fusion sans decay (la traduction validée reste valide)
+        for terme, entry in data.get("user", {}).items():
+            if terme not in self._user:
+                self._user[terme] = entry
+
+        self._entries_cache.clear()
+
     def _load_from_cache(self) -> None:
         """Charge le glossaire depuis le cache."""
         if not self.cache_path or not self.cache_path.exists():
             return
-
-        try:
-            with open(self.cache_path, encoding="utf-8") as f:
-                data = json.load(f)
-
-            # Reconstruire les defaultdicts
-            for source, translations in data.get("glossary", {}).items():
-                for trans, count in translations.items():
-                    self._glossary[source][trans] = count
-
-            self._validated = data.get("validated", {})
-
-        except (json.JSONDecodeError, KeyError, OSError) as e:
-            # En cas d'erreur, ignorer et repartir à zéro
-            print(f"⚠️ Erreur lors du chargement du glossaire: {e}")
-            self._glossary.clear()
-            self._validated.clear()
+        self.import_from_volume(self.cache_path, decay=1.0)
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""
@@ -502,11 +595,14 @@ class Glossary:
         return (
             f"Glossary(\n"
             f"  termes: {stats['total_terms']}\n"
-            f"  validés: {stats['validated_terms']}\n"
+            f"  user: {stats['user_terms']}\n"
             f"  conflits: {stats['conflicting_terms']}\n"
-            f"  haute confiance (>0.8): {len(self.get_high_confidence_terms())}\n"
             f")"
         )
+
+    def __len__(self) -> int:
+        """Nombre de termes dans le glossaire."""
+        return self.get_term_count()
 
     def __str__(self) -> str:
         """Représentation textuelle du glossaire."""

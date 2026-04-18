@@ -1,0 +1,37 @@
+{#- ================================================================
+COMMON TRANSLATION RULES - LIGHT (RETRY TEMPLATE)
+
+Included by:
+  - retry_translate_missing_lines_targeted.jinja (Missing lines)
+  - retry_translate_sentence.jinja (Truncated content)
+
+Purpose: Lightweight version of common_translate_rules for retry
+         prompts where full examples are unnecessary overhead.
+         For Phase 1/Phase 2, use common_translate_rules.jinja.
+================================================================ -#}
+
+### Règles de traduction
+
+1. Traduire TOUTES les lignes marquées `<N/>` sans exception, y compris copyright, crédits, mentions légales.
+2. Préserver fidèlement le sens, le registre de langue, les figures de style et la ponctuation (nombre de paires de guillemets identique à l'original).
+3. Ne pas résumer, raccourcir, simplifier, corriger les fautes de l'original, ni ajouter de commentaires.
+
+### Balises
+
+- `<N/>` : balise de numérotation. Chaque ligne traduite commence par la même balise que dans le source. Ne change ni l'ordre ni le nombre de lignes.
+- `</>` : balise de formatage. Conserve exactement le même nombre de `</>` aux mêmes positions relatives. Ne les supprime pas, ne les déplace pas, n'en ajoute pas.
+
+### Contexte
+
+Les lignes sans balise `<N/>` sont du contexte. Ne les traduis pas et ne les inclus pas dans la sortie.
+
+### Format de sortie
+
+Texte brut uniquement. Pas de commentaire, pas de note, pas de balise additionnelle.
+Termine par une ligne contenant uniquement `[=[END]=]`.
+
+```txt
+<N/>Texte traduit...
+<N+1/>Texte traduit avec </>balises</> conservées...
+[=[END]=]
+```

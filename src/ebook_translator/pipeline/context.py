@@ -4,15 +4,18 @@ Contextes de données pour le système de phases.
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ebooklib import epub
 
-from ebook_translator.glossary import Glossary
-from ebook_translator.llm import LLM
 from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
-from ebook_translator.segmentation import Chunk
+from ebook_translator.segmentation import Chapters, Chunk
 from ebook_translator.validation import ValidationWorkerPool
+
+if TYPE_CHECKING:
+    from ebook_translator.glossary import Glossary
+    from ebook_translator.llm import LLM
 
 
 @dataclass
@@ -99,10 +102,20 @@ class PhaseContext:
     glossary: Glossary
     """Glossaire optionnel pour cohérence terminologique"""
 
+    book: epub.EpubBook
+    """EpubBook source (pour TOC-aware segmentation et noms de chapitres via TOC)"""
+
+    chapters: Chapters = field(init=False)
+    """Gestionnaire de chapitres et analyses littéraires (initialisé automatiquement)"""
+
     previous_phases: dict[PhaseName, PhaseStats] = field(
         default_factory=dict[PhaseName, PhaseStats]
     )
     """Statistiques des phases précédentes (clé: nom de phase)"""
+
+    def __post_init__(self) -> None:
+        """Initialise Chapters automatiquement depuis le livre EPUB."""
+        self.chapters = Chapters(self.book, self.store_manager)
 
     def get_previous_stats(self, phase_name: PhaseName) -> PhaseStats | None:
         """

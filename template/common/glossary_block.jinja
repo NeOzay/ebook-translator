@@ -1,0 +1,54 @@
+{#- ================================================================
+GLOSSARY_BLOCK.JINJA - Shared glossary rendering
+
+Included by:
+  - translate_base_system.jinja (Phase 1)
+  - translate_refine_system.jinja (Phase 2)
+
+Input variable:
+  - glossary: list of objects with fields:
+      - terme (str): original term
+      - type (str): one of "personnage", "lieu", "creature",
+                     "titre", "objet", "terme_technique",
+                     "reference_culturelle"
+      - sexe (str): "m", "f", or "nc"
+      - traduction (str): target language translation
+
+Purpose: Render glossary as a structured table for the LLM.
+         The template groups entries by type for readability.
+================================================================ -#}
+{%- if glossary and glossary|length > 0 %}
+
+### Glossaire
+
+Tu DOIS utiliser les traductions ci-dessous pour chaque terme rencontré dans le texte.
+Si un terme du glossaire apparaît dans le texte source, utilise sa traduction définie, pas la tienne.
+
+{#- Define type labels for display -#}
+{%- set type_labels = {
+  'personnage': 'Personnages',
+  'lieu': 'Lieux',
+  'creature': 'Créatures',
+  'titre': 'Titres',
+  'objet': 'Objets',
+  'terme_technique': 'Termes techniques',
+  'reference_culturelle': 'Références culturelles'
+} -%}
+
+{#- Define type order -#}
+{%- set type_order = ['personnage', 'lieu', 'creature', 'titre', 'objet', 'terme_technique', 'reference_culturelle'] -%}
+
+{%- for t in type_order -%}
+{%- set entries = glossary | selectattr('type', 'equalto', t) | list -%}
+{%- if entries|length > 0 %}
+
+**{{ type_labels[t] }}** :
+| Terme | Traduction | Sexe |
+|-------|------------|------|
+{%- for e in entries %}
+| {{ e.terme }} | {{ e.traduction }} | {{ e.sexe }} |
+{%- endfor %}
+{%- endif -%}
+{%- endfor %}
+
+{%- endif %}

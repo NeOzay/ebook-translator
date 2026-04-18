@@ -13,6 +13,7 @@ from ebooklib import epub
 
 from ebook_translator.config import Config
 from ebook_translator.segmentation.helper import turn_resource_to_chunks
+from ebook_translator.translation.epub_handler import get_html_items_in_spine_order
 
 from ..constants import DEFAULT_OVERLAP_RATIO
 from ..htmlpage import get_texts
@@ -54,7 +55,7 @@ class Segmentator:
 
     def __init__(
         self,
-        epub_htmls: list[epub.EpubHtml],
+        epub_source: epub.EpubBook | list[epub.EpubHtml],
         max_tokens: int,
         overlap_ratio: float = DEFAULT_OVERLAP_RATIO,
         encoding: str = Config.DEFAULT_ENCODING,
@@ -63,7 +64,7 @@ class Segmentator:
         Initialise le segmentateur.
 
         Args:
-            epub_htmls: Liste des pages HTML à segmenter
+            epub_source: Soit un EpubBook (TOC-aware), soit une liste d'EpubHtml
             max_tokens: Nombre maximum de tokens par chunk
             overlap_ratio: Ratio de chevauchement
                 - Si < 1.0 : pourcentage de max_tokens (ex: 0.15 = 15%)
@@ -75,7 +76,13 @@ class Segmentator:
             plusieurs chunks précédents. Cela augmente la cohérence mais aussi
             la consommation de tokens et le coût des requêtes LLM.
         """
-        self.epub_htmls = epub_htmls
+        if isinstance(epub_source, epub.EpubBook):
+            self._book: epub.EpubBook | None = epub_source
+            self.epub_htmls = get_html_items_in_spine_order(epub_source)
+        else:
+            self._book = None
+            self.epub_htmls = epub_source
+
         self.max_tokens = max_tokens
         self.overlap_ratio = overlap_ratio
         self.encoding = encoding
@@ -112,14 +119,27 @@ class Segmentator:
         - Chunk 1 : body=2000 tokens, head=4000 tokens (depuis chunk 0), tail=4000 tokens
         - Le head de chunk 1 peut inclure tout le body de chunk 0 + du contexte antérieur
 
+        Args:
+            segmentation_logic: Stratégie de segmentation.
+                - `"continue"` (défaut) : segmente l'EPUB en flux continu, les
+                  chunks peuvent chevaucher les frontières de chapitres.
+                - `"stop_chunk_end_of_chapter"` : redémarre la segmentation à
+                  chaque chapitre (détecté via la spine EPUB), garantissant
+                  qu'aucun chunk ne chevauche deux chapitres. Utile pour la
+                  Phase 0 (analyse littéraire par chapitre).
+
         Yields:
             Les chunks successifs avec leur contexte (head/tail)
 
         Example:
-            >>> # Overlap standard (15%)
+            >>> # Overlap standard (15%), flux continu
             >>> segmentator = Segmentator(epub_htmls, max_tokens=2000, overlap_ratio=0.15)
             >>> for chunk in segmentator.get_all_segments():
             ...     print(f"Chunk {chunk.index} with {len(chunk.body)} items")
+
+            >>> # Segmentation par chapitre (Phase 0)
+            >>> for chunk in segmentator.get_all_segments("stop_chunk_end_of_chapter"):
+            ...     print(f"Chunk {chunk.index}: chapitre isolé")
 
             >>> # Overlap étendu (200% du body)
             >>> segmentator = Segmentator(epub_htmls, max_tokens=2000, overlap_ratio=2.0)
@@ -129,10 +149,6 @@ class Segmentator:
         """
         if segmentation_logic == "stop_chunk_end_of_chapter":
             for chapter in self.get_all_chapters_by_spine():
-                logger.debug(
-                    f"Segmentation du chapitre {chapter.index} "
-                    f"({len(chapter.body)} fragments, {chapter.token_count} tokens)"
-                )
                 yield from turn_resource_to_chunks(
                     get_texts(chapter.files),
                     self.max_tokens,
@@ -140,6 +156,7 @@ class Segmentator:
                     self.encoding,
                 )
             return
+
         yield from turn_resource_to_chunks(
             get_texts(self.epub_htmls),
             self.max_tokens,
@@ -153,7 +170,7 @@ class Segmentator:
 
         # Affichage différent selon si overlap < ou >= max_tokens
         if self.overlap_ratio < 1.0:
-            overlap_str = f"{self.overlap_ratio*100:.0f}% ({overlap_tokens} tokens)"
+            overlap_str = f"{self.overlap_ratio * 100:.0f}% ({overlap_tokens} tokens)"
         else:
             overlap_str = (
                 f"{self.overlap_ratio:.1f}× max_tokens ({overlap_tokens} tokens)"
@@ -168,7 +185,7 @@ class Segmentator:
 
     def get_all_chapters_by_spine(
         self,
-        config: SequentialDetectorConfig|None = None,
+        config: SequentialDetectorConfig | None = None,
     ) -> Iterator[ChapterChunk]:
         """
         Génère chunks par chapitre basé sur analyse de la spine EPUB.
@@ -184,34 +201,12 @@ class Segmentator:
                 (voir SequentialDetectorConfig pour les options)
         Yields:
             Un Chunk par chapitre détecté
-
-        Example:
-            >>> segmentator = Segmentator(epub_htmls, max_tokens=100000)
-            >>> # Nouveau détecteur (recommandé)
-            >>> for chapter in segmentator.get_all_chapters_by_spine():
-            ...     analyze_chapter(chapter)
-            >>>
-            >>> # Ancien détecteur (deprecated)
-            >>> for chapter in segmentator.get_all_chapters_by_spine(use_sequential=False):
-            ...     analyze_chapter(chapter)
-
-        Note:
-            Le nouveau détecteur séquentiel (use_sequential=True) est maintenant par défaut.
-            Il est plus robuste et rapide que l'ancien détecteur 4-pass.
-            L'ancien détecteur est conservé pour rétrocompatibilité mais sera supprimé dans v0.11.0.
         """
-        from ..segmentation.chapter_chunk import ChapterChunk
-        from .chapter_detector import SequentialChapterDetector
+        from .chapter import Chapters
 
-        detector = SequentialChapterDetector(self.epub_htmls, config=config)
+        if self._book is not None:
+            chapters = Chapters(self._book, config=config)
+        else:
+            chapters = Chapters.from_html_items(self.epub_htmls, config=config)
 
-        for chapter_group in detector.detect_chapters():
-            chunk = ChapterChunk(chapter_group, token_encoding=self.encoding)
-
-            logger.debug(
-                f"Chapitre {chunk.index}: {chapter_group.chapter_name} "
-                f"({len(chapter_group.html_files)} fichiers, "
-                f"{len(chunk.body)} fragments)"
-            )
-            if chunk.body:
-                yield chunk
+        yield from chapters.iter_chapter_chunks(encoding=self.encoding)

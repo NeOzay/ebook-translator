@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 
 from ebooklib import epub
 
+from ebook_translator.glossary import Glossary
+from ebook_translator.htmlpage import BilingualFormat, HtmlPage
 from ebook_translator.logger import get_logger
-from ebook_translator.pipeline.base import PhaseBase, PhaseName
+from ebook_translator.pipeline.base import PhaseName, PhaseProtocol
 from ebook_translator.pipeline.context import PhaseContext, PhaseStats
 from ebook_translator.pipeline.executor import PhaseExecutor
 from ebook_translator.pipeline.phases.dummy_phase import DummyPhase
@@ -23,7 +25,6 @@ from ebook_translator.translation.epub_handler import (
 from ebook_translator.validation import ValidationWorkerPool
 
 if TYPE_CHECKING:
-    from ebook_translator.glossary import Glossary
     from ebook_translator.llm import LLM
 
 logger = get_logger(__name__)
@@ -73,7 +74,7 @@ class Pipeline:
         self,
         llm: LLM,
         epub_path: str | Path,
-        phases: list[PhaseBase],
+        phases: list[PhaseProtocol],
         cache_dir: str | Path | None = None,
         transitions: dict[tuple[str, str], type[TransitionBase]] | None = None,
         num_validation_workers: int = 2,
@@ -115,7 +116,7 @@ class Pipeline:
         # Infrastructure (créée au démarrage)
         self.store_manager: StoreManager | None = None
         self.validation_pool: ValidationWorkerPool | None = None
-        self.glossary: Glossary | None = None
+        self.glossary = Glossary()
 
     def _validate_dependencies(self) -> None:
         """
@@ -140,8 +141,8 @@ class Pipeline:
 
     def _execute_transition(
         self,
-        prev_phase_class: PhaseBase,
-        phase_class: PhaseBase,
+        prev_phase_class: PhaseProtocol,
+        phase_class: PhaseProtocol,
         stats: dict[PhaseName, PhaseStats],
     ) -> None:
         """
@@ -197,6 +198,7 @@ class Pipeline:
         output_epub: str | Path,
         glossary: Glossary | None = None,
         max_retries: int = 3,
+        bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
     ) -> dict[PhaseName, PhaseStats]:
         """
         Exécute toutes les phases.
@@ -206,6 +208,7 @@ class Pipeline:
             output_epub: Chemin de sortie de l'EPUB traduit
             glossary: Glossaire optionnel (créé automatiquement si None)
             max_retries: Nombre max de retries pour les corrections (défaut: 3)
+            bilingual_format: Format de sortie bilingue (défaut: SEPARATE_TAG)
 
         Returns:
             Statistiques par phase (clé: nom de phase, valeur: PhaseStats)
@@ -250,13 +253,10 @@ class Pipeline:
             logger.info(f"  • Stores créés: {self.store_manager.list_phases()}")
 
             # Glossaire
-            if glossary is None:
-                from ebook_translator.glossary import Glossary
-
-                self.glossary = Glossary(cache_path=self.cache_dir / "glossary.json")
-            else:
+            if glossary is not None:
                 self.glossary = glossary
-            logger.info(f"  • Glossaire Path: {self.glossary.cache_path}")
+
+            logger.info(f"  • Glossaire Path: {self.glossary.cache_path or 'None'}")
 
             # ValidationWorkerPool (sera reconfiguré par chaque phase)
             # Créer un pipeline/store dummy pour initialisation (sera remplacé par PhaseExecutor)
@@ -308,6 +308,7 @@ class Pipeline:
                     store_manager=self.store_manager,
                     validation_pool=self.validation_pool,
                     glossary=self.glossary,
+                    book=source_book,
                     previous_phases=stats.copy(),
                 )
 
@@ -333,10 +334,11 @@ class Pipeline:
 
             # Sauvegarder glossaire
             if self.glossary:
-                self.glossary.save()
-                logger.info(
-                    f"  • Glossaire sauvegardé: {self.cache_dir / 'glossary.json'}"
+                cache_dir = (
+                    self.epub_path.parent / f".{self.epub_path.stem}_glossary.json"
                 )
+                self.glossary.save(cache_dir)
+                logger.info(f"  • Glossaire sauvegardé: {cache_dir}")
 
             # =================================================================
             # RECONSTRUCTION EPUB
@@ -344,6 +346,32 @@ class Pipeline:
             logger.info("\n" + "=" * 70)
             logger.info("🔨 RECONSTRUCTION EPUB")
             logger.info("=" * 70)
+
+            logger.info("  • Application des traductions aux pages HTML...")
+            assert self.store_manager is not None
+
+            for item in html_items:
+                page = HtmlPage(item)  # Récupère l'instance Singleton existante
+                source_file = str(item.file_name)
+
+                # Fusionner les traductions de toutes les phases
+                # (les phases suivantes écrasent les précédentes — plus raffinées)
+                merged_translations: dict[str, str] = {}
+                for phase in self.phases:
+                    store = self.store_manager.get_store(phase.name)
+                    merged_translations.update(store.get_from_file(source_file))
+
+                # Appliquer les traductions disponibles
+                for tag_key in list(page.to_translate.keys()):
+                    translation = merged_translations.get(tag_key.index)
+                    if translation:
+                        page.replace_text(tag_key, translation, bilingual_format)
+
+                # replace_text() appelle _save_content() automatiquement quand
+                # to_translate est vide. Si des fragments restent (non-traduits /
+                # rejetés), on force la sauvegarde partielle.
+                if page.to_translate:
+                    page.save()
 
             logger.info("  • Reconstruction des pages HTML...")
             for item in html_items:
@@ -383,7 +411,7 @@ class Pipeline:
                 glossary_stats = self.glossary.get_statistics()
                 logger.info("\n📚 GLOSSAIRE:")
                 logger.info(f"  • Termes: {glossary_stats['total_terms']}")
-                logger.info(f"  • Validés: {glossary_stats['validated_terms']}")
+                logger.info(f"  • Validés: {glossary_stats['user_terms']}")
 
             logger.info(f"\n⏱️  DURÉE TOTALE: {duration:.1f}s")
             logger.info(f"📄 EPUB FINAL: {output_epub}")

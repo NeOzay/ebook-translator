@@ -1,0 +1,28 @@
+{#- ================================================================
+RETRY_CORRECT_PUNCTUATION_USER.JINJA - Fix Quote Pairs (User)
+
+Purpose: User prompt with concrete data for quote pair correction.
+
+Input variables:
+  - original_text, incorrect_translation
+  - expected_pairs, actual_pairs
+
+Pair: retry_correct_punctuation_system.jinja
+================================================================ -#}
+
+**Texte original** :
+{{ original_text }}
+
+**Traduction incorrecte** :
+{{ incorrect_translation }}
+
+Paires de guillemets attendues : **{{ expected_pairs }}**
+Paires dans la traduction : **{{ actual_pairs }}**
+
+{% if actual_pairs < expected_pairs -%}
+Il manque {{ expected_pairs - actual_pairs }} paire(s). Des dialogues ont probablement été fusionnés.
+{%- elif actual_pairs > expected_pairs -%}
+Il y a {{ actual_pairs - expected_pairs }} paire(s) en trop. Un dialogue a probablement été divisé ou des guillemets superflus ont été ajoutés.
+{%- endif %}
+
+Produis la correction avec exactement **{{ expected_pairs }}** paire(s) de guillemets :

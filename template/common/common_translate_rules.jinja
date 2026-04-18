@@ -1,0 +1,136 @@
+{#- ================================================================
+COMMON TRANSLATION RULES (BASE TEMPLATE)
+
+Included by:
+  - translate_base_system.jinja (Phase 1 - Initial translation)
+  - translate_refine_system.jinja (Phase 2 - Refinement with glossary)
+
+For retry prompts, use common_translate_rules_light.jinja instead.
+
+Purpose: Centralize shared translation rules to avoid duplication
+         and ensure consistency across Phase 1 and Phase 2 prompts.
+================================================================ -#}
+
+### Règles de traduction
+
+**1. Traduire TOUTES les lignes marquées `<N/>` sans exception**
+   - Y compris copyright, mentions légales, crédits, newsletters, publicités
+   - Y compris contenu répétitif, technique ou non narratif
+   - Si une ligne commence par `<N/>`, tu DOIS la traduire
+
+**2. Préserver fidèlement**
+   - Sens exact du texte source (pas de reformulation, ajout ou suppression)
+   - Registre de langue (formel/informel/soutenu/familier)
+   - Figures de style (métaphores, jeux de mots, allitérations)
+   - Tutoiement/vouvoiement selon contexte culturel
+   - Rythme et musicalité du texte narratif
+   - Ponctuation et structure narrative : si l'original a N paires de guillemets, ta traduction DOIT avoir N paires
+   - Interruptions narratives : si dialogue interrompu (`"A," he said, "B"`), préserve cette structure avec 2 paires (`« A », dit-il, « B »`)
+   - Ne fusionne PAS les dialogues en un seul bloc continu
+
+**3. Interdictions absolues**
+   - Ne pas résumer, raccourcir ou simplifier le texte
+   - Ne pas corriger les fautes du texte original
+   - Ne pas modifier les passages sensibles, violents ou sexuels
+   - Ne pas ajouter de commentaires ou opinions personnelles
+
+**4. Cohérence terminologique**
+   - Noms propres : traduction cohérente (personnages, lieux)
+   - Termes techniques : même traduction partout
+   - Utilise le contexte pour maintenir la cohérence avec les passages précédents
+
+### Balises
+
+- `<N/>` : balise de numérotation. Chaque ligne traduite commence par la même balise `<N/>` que dans le texte source. Ne change ni l'ordre ni le nombre de lignes.
+- `</>` : balise de formatage. Conserve exactement le même nombre de `</>` aux mêmes positions dans la traduction. Ne les supprime pas, ne les déplace pas, n'en ajoute pas.
+
+### Contexte
+
+Le texte peut contenir des lignes sans balise `<N/>`. Ces lignes servent uniquement de contexte pour comprendre la scène, le ton ou les personnages. Ne les traduis pas et ne les inclus pas dans la sortie.
+
+### Exemples
+
+**Métadonnées et mentions légales (à traduire)** :
+```
+<17/>Sign up for our mailing list to hear about new releases!
+<18/>Newsletter
+<19/>Copyright © 2016 Miya Kinojo
+<20/>Translated by Meteora
+```
+Traduction correcte :
+```
+<17/>Inscrivez-vous à notre liste de diffusion pour être informé des nouvelles sorties !
+<18/>Newsletter
+<19/>Copyright © 2016 Miya Kinojo
+<20/>Traduit par Meteora
+```
+
+**Cohérence terminologique** :
+```
+<0/>Dr. Sakamoto activated the Temporal Displacement Matrix.
+<1/>The Matrix hummed to life, displaying the coordinates.
+```
+Correct (même terme → même traduction) :
+```
+<0/>Le Dr Sakamoto activa la Matrice de Déplacement Temporel.
+<1/>La Matrice s'anima en ronronnant, affichant les coordonnées.
+```
+Incorrect (incohérence "Matrix" → "Matrice" puis "Système") :
+```
+<0/>Le Dr Sakamoto activa la Matrice de Déplacement Temporel.
+<1/>Le Système s'alluma en vibrant, montrant les coordonnées.
+```
+
+**Balises `</>`** :
+```
+<0/>She smiled, but </>her eyes </>betrayed her feelings.
+```
+Correct (2 `</>` conservées) :
+```
+<0/>Elle sourit, mais </>ses yeux </>trahissaient ses sentiments.
+```
+Incorrect (balises supprimées) :
+```
+<0/>Elle sourit, mais ses yeux trahissaient ses sentiments.
+```
+
+**Préservation du style et registre** :
+```
+<0/>The mansion stood like a sentinel, windows dark as forgotten memories.
+<1/>"Dude, that's insane!" Jake exclaimed.
+```
+Correct :
+```
+<0/>Le manoir se dressait tel une sentinelle, fenêtres sombres comme des souvenirs oubliés.
+<1/>« Mec, c'est dingue ! » s'exclama Jake.
+```
+Incorrect (métaphore perdue + registre incohérent) :
+```
+<0/>La maison était debout, avec des fenêtres noires.
+<1/>« Mon ami, c'est incroyable ! » s'exclama Jacques.
+```
+
+**Préservation des paires de guillemets** :
+```
+<0/>"You can </>think</>," she said, "after you </>arrest him</>!"
+```
+Correct (2 paires, structure narrative intacte) :
+```
+<0/>« Tu peux </>penser</> », dit-elle, « après l'avoir </>arrêté</> ! »
+```
+Incorrect (1 seule paire, dialogue fusionné) :
+```
+<0/>« Tu peux </>penser</>, dit-elle, après l'avoir </>arrêté</> ! »
+```
+
+### Format de sortie
+
+Texte brut uniquement. Pas de commentaire, pas de note, pas de balise additionnelle.
+Termine par une ligne contenant uniquement `[=[END]=]`.
+
+```txt
+<N/>Texte traduit...
+<N+1/>Texte traduit avec </>balises</> conservées...
+<N+2/>Texte traduit...
+[=[END]=]
+```

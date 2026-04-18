@@ -1,0 +1,37 @@
+{#- ================================================================
+LITERARY_CONTEXT_BLOCK.JINJA - Shared literary context rendering
+
+Included by:
+  - translate_base_system.jinja (Phase 1)
+  - translate_refine_system.jinja (Phase 2)
+
+Input variable:
+  - literary_context: object with fields:
+      - resume_narratif
+      - tonalite_ambiance
+      - style_ecriture
+      - themes_images_cles
+      - references_culturelles
+      - pistes_traduction (list of strings)
+
+Purpose: Render literary context block for translation prompts.
+================================================================ -#}
+{%- if literary_context %}
+
+### Contexte littéraire du chapitre
+
+**Résumé narratif** : {{ literary_context.resume_narratif }}
+
+**Tonalité et ambiance** : {{ literary_context.tonalite_ambiance }}
+
+**Style d'écriture** : {{ literary_context.style_ecriture }}
+
+**Thèmes et images clés** : {{ literary_context.themes_images_cles }}
+
+**Références culturelles** : {{ literary_context.references_culturelles }}
+
+**Pistes pour la traduction** :
+{% for piste in literary_context.pistes_traduction -%}
+- {{ piste }}
+{% endfor %}
+{%- endif %}

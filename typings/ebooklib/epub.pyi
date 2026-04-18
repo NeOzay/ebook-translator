@@ -241,9 +241,7 @@ class EpubHtml(EpubItem):
         """
         ...
 
-    def get_links_of_type(
-        self, link_type: str
-    ) -> Generator[dict[str, str]]:
+    def get_links_of_type(self, link_type: str) -> Generator[dict[str, str]]:
         """
         Returns list of additional links of specific type.
 
@@ -516,9 +514,7 @@ class EpubBook:
         """
         ...
 
-    def get_items_of_media_type(
-        self, media_type: str
-    ) -> Generator[EpubItem]:
+    def get_items_of_media_type(self, media_type: str) -> Generator[EpubItem]:
         """
         Returns all items of specified media type.
 

@@ -42,6 +42,7 @@ from .engine import build_translation_map
 from .epub_handler import (
     copy_epub_metadata,
     extract_html_items_in_spine_order,
+    get_html_items_in_spine_order,
     reconstruct_html_item,
 )
 from .parser import parse_llm_translation_output
@@ -53,5 +54,6 @@ __all__ = [
     # Fonctions EPUB
     "copy_epub_metadata",
     "extract_html_items_in_spine_order",
+    "get_html_items_in_spine_order",
     "reconstruct_html_item",
 ]

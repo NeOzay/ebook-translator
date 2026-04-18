@@ -1,546 +1,279 @@
 # Architecture du système
 
-Ce document décrit l'architecture globale du traducteur d'ebooks.
-
 ## Vue d'ensemble
 
-Le système est organisé en **architecture modulaire par phases** avec un orchestrateur central (`Pipeline`) qui coordonne l'exécution séquentielle des phases de traduction et des transitions entre celles-ci.
+Le système est organisé en **pipeline modulaire par phases** orchestré par `Pipeline` ([pipeline/pipeline.py](../src/ebook_translator/pipeline/pipeline.py)). Chaque phase est un plugin indépendant héritant de `PhaseBase`.
 
-**Principes clés** :
-- **Modularité** : Chaque phase est indépendante et réutilisable
-- **Extensibilité** : Ajout facile de nouvelles phases ou transitions
-- **Validation rigoureuse** : Système de checks avec retry progressif
-- **Performance** : Découplage validation/sauvegarde pour +33-50% de throughput
-- **Traçabilité** : Logging par session avec nommage contextuel
-
-## Pipeline de traduction principal
-
-Le processus de traduction suit ce flux orchestré par `Pipeline` :
-
+**Flux principal** :
 ```
-EPUB Input (epub_handler)
-    ↓
-[Pipeline] orchestrate:
-    ↓
-Phase 1: Initial Translation (chunks 2000 tokens)
-    ├─ [Segmentator] → Chunks (head/body/tail)
-    ├─ [ValidationWorkerPool]
-    │   ├─ [ValidationWorkers (N threads)]
-    │   │   ├─ [Engine] → build_translation_map
-    │   │   ├─ [LLM] → query API
-    │   │   ├─ [Parser] → parse output
-    │   │   ├─ [ValidationPipeline] → run checks
-    │   │   └─ Submit to SaveQueue
-    │   └─ [SaveWorker (1 thread)] → [StoreManager]
-    ↓
-[Transition: Glossary Validation]
-    ├─ Extract glossary from Phase 1
-    ├─ Filter conflicts
-    └─ Prepare for Phase 2
-    ↓
-Phase 2: Refinement (chunks 300 tokens, with glossary)
-    └─ Same workflow with glossary context
-    ↓
-[HtmlPage] → Text Replacement in DOM
-    ↓
-[epub_handler] → Reconstruct EPUB
-    ↓
-EPUB Output
+EPUB Input
+  → [Phase 0] Analyse littéraire (optionnelle, séquentielle)
+  → [Phase 1] Traduction initiale (parallèle)
+  → [Transition] Validation glossaire (optionnelle)
+  → [Phase 2] Raffinage (séquentielle)
+  → EPUB Output
 ```
 
-**Flux détaillé** :
-1. **Chargement EPUB** - Extraction métadonnées et contenu HTML
-2. **Phase 1: Initial Translation** - Traduction par chunks de 2000 tokens
-3. **Transition: Glossary Validation** - Extraction glossaire, filtrage conflits
-4. **Phase 2: Refinement** - Raffinage avec glossaire (chunks 300 tokens)
-5. **Reconstruction** - Remplacement texte dans DOM HTML
-6. **Génération EPUB** - Création du fichier traduit final
+---
 
-## Architecture Pipeline
+## Pipeline et phases
 
-### Pipeline (orchestrateur principal)
+### Pipeline
 
 **Fichier** : [pipeline/pipeline.py](../src/ebook_translator/pipeline/pipeline.py)
 
-**Responsabilités** :
-- Orchestration séquentielle des phases et transitions
-- Initialisation du contexte global (PhaseContext)
-- Gestion du cycle de vie des phases
-- Coordination entre StoreManager et phases
+Orchestrateur principal. Initialise le contexte global (`PhaseContext`), instancie les composants partagés (StoreManager, Glossary, ValidationWorkerPool), exécute les phases séquentiellement avec leurs transitions, puis reconstruit et écrit l'EPUB final.
 
-**Méthode principale** :
-```python
-@staticmethod
-def run(
-    epub_htmls: list[HtmlPage],
-    llm: LLM,
-    target_language: str,
-    store_manager: StoreManager,
-    phases: list[PhaseBase],
-    transitions: list[TransitionBase] = []
-) -> tuple[dict, dict]:
-    # Orchestrates phase execution + transitions
-```
-
-### PhaseBase (classe de base des phases)
+### PhaseBase
 
 **Fichier** : [pipeline/base.py](../src/ebook_translator/pipeline/base.py)
 
-**Responsabilités** :
-- Interface commune pour toutes les phases
-- Définit le contrat : `execute()`, `get_name()`, `get_execution_mode()`
-- Support de 3 modes d'exécution : PARALLEL, SEQUENTIAL, CUSTOM
-
-**Phases concrètes** :
-- **InitialTranslation** ([pipeline/phases/initial_translation.py](../src/ebook_translator/pipeline/phases/initial_translation.py))
-  - Traduction initiale par chunks de 2000 tokens
-  - Exécution parallèle (PARALLEL mode)
-  - Pas de glossaire
-
-- **Refinement** ([pipeline/phases/refinement.py](../src/ebook_translator/pipeline/phases/refinement.py))
-  - Raffinage avec glossaire
-  - Chunks de 300 tokens pour précision
-  - Utilise glossaire extrait de Phase 1
+Interface abstraite pour toutes les phases. Une phase déclare :
+- `execution_mode` : PARALLEL ou SEQUENTIAL
+- `max_tokens`, `overlap_ratio` : configuration de la segmentation
+- `checks` : liste de `Check` pour valider les sorties LLM
+- `depends_on` : phases dont les traductions sont nécessaires en entrée
+- Hooks : `before_phase()`, `before_chunk()`, `after_chunk()`, `after_phase()`
+- `render_prompt()` (abstract) : génère le prompt LLM pour un chunk
 
 ### PhaseExecutor
 
 **Fichier** : [pipeline/executor.py](../src/ebook_translator/pipeline/executor.py)
 
-**Responsabilités** :
-- Exécution concrète d'une phase
-- Segmentation du contenu en chunks
-- Soumission des chunks au ValidationWorkerPool
-- Collecte des résultats et statistiques
+Exécute concrètement une phase :
+1. Segmente le contenu via `Segmentator`
+2. Configure le `ValidationWorkerPool` pour la phase courante
+3. Pour chaque chunk : vérifie le cache Store, sinon soumet à la validation pool
+4. Attend la completion et retourne `PhaseStats`
 
-**Workflow** :
-1. Segmente le contenu via Segmentator
-2. Initialise ValidationWorkerPool
-3. Soumet chaque chunk au pool
-4. Attend la complétion et collecte résultats
-5. Retourne PhaseStats (temps, chunks traités, erreurs)
+### PhaseContext / ChunkContext
 
-### StoreManager (gestion des caches)
+**Fichier** : [pipeline/context.py](../src/ebook_translator/pipeline/context.py)
+
+Conteneurs de données injectés dans les phases :
+- `PhaseContext` : données globales (target_language, html_items, llm, store_manager, validation_pool, glossary, chapters, previous_phases)
+- `ChunkContext` : données par chunk (phase_name, chunk_index, llm, store_manager, glossary)
+- `PhaseStats` : métriques d'exécution (chunks traités/cachés/traduits/validés/rejetés, durée)
+
+### StoreManager
 
 **Fichier** : [pipeline/store_manager.py](../src/ebook_translator/pipeline/store_manager.py)
 
-**Responsabilités** :
-- Gestion centralisée des caches MultiStore
-- Création/récupération de stores par phase
-- Coordination entre phases pour partage de données
+Gère un `Store` par phase (à `cache/{phase_name}/`). Fournit `get_translate(phase, chunk)` et `get_with_fallback(chunk, phase_order)` pour la récupération avec fallback inter-phases.
 
-**Stores gérés** :
-- `initial_translation` : Cache Phase 1
-- `refinement` : Cache Phase 2
-- Possibilité d'ajouter d'autres phases
+---
 
-## Système de Transition
+## Phases concrètes
 
-**Fichier** : [transition/base.py](../src/ebook_translator/transition/base.py)
+**Fichiers** : [pipeline/phases/](../src/ebook_translator/pipeline/phases/)
 
-**Responsabilités** :
-- Interface pour transitions entre phases
-- Permet de transformer/enrichir le contexte
-- Exécutées entre deux phases
+### Phase 0 — Analyse littéraire
 
-**Transition concrète** :
-- **GlossaryValidationTransition** ([transition/transitions/glossary_validation.py](../src/ebook_translator/transition/transitions/glossary_validation.py))
-  - Extrait le glossaire de Phase 1
-  - Filtre les conflits avec `glossary_filters.py`
-  - Injecte le glossaire dans le contexte pour Phase 2
+**Fichier** : [pipeline/phases/literary_analysis.py](../src/ebook_translator/pipeline/phases/literary_analysis.py)
 
-## Composants clés
+- Chunk type : `ChapterPartChunk` (un chunk par chapitre, max 8000 tokens)
+- Exécution séquentielle, mode JSON LLM
+- Template : `analyze_chapter_simplified.jinja`
+- Output : `ContexteTraduction` JSON validé par `AnalysisValidator`
+- Peuple automatiquement le `Glossary` avec les `proposition_traduction`
+
+Voir [LITERARY_ANALYSIS.md](LITERARY_ANALYSIS.md) pour le détail.
+
+### Phase 1 — Traduction initiale
+
+**Fichier** : [pipeline/phases/initial_translation.py](../src/ebook_translator/pipeline/phases/initial_translation.py)
+
+- Chunks de 1500 tokens, overlap 15%, exécution parallèle
+- Template : `translate_base.jinja`
+- Checks : `LineCountCheck`, `FragmentCountCheck`, `PunctuationCheck`, `SentenceCheck`
+- Apprend les traductions dans le `Glossary`
+
+### Phase 2 — Raffinage
+
+**Fichier** : [pipeline/phases/refinement.py](../src/ebook_translator/pipeline/phases/refinement.py)
+
+- Chunks de 300 tokens, overlap 100% (contexte complet), exécution séquentielle
+- Dépend de Phase 1 (`depends_on = [InitialTranslationPhase]`)
+- Template : `translate_refine.jinja` (inclut glossaire + traduction précédente)
+- Mêmes checks que Phase 1
+
+---
+
+## Segmentation
 
 ### Segmentator
 
 **Fichier** : [segmentation/segmentator.py](../src/ebook_translator/segmentation/segmentator.py)
 
-**Responsabilités** :
-- Découpe le contenu en chunks basés sur tokens (tiktoken)
-- Maintient chevauchement configurable (overlap_ratio)
-- Suit quelles pages HTML appartiennent à chaque chunk (file_range)
-- Préserve structure HTML (head/body/tail dans Chunk dataclass)
+Découpe les `EpubHtml` items en `Chunk` (head/body/tail). Paramètres :
+- `max_tokens` : taille cible des chunks (via tiktoken)
+- `overlap_ratio` : ratio de chevauchement (< 1.0 = pourcentage, ≥ 1.0 = multiple de max_tokens)
 
-**Caractéristiques avancées** :
-- Support `overlap_ratio >= 1.0` pour contexte étendu
-- Système de queue pour gestion multi-chunks
-- Warning automatique si overlap élevé (impact tokens)
+Méthodes principales :
+- `get_all_segments()` → Iterator[Chunk] pour les phases de traduction
+- `get_all_chapters_by_spine()` → Iterator[ChapterChunk] pour Phase 0
 
-**Dataclass Chunk** : [segmentation/chunk.py](../src/ebook_translator/segmentation/chunk.py)
+### Chunk
 
-### HtmlPage
+**Fichier** : [segmentation/chunk.py](../src/ebook_translator/chunk.py)
 
-**Fichier** : [htmlpage/page.py](../src/ebook_translator/htmlpage/page.py)
+Dataclass représentant un segment de contenu :
+- `head` / `body` / `tail` : contexte avant, contenu principal, contexte après
+- `__str__()` : sérialise en format numéroté `<N/>text` pour le LLM
+- `calculate_chunk_hash()` : empreinte pour le cache Store
+- `split_chunk()` : découpe si trop grand
 
-**Responsabilités** :
-- Pattern singleton avec `pages_cache` pour éviter re-parsing
-- Extrait texte des balises "p" et "h1" (voir `valid_root`)
-- Regroupe fragments de texte par balise parente
-- Gère séparateurs de fragments `</>`
-- `replace_text()` pour remplacements simples et multi-fragments
+### SequentialChapterDetector
 
-**Composants associés** :
-- **TagKey** ([htmlpage/tag_key.py](../src/ebook_translator/htmlpage/tag_key.py)) : Wrapper pour clés de cache
-- **TextReplacer** ([htmlpage/replacement.py](../src/ebook_translator/htmlpage/replacement.py)) : Logique de remplacement
+**Fichier** : [segmentation/chapter_detector.py](../src/ebook_translator/segmentation/chapter_detector.py)
 
-**Pattern de séparateur** :
-- Fragments multiples dans même balise parente joints avec `</>`
-- Exemple : `["Hello ", "world"]` → `"Hello</>world"`
-- Traduction doit préserver ce séparateur pour reconstruction correcte
+Détecte les chapitres depuis le spine EPUB. Supporte plusieurs patterns de nommage ("Chapter 1", "Chapitre I", etc.).
 
-### LLM (Client API)
+---
+
+## Client LLM et templates
+
+### LLM
 
 **Fichier** : [llm/llm.py](../src/ebook_translator/llm/llm.py)
 
-**Responsabilités** :
-- Client async OpenAI pour toute API compatible OpenAI
-- Templates Jinja2 du répertoire `template/` pour prompts
-- Logs individuels pour chaque requête dans `logs/`
-- Pattern callback avec `on_response` pour streaming
+Wrapper autour du SDK OpenAI :
+- `query(prompt, source_content, log_name, config)` → réponse LLM
+- Retry automatique avec backoff exponentiel (APITimeoutError × 2, RateLimitError × 3)
+- Support du mode reasoning (`deepseek-reasoner`) via `LLMConfig`
+- Support du JSON mode pour les sorties structurées (Phase 0)
+- Logs individuels par requête via `LazyFileHandler`
 
-**Fonctionnalités avancées** :
-- Retry automatique avec backoff exponentiel (v0.3.0)
-- Support mode reasoning (`deepseek-reasoner`) pour corrections complexes (v0.8.0)
-- Température optimisée à 0.5 pour cohérence (v0.4.0)
-- Logging contextuel par session avec création lazy (v0.6.0)
+### TemplateRenderer
 
-**Composants associés** :
-- **TemplateRenderers** ([llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py)) : Rendu templates Jinja2
-- **TemplateParams** ([llm/template_params.py](../src/ebook_translator/llm/template_params.py)) : Paramètres templates
+**Fichier** : [llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py)
 
-### Engine (Traduction)
+Charge et rend les templates Jinja2 depuis `template/`. Fournit des méthodes typées :
+- `render_translate()` — Phase 1
+- `render_refine()` — Phase 2
+- `render_analyze_simplified()` — Phase 0
 
-**Fichier** : [translation/engine.py](../src/ebook_translator/translation/engine.py)
+---
 
-**Responsabilités** :
-- `build_translation_map()` : Construit mapping texte original → requête LLM
-- `apply_translations()` : Applique traductions dans HtmlPage
-- Gère le cycle complet traduction → validation → application
-
-**Workflow** :
-1. Extrait textes à traduire depuis HtmlPage
-2. Envoie requêtes LLM via `llm.query()`
-3. Parse la sortie LLM via Parser
-4. Valide les traductions via ValidationPipeline
-5. Applique les traductions dans HtmlPage
-
-### Parser
-
-**Fichier** : [translation/parser.py](../src/ebook_translator/translation/parser.py)
-
-**Responsabilités** :
-- Parse la sortie LLM (format avec `<N/>`, `</>`, `[=[END]=]`)
-- Validation du format (marqueur END, numérotation, structure)
-- Détection erreurs LLM (messages `[ERREUR`)
-- Extraction des traductions ligne par ligne
-
-**Validations** :
-- Présence du marqueur `[=[END]=]`
-- Format numéroté correct (`<0/>`, `<1/>`, etc.)
-- Nombre de lignes cohérent avec l'original
-
-### EpubHandler (Gestion EPUB)
-
-**Fichier** : [translation/epub_handler.py](../src/ebook_translator/translation/epub_handler.py)
-
-**Responsabilités** :
-- Extraction métadonnées EPUB (titre, auteur, langue, identifiant)
-- Lecture spine order pour préserver ordre des chapitres
-- Copie des ressources non-documents (images, CSS)
-- Reconstruction EPUB traduit avec métadonnées préservées
+## Validation et sauvegarde
 
 ### ValidationWorkerPool
 
 **Fichier** : [validation/validation_worker_pool.py](../src/ebook_translator/validation/validation_worker_pool.py)
 
-**Responsabilités** :
-- Orchestre N ValidationWorkers + 1 SaveWorker
-- Gère cycle de vie des threads
-- Coordonne validation et sauvegarde
-
-**Architecture multi-thread** :
+Architecture multi-thread :
 ```
-ValidationQueue → ValidationWorkers (N threads, CPU-bound)
-               ↓
-            SaveQueue → SaveWorker (1 thread, I/O-bound)
-                     ↓
-                   StoreManager
+ValidationQueue → N × ValidationWorker (CPU-bound)
+                → SaveQueue → 1 × SaveWorker (I/O-bound) → Store
 ```
 
-**Composants** :
-- **ValidationWorker** ([validation/validation_worker.py](../src/ebook_translator/validation/validation_worker.py))
-  - Valide traductions (multi-thread, CPU-bound)
-  - Exécute ValidationPipeline
-  - Transmet chunks validés à SaveQueue
+- `switch_phase(phase, store)` : reconfigure les workers pour la phase courante
+- `submit(ValidationItem)` : soumet un chunk à valider
+- `wait_completion()` : attend que toutes les queues soient vidées
 
-- **SaveWorker** ([validation/save_worker.py](../src/ebook_translator/validation/save_worker.py))
-  - Pipeline I/O dédié pour découpler validation et persistance
-  - Garantit ordre FIFO des sauvegardes
-  - Exécute callbacks après sauvegarde confirmée
+### ValidationWorker
 
-- **ValidationQueue / SaveQueue** ([validation/validation_queue.py](../src/ebook_translator/validation/validation_queue.py))
-  - Queues thread-safe pour coordination
-  - Gestion de la backpressure (limite utilisation mémoire)
+**Fichier** : [validation/validation_worker.py](../src/ebook_translator/validation/validation_worker.py)
 
-**Bénéfices de SaveWorker** :
-- **Performance** : ValidationWorkers ne bloquent pas sur écritures disque
-- **Ordre déterministe** : Sauvegardes FIFO (facilite debug)
-- **Callbacks thread-safe** : Exécutés après confirmation sauvegarde
-- **Gestion erreurs centralisée** : Logs cohérents, statistiques unifiées
+Consomme `ValidationQueue`. Pour chaque item :
+1. Exécute `ValidationPipeline.validate_and_correct(context)`
+2. Si succès → soumet `SaveItem` à `SaveQueue`
+3. Si échec → log + incrémente rejected_count
 
-### ValidationPipeline (Checks)
+### SaveWorker
+
+**Fichier** : [validation/save_worker.py](../src/ebook_translator/validation/save_worker.py)
+
+Consomme `SaveQueue`. Écrit dans `Store` en ordre FIFO. Exécute les callbacks `on_save` après confirmation. Découple I/O de la validation → +33-50% throughput.
+
+### ValidationPipeline
 
 **Fichier** : [checks/pipeline.py](../src/ebook_translator/checks/pipeline.py)
 
-**Responsabilités** :
-- Exécute séquentiellement les checks de validation
-- Collecte les erreurs détectées
-- Déclenche corrections avec retry progressif si erreurs
+Exécute les `Check` séquentiellement. En cas d'erreur :
+- Tentative 1 : correction via LLM normal (`deepseek-chat`)
+- Tentative 2 : correction via LLM reasoning (`deepseek-reasoner`)
 
-**Checks disponibles** :
-- **LineCountCheck** ([checks/check_tests/line_count_check.py](../src/ebook_translator/checks/check_tests/line_count_check.py))
-  - Vérifie que toutes les lignes sont traduites
+### Checks disponibles
 
-- **FragmentCountCheck** ([checks/check_tests/fragment_count_check.py](../src/ebook_translator/checks/check_tests/fragment_count_check.py))
-  - Vérifie nombre de séparateurs `</>` préservé
+**Répertoire** : [checks/check_tests/](../src/ebook_translator/checks/check_tests/)
 
-- **PunctuationCheck** ([checks/check_tests/punctuation_check.py](../src/ebook_translator/checks/check_tests/punctuation_check.py))
-  - Vérifie équilibre des paires de guillemets
+| Check | Vérifie |
+|-------|---------|
+| `LineCountCheck` | Toutes les lignes sont traduites |
+| `FragmentCountCheck` | Nombre de séparateurs `</>` préservé |
+| `PunctuationCheck` | Équilibre des paires de guillemets |
+| `SentenceCheck` | Intégrité des phrases |
 
-- **SentenceCheck** ([checks/check_tests/sentence_check.py](../src/ebook_translator/checks/check_tests/sentence_check.py))
-  - Vérifie intégrité des phrases
+Chaque check implémente `validate(context)` → `CheckResult` et `correct(context, error_data)` → translations corrigées.
 
-**Retry progressif** (v0.8.0) :
-- Tentative 1 : Mode normal (`deepseek-chat`) via [checks/retry_helper.py](../src/ebook_translator/checks/retry_helper.py)
-- Tentative 2 : Mode reasoning (`deepseek-reasoner`)
-- **Impact** : +10-20% taux de succès, -40% chunks filtrés
+---
 
-## Système de Stores
-
-### Store (Cache persistant)
+## Stockage (Store)
 
 **Fichier** : [stores/store.py](../src/ebook_translator/stores/store.py)
 
-**Responsabilités** :
-- Cache thread-safe avec verrous par fichier
-- Écriture atomique via fichier temporaire + rename
-- Gestion robuste erreurs I/O (corruption, permissions Windows)
-- Format JSON pour persistance
+Cache persistant par phase à `cache/{phase_name}/`. Format JSON, un fichier par chunk (nommé par hash). Thread-safe : verrous par fichier + écriture atomique via fichier temporaire + rename.
 
-**Méthodes** :
-- `save(key, value)` : Sauvegarde atomique
-- `get(key)` : Récupération avec fallback
-- `clear()` : Nettoyage du cache
+---
 
-### MultiStore (Gestion multi-caches)
+## Parsing HTML et reconstruction EPUB
 
-**Fichier** : [stores/multi_store.py](../src/ebook_translator/stores/multi_store.py)
+### HtmlPage
 
-**Responsabilités** :
-- Gestion de plusieurs stores simultanément
-- Isolation des caches par phase
-- Partage de données entre phases si nécessaire
+**Fichier** : [htmlpage/page.py](../src/ebook_translator/htmlpage/page.py)
 
-## Modules complémentaires
+Singleton par `EpubHtml`. Extrait les fragments texte des balises `<p>` et `<h1>`. Les fragments multiples dans une même balise parente sont joints avec `</>`.
 
-### Glossary (Glossaire automatique)
+- `dump()` → texte numéroté pour LLM
+- `replace(translations)` → applique les traductions dans le DOM
+- `dump_bilingue()` → format bilingue
 
-**Fichiers** :
-- [glossary.py](../src/ebook_translator/glossary.py) : Système de glossaire automatique
-- [glossary_filters.py](../src/ebook_translator/glossary_filters.py) : Filtrage conflits
+### EpubHandler
 
-**Responsabilités** :
-- Apprentissage automatique des traductions (noms propres, termes techniques)
-- Détection conflits (même terme → traductions différentes)
-- Persistance sur disque (JSON)
-- Validation manuelle possible (prioritaire sur apprentissage)
+**Fichier** : [translation/epub_handler.py](../src/ebook_translator/translation/epub_handler.py)
 
-### Configuration
+- `extract_html_items_in_spine_order()` : lit les items HTML dans l'ordre du spine
+- `reconstruct_html_item(item)` : reconstruit un item HTML après remplacement
+- `copy_epub_metadata()` : préserve titre, auteur, langue, identifiant
 
-**Fichiers** :
-- [config.py](../src/ebook_translator/config.py) : Constantes de templates, chemins
-- [constants.py](../src/ebook_translator/constants.py) : Constantes globales
+### Parser
 
-**Responsabilités** :
-- Centralisation de la configuration
-- Noms de templates (TRANSLATE, CORRECT)
-- Chemins vers ressources
+**Fichier** : [translation/parser.py](../src/ebook_translator/translation/parser.py)
 
-### Logger (Logging par session)
+Parse la sortie LLM (format `<N/>text`, séparateur `</>`, marqueur `[=[END]=]`) → `dict[int, str]`. Valide la complétude et la cohérence structurelle.
+
+---
+
+## Glossaire
+
+**Fichier** : [glossary.py](../src/ebook_translator/glossary.py)
+
+Apprentissage automatique des traductions (noms propres, termes techniques) avec comptage de fréquences. Détecte et signale les conflits (même terme, traductions différentes). Persistance JSON. La méthode `validate_translation()` marque un terme comme manuel (prioritaire).
+
+---
+
+## Logging
 
 **Fichier** : [logger.py](../src/ebook_translator/logger.py)
 
-**Responsabilités** :
-- Classe `LogSession` (singleton) gérant répertoire unique par exécution
-- Classe `LazyFileHandler` créant fichier au premier log (évite fichiers vides)
-- Helper `get_session_log_path()` pour chemins contextuels
+Organisation par session : `logs/run_YYYYMMDD_HHMMSS/`. Chaque requête LLM génère un fichier de log individuel (nommage contextuel : chunk index, phase, tentative). Utilise `LazyFileHandler` : le fichier n'est créé qu'au premier log (évite les fichiers vides).
 
-**Organisation par session** :
-```
-logs/
-├── run_20251023_143022/          # Session d'exécution
-│   ├── translation.log            # Log principal
-│   ├── llm_chunk_001_0001.log    # Requête LLM chunk 1
-│   ├── llm_retry_chunk_005_attempt_1_0003.log  # Retry
-│   └── llm_correction_XXX_0004.log  # Correction
-└── run_20251023_150145/          # Session suivante
-```
+---
 
-**Nommage contextuel** :
-- `llm_chunk_XXX_XXXX.log` : Traduction chunk
-- `llm_retry_chunk_XXX_attempt_X_XXXX.log` : Retry chunk
-- `llm_correction_XXX_XXXX.log` : Correction structurelle
-- Création lazy (fichier créé seulement si réponse LLM)
+## Format des données LLM
 
-### Language (Enum langues)
+**Balises de numérotation** : chaque ligne commence par `<0/>`, `<1/>`, etc. Le LLM doit les reproduire exactement.
 
-**Fichier** : [translation/language.py](../src/ebook_translator/translation/language.py)
+**Séparateur de fragments** : `</>` dans une ligne signale des fragments HTML multiples dans la même balise parente. Doit être préservé en nombre et position.
 
-**Responsabilités** :
-- Enum des langues supportées
-- Codes ISO (ex: "fr", "en", "es")
+**Marqueur de fin** : `[=[END]=]` en dernière ligne, utilisé pour valider la complétude.
 
-## Flux de données
-
-### Extraction de texte
-
-L'extraction utilise un pattern de séparateur spécial :
-- Fragments multiples dans même balise parente joints avec `</>`
-- Exemple : `["Hello ", "world"]` → `"Hello</>world"`
-- Traduction doit préserver ce séparateur pour reconstruction correcte
-
-### Format de traduction
-
-**Balises de numérotation `<N/>`** :
-- Chaque ligne commence par `<0/>`, `<1/>`, etc.
-- OBLIGATOIRE : Reproduire EXACTEMENT dans la traduction
-- INTERDICTION : Modifier, supprimer, ajouter des numéros
-
-**Séparateurs de fragments `</>`** :
-- Marquent fragments multiples dans une même balise HTML
-- OBLIGATOIRE : Préserver EXACTEMENT le même nombre
-- Exemple : `<0/>Hello</>world` → `<0/>Bonjour</>monde`
-
-**Marqueur de fin** :
-- Toutes les traductions se terminent par `[=[END]=]`
-- Utilisé pour validation de complétude
-
-## Configuration
-
-### Paramètres du système
-
-- **Sélection du modèle** : Passer `model_name` à LLM (défaut : "deepseek-chat")
-- **Concurrence** : Paramètre `num_workers` dans ValidationWorkerPool
-- **Langue cible** : Code ISO via Language enum
-- **Templates** : Répertoire `template/` (templates Jinja2 `.jinja`)
-- **Overlap** : `overlap_ratio` dans Segmentator (défaut : 0.15 = 15%)
-- **Température LLM** : Contrôle déterminisme (défaut : 0.5)
-
-### Variables d'environnement
-
-| Variable | Obligatoire | Défaut | Description |
-|----------|-------------|--------|-------------|
-| `DEEPSEEK_API_KEY` | ✅ Oui | - | Clé API DeepSeek pour authentification |
-| `DEEPSEEK_URL` | ❌ Non | `https://api.deepseek.com` | URL de base API DeepSeek |
-| `OPENAI_API_KEY` | ❌ Non | - | Clé API OpenAI (alternative à DeepSeek) |
-
-## Notes importantes d'implémentation
-
-### Préservation de l'ordre du spine
-
-La lecture EPUB maintient l'ordre du spine via liste `spine_order` pour garantir que chapitres apparaissent correctement.
-
-### Copie des métadonnées
-
-Titre, identifiant, langue et auteurs préservés depuis EPUB source.
-
-### Gestion des ressources
-
-Éléments non-documents (images, CSS) copiés sans modification.
-
-### Gestion des erreurs
-
-Erreurs LLM capturées et enregistrées comme "[ERREUR DE REQUÊTE]" dans fichiers de log.
-
-#### Système de retry
-
-**Retry automatique** :
-- `APITimeoutError` : Backoff ×2 (1s, 2s, 4s)
-- `RateLimitError` : Backoff ×3 (1s, 3s, 9s)
-- Max 3 tentatives par défaut
-
-**Retry progressif** (v0.8.0) :
-- Tentative 1 : Mode normal (`deepseek-chat`)
-- Tentative 2 : Mode reasoning (`deepseek-reasoner`)
-- Utilisé pour corrections structurelles complexes
-
-## Architecture des templates
-
-### Catégorisation
-
-**TRANSLATE Templates** - Créent nouvelles traductions :
-- `translate_base.jinja` : Phase 1 - Traduction initiale (chunks 2000 tokens)
-- `translate_refine.jinja` : Phase 2 - Raffinage avec glossaire (chunks 300 tokens)
-- `retry_translate_missing_lines_targeted.jinja` : Retraduire lignes spécifiques ignorées
-- `retry_translate_sentence.jinja` : Retraduire segments tronqués par LLM
-
-**CORRECT Templates** - Corrigent erreurs structurelles :
-- `retry_correct_fragments.jinja` : Corriger nombre `</>` (positions exactes)
-- `retry_correct_fragments_flexible.jinja` : Corriger nombre `</>` (positions flexibles)
-- `retry_correct_punctuation.jinja` : Corriger paires de guillemets
-
-### Bases communes (v0.9.0)
-
-**common_translate_rules.jinja** (199 lignes) :
-- Règles générales de traduction (fidélité, style, cohérence)
-- Gestion des balises `<N/>` et `</>`
-- Exemples few-shot learning (4 exemples complets)
-- Format de sortie standard
-
-**common_correct_rules.jinja** (130 lignes) :
-- Philosophie de correction (minimiser changements, préserver sens)
-- Gestion des balises (focus comptage exact)
-- Checklist de vérification finale
-- Format de sortie
-
-**Bénéfices** :
-- -73% duplication de code
-- 7× plus facile à maintenir (1 fichier au lieu de 7)
-- Cohérence 100% garantie
-
-## Point d'entrée
-
-**Fichier** : [example_pipeline.py](../example_pipeline.py)
-
-**Exemple d'utilisation** :
-```python
-from ebook_translator.pipeline import Pipeline
-from ebook_translator.pipeline.phases import InitialTranslation, Refinement
-from ebook_translator.transition.transitions import GlossaryValidationTransition
-
-# Configuration
-phases = [
-    InitialTranslation(llm, target_language="fr", max_tokens=2000),
-    Refinement(llm, target_language="fr", max_tokens=300)
-]
-
-transitions = [
-    GlossaryValidationTransition()  # Entre Phase 1 et Phase 2
-]
-
-# Exécution
-translation_map, glossary = Pipeline.run(
-    epub_htmls=htmls,
-    llm=llm,
-    target_language="fr",
-    store_manager=store_manager,
-    phases=phases,
-    transitions=transitions
-)
-```
+---
 
 ## Voir aussi
 
-- [VALIDATION.md](VALIDATION.md) - Architecture de validation détaillée
-- [TEMPLATES.md](TEMPLATES.md) - Architecture des templates LLM
-- [ROADMAP.md](ROADMAP.md) - Améliorations futures planifiées
-- [CHANGELOG.md](CHANGELOG.md) - Historique des versions (0.2.0 → 0.9.0)
+- [LITERARY_ANALYSIS.md](LITERARY_ANALYSIS.md) — Phase 0, schéma ContexteTraduction
+- [VALIDATION.md](VALIDATION.md) — Système de validation et retry
+- [TEMPLATES.md](TEMPLATES.md) — Architecture des templates Jinja2
+- [CODING_STANDARDS.md](CODING_STANDARDS.md) — Standards de code

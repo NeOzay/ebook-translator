@@ -3,8 +3,8 @@
 from .htmlpage import BilingualFormat
 from .llm import LLM
 from .pipeline import Pipeline
+from .pipeline.builder import LLMBuilder, PhasesBuilder, PipelineBuilder
 from .pipeline.phases import (
-    DummyPhase,
     InitialTranslationPhase,
     LiteraryAnalysisPhase,
     RefinementPhase,
@@ -26,9 +26,12 @@ __all__ = [
     "Language",
     # Pipeline
     "Pipeline",
+    # Builder
+    "PipelineBuilder",
+    "LLMBuilder",
+    "PhasesBuilder",
     # Phases
     "LiteraryAnalysisPhase",
-    "DummyPhase",
     "InitialTranslationPhase",
     "RefinementPhase",
 ]

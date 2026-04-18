@@ -30,4 +30,4 @@ html_items, target_book = extract_html_items_in_spine_order(source_book)
 titles = extract_titles_from_epub(html_items)
 print(f"Found {len(html_items)} HTML items in spine order:")
 for i, (title, item) in enumerate(zip(titles, html_items, strict=True)):
-    print(f"{i+1}: {item.get_name()} with title '{title}'")
+    print(f"{i + 1}: {item.get_name()} with title '{title}'")

@@ -2,11 +2,11 @@
 Phase 1: Traduction initiale avec gros blocs.
 """
 
-import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from ebook_translator.checks import (
+    Check,
     FragmentCountCheck,
     LineCountCheck,
     PunctuationCheck,
@@ -48,57 +48,17 @@ class InitialTranslationPhase(PhaseBase):
 
     depends_on = ()  # Première phase, aucune dépendance
 
-    checks = (
-        LineCountCheck(),
-        FragmentCountCheck(),
-        PunctuationCheck(),
-        SentenceCheck(),
+    checks: tuple[Check[Any], ...] = field(
+        default=(
+            LineCountCheck(),
+            FragmentCountCheck(),
+            PunctuationCheck(),
+            SentenceCheck(),
+        ),
+        init=False,
     )
 
-    def _get_literary_context(
-        self, chunk: Chunk, context: ChunkContext
-    ) -> dict[str, Any] | None:
-        """
-        Récupère l'analyse littéraire du chapitre depuis Phase 0 si disponible.
-
-        Args:
-            chunk: Chunk à traduire
-            context: Contexte du chunk
-
-        Returns:
-            Analyse littéraire (AnalyseLitteraire) ou None si non disponible
-        """
-
-        if not self.context.get_previous_stats(PhaseName.LITERARY_ANALYSIS):
-            return None
-
-        try:
-            # Récupérer le store d'analyse littéraire
-            literary_store = context.store_manager.get_store("literary_analysis")
-            chapter_name = chunk.chapter.name
-
-            # ChapterChunk a toujours index=0, hash basé sur contenu
-            keyname = f"0_{chunk.chapter.calculate_chunk_hash()[:8]}"
-            cached_json = literary_store.get(chapter_name, keyname)
-
-            if cached_json is None:
-                logger.debug(
-                    f"No literary analysis found for chapter '{chapter_name}' "
-                    f"(key: {keyname})"
-                )
-                return None
-
-            # Parser le JSON et extraire la section 'analyse'
-            analysis = json.loads(cached_json)
-            return analysis.get("analyse")
-
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
-            logger.warning(
-                f"Failed to load literary analysis for chapter '{chunk.chapter.name}': {e}"
-            )
-            return None
-
-    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> str:
+    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
         """
         Génère le prompt de traduction initiale.
 
@@ -112,7 +72,11 @@ class InitialTranslationPhase(PhaseBase):
         Returns:
             Prompt formaté pour le LLM
         """
-        literary_context = self._get_literary_context(chunk, context)
+        literary_context = self.get_literary_context(chunk, context)
+        source_text = str(chunk)
         return context.llm.renderer.render_translate(
-            context.target_language, literary_context=literary_context
+            context.target_language,
+            source_text,
+            glossary=context.glossary,
+            literary_context=literary_context,
         )

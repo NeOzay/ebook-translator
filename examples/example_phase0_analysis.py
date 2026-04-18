@@ -29,7 +29,7 @@ def main() -> None:
     """Exécute l'analyse littéraire simplifiée d'un EPUB."""
     # === Configuration ===
     epub_path = Path(
-        "books/Chillin' in Another World With Level 2 Super Cheat Powers - Volume 02 [J-Novel Club][Premium].epub"
+        "books/The Genius Prince's Guide to Raising a Nation Out of Debt - Volume 01 [Yen Press][Kobo].epub"
     )  # Remplacer par votre fichier
     output_epub = Path(f"books/out/[FR] {epub_path.name} test")
     target_language = Language.FRENCH  # Pour propositions de traduction

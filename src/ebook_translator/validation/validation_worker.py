@@ -9,13 +9,13 @@ import queue
 import threading
 from typing import TYPE_CHECKING
 
+from ebook_translator.pipeline.base import PhaseProtocol
+
 from ..checks import ValidationContext, ValidationPipeline
 from ..logger import get_logger
 from .validation_queue import SaveItem, SaveQueue, ValidationItem, ValidationQueue
 
 if TYPE_CHECKING:
-    from ebook_translator.pipeline.base import PhaseBase
-
     from ..llm import LLM
     from ..segmentation.segmentator import Chunk
 
@@ -79,7 +79,7 @@ class ValidationWorker:
         pipeline: ValidationPipeline,
         llm: LLM,
         target_language: str,
-        phase: PhaseBase,
+        phase: PhaseProtocol,
         stop_event: threading.Event,
         max_retries: int = 1,
     ):

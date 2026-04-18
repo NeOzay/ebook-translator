@@ -9,6 +9,7 @@ from ebook_translator.config import Config
 if TYPE_CHECKING:
     from ebook_translator.htmlpage import TagKey
     from ebook_translator.segmentation import Chunk
+    from ebook_translator.segmentation.chunk import Scope
 
 
 def chunk_generator() -> Callable[[], Chunk]:
@@ -24,10 +25,10 @@ def chunk_generator() -> Callable[[], Chunk]:
     return lambda: Chunk(index=next(counter))
 
 
-encoding_cache: dict[str, tiktoken.Encoding] = {}
+_encoding_cache: dict[str, tiktoken.Encoding] = {}
 
 
-def get_encoding(encoding_name: str):
+def get_encoding(encoding_name: str) -> tiktoken.Encoding:
     """
     Récupère l'encodage de tokens spécifié.
 
@@ -37,9 +38,9 @@ def get_encoding(encoding_name: str):
     Returns:
             L'objet d'encodage correspondant
     """
-    if encoding_name not in encoding_cache:
-        encoding_cache[encoding_name] = tiktoken.get_encoding(encoding_name)
-    return encoding_cache[encoding_name]
+    if encoding_name not in _encoding_cache:
+        _encoding_cache[encoding_name] = tiktoken.get_encoding(encoding_name)
+    return _encoding_cache[encoding_name]
 
 
 def count_tokens(text: str, encoding_name: str) -> int:
@@ -63,7 +64,6 @@ def turn_resource_to_chunks(
     overlap_ratio: float = 0,
     encoding_name: str = Config.DEFAULT_ENCODING,
 ) -> Iterator[Chunk]:
-
     def add_fragment_to_body(
         chunk: Chunk, tag_key: TagKey, text: str, token_count: int = 0
     ) -> None:
@@ -162,3 +162,38 @@ def turn_resource_to_chunks(
     # Yield le chunk actuel seulement s'il n'a pas déjà été yielded via la queue
     if current_chunk not in chunk_queue:
         yield current_chunk
+
+
+def is_included_in_scope(in_scope: Scope, out_scope: Scope) -> bool:
+    """
+    Vérifie si une portée de fragments est incluse dans une autre.
+
+    Args:
+            in_scope: Portée à vérifier (liste de tuples (file_name, line_number))
+            out_scope: Portée de référence (liste de tuples (file_name, line_number))
+
+    Returns:
+            True si in_scope est entièrement contenu dans out_scope, False sinon
+    """
+    if (len(in_scope) < 2 or len(out_scope) < 2) or len(in_scope) > len(out_scope):
+        return False
+
+    in_iter = iter(in_scope)
+    in_file, in_line = next(in_iter, (None, None))
+    is_first_out_element = True
+    for out_file, out_line in out_scope:
+        while not (in_file is None or in_line is None) and in_file == out_file:
+            if is_first_out_element:
+                is_first_out_element = False
+                if in_line < out_line:
+                    return False
+            elif out_line != -1 and in_line > out_line:
+                return False
+
+            in_file, in_line = next(in_iter, (None, None))
+            if in_file != out_file or (
+                in_line and in_line > out_line and out_line != -1
+            ):
+                break
+        is_first_out_element = False
+    return in_file is None and in_line is None

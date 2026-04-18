@@ -46,8 +46,10 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
         """Thread qui lit le cache en boucle."""
         while not stop_event.is_set():
             try:
-                cache_file = store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
-                    source_file
+                cache_file = (
+                    store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
+                        source_file
+                    )
                 )
                 _ = store._load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
 
@@ -68,8 +70,10 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
         counter = 0
         while not stop_event.is_set():
             try:
-                cache_file = store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
-                    source_file
+                cache_file = (
+                    store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
+                        source_file
+                    )
                 )
 
                 # Écrire des données
@@ -333,7 +337,7 @@ def test_stress_concurrent_operations(tmp_path: Path) -> None:
                     store.save(source_file, f"{thread_id}_{i}", f"Translation_{i}")
                 else:
                     # Lecture
-                    _ = store.get(source_file, f"{thread_id}_{i-1}")
+                    _ = store.get(source_file, f"{thread_id}_{i - 1}")
                 time.sleep(0.001)
         except Exception as e:
             with lock:

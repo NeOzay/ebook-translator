@@ -83,6 +83,25 @@ def extract_html_items_in_spine_order(
     return sorted_html_items, new_book
 
 
+def get_html_items_in_spine_order(book: EpubBook) -> list[EpubHtml]:
+    """Retourne les items HTML du spine dans l'ordre, sans créer de livre cible.
+
+    Args:
+        book: L'EPUB source
+
+    Returns:
+        Liste des items HTML dans l'ordre du spine
+    """
+    spine_order = [s[0] for s in book.spine]
+    items: dict[int, epub.EpubHtml] = {}
+    for item in book.get_items():
+        if item.get_type() == ITEM_DOCUMENT and item.id in spine_order:
+            pos = spine_order.index(item.id)
+            assert isinstance(item, epub.EpubHtml)
+            items[pos] = item
+    return [items[i] for i in sorted(items)]
+
+
 def reconstruct_html_item(item: EpubHtml) -> None:
     """
     Reconstruit le contenu HTML d'un item EPUB après traduction.
@@ -111,5 +130,6 @@ def reconstruct_html_item(item: EpubHtml) -> None:
             else:
                 link_attrs[attr_name] = attr_value
 
-        if link_attrs:
-            item.add_link(**link_attrs)
+        filtered = {k: v for k, v in link_attrs.items() if v is not None}
+        if filtered:
+            item.add_link(**filtered)

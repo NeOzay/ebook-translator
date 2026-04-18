@@ -6,7 +6,12 @@ permettant une vérification de type stricte et une documentation claire
 des paramètres requis pour chaque template.
 """
 
-from typing import Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
+
+from ebook_translator.glossary import GlossaryEntry, GlossaryMultipleValueEntry
+
+if TYPE_CHECKING:
+    from ebook_translator.validator.translation_context import AnalyseLitteraire
 
 
 class AnalyzeSimplifiedParams(TypedDict):
@@ -19,19 +24,37 @@ class AnalyzeSimplifiedParams(TypedDict):
 
     chapter_name: str
     target_language: str
+    chapter_text: str
+    genre: str
+
+
+class AnalyzeIncremental(TypedDict):
+    chapter_name: str
+    current_block: int
+    total_blocks: int
+    partial_analysis_json: str
+    block_text: str
+    is_last_block: bool
+    genre: str
+    target_language: str
+
+
+class GlossaryParams(TypedDict):
+    block_text: str
+    target_language: str
+    genre: str
+    existing_glossary: list[GlossaryMultipleValueEntry] | None
 
 
 class TranslateParams(TypedDict):
     """
     Paramètres pour translate.jinja (Phase 1 - Traduction initiale).
-
-    Attributes:
-        target_language: Code langue cible (ex: "fr", "en", "es")
-        literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
     """
 
     target_language: str
-    literary_context: NotRequired[dict[str, Any]]  # Optional - AnalyseLitteraire depuis Phase 0
+    source_text: str
+    glossary: list[GlossaryEntry] | None
+    literary_context: AnalyseLitteraire | None
 
 
 class RefineParams(TypedDict):
@@ -50,9 +73,10 @@ class RefineParams(TypedDict):
     target_language: str
     original_text: str
     initial_translation: str
-    glossaire: str
-    expected_count: int
-    literary_context: NotRequired[dict[str, Any]]  # Optional - AnalyseLitteraire depuis Phase 0
+    head_context: str
+    tail_context: str
+    glossary: list[GlossaryEntry] | None
+    literary_context: AnalyseLitteraire | None
 
 
 class MissingLinesParams(TypedDict):
@@ -92,6 +116,7 @@ class RetryFragmentsParams(TypedDict):
     incorrect_translation: str
     expected_separators: int
     actual_separators: int
+    mode: Literal["strict", "flexible"]
 
 
 class RetryFragmentsFlexibleParams(TypedDict):
@@ -159,7 +184,6 @@ class RetrySentenceParams(TypedDict):
     original_text: str
     previous_translation: str
     missing_indices: str
-    num_lines: int
 
 
 class RetryAnalysisInvalidJsonParams(TypedDict):
@@ -173,3 +197,5 @@ class RetryAnalysisMissingSectionsParams(TypedDict):
     chapter_name: str
     target_language: str
     missing_sections: list[str]
+    incomplete_response: str
+    chapter_text: str

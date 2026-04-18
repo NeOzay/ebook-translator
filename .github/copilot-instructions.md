@@ -114,7 +114,7 @@ class RefinementPhase(PhaseBase):
 
 ### Strict Type Checking (MANDATORY)
 
-**Pyright strict mode**: 0 errors tolerated.
+**basedpyright strict mode**: 0 errors tolerated.
 
 ```python
 # ✅ GOOD: Complete typing
@@ -165,9 +165,9 @@ def test_validation_with_mock_llm():
 ### Pre-Commit Checklist
 
 ```bash
-poetry run pyright src/                    # Type checking (strict)
-poetry run pytest --cov=src/ebook_translator  # Tests + coverage ≥80%
-poetry run pre-commit run --all-files      # Black, isort, ruff
+uv run basedpyright src/                    # Type checking (strict)
+uv run pytest --cov=src/ebook_translator  # Tests + coverage ≥80%
+uv run pre-commit run --all-files      # Black, isort, ruff
 ```
 
 ### Commit Messages
@@ -248,7 +248,7 @@ vim template/common_translate_rules.jinja
 vim template/common_correct_rules.jinja
 
 # Test changes
-poetry run python test_template_manual.py translate_base
+uv run python test_template_manual.py translate_base
 ```
 
 ## Project Structure
@@ -302,7 +302,7 @@ DEEPSEEK_URL=https://api.deepseek.com  # Optional (default)
 
 **pyproject.toml key settings**:
 
-- Pyright: `typeCheckingMode = "strict"` (0 errors tolerated)
+- basedpyright: `typeCheckingMode = "strict"` (0 errors tolerated)
 - Pytest: `--cov-fail-under=80` (coverage enforcement)
 - Black: `line-length = 88`
 - Python: `>=3.12` (uses modern syntax: `|` unions, `match` statements)
@@ -326,11 +326,11 @@ DEEPSEEK_URL=https://api.deepseek.com  # Optional (default)
 
 **"API key not found"**: Check `.env` exists and `DEEPSEEK_API_KEY` is set.
 
-**Type errors**: Run `poetry run pyright src/` and fix ALL errors (strict mode).
+**Type errors**: Run `uv run basedpyright src/` and fix ALL errors (strict mode).
 
-**Tests failing**: Check coverage with `poetry run pytest --cov-report=html`, open `htmlcov/index.html`.
+**Tests failing**: Check coverage with `uv run pytest --cov-report=html`, open `htmlcov/index.html`.
 
-**Template rendering issues**: Use `poetry run python test_template_manual.py <template_name>` to debug.
+**Template rendering issues**: Use `uv run python test_template_manual.py <template_name>` to debug.
 
 **Store permission errors (Windows)**: Store auto-retries 3 times with exponential backoff. Check antivirus exclusions for `cache/` directory.
 

@@ -21,14 +21,14 @@ import threading
 import time
 from typing import TYPE_CHECKING, TypedDict
 
+from ebook_translator.pipeline.base import PhaseProtocol
+
 from ..logger import get_logger
 from .save_worker import SaveWorker
 from .validation_queue import SaveQueue, ValidationItem, ValidationQueue
 from .validation_worker import ValidationWorker
 
 if TYPE_CHECKING:
-    from ebook_translator.pipeline.base import PhaseBase
-
     from ..checks import ValidationPipeline
     from ..llm import LLM
     from ..stores.store import Store
@@ -106,7 +106,7 @@ class ValidationWorkerPool:
         store: Store,
         llm: LLM,
         target_language: str,
-        phase: PhaseBase,
+        phase: PhaseProtocol,
         max_retries: int = 1,
     ):
         """
@@ -210,7 +210,7 @@ class ValidationWorkerPool:
 
         # Attendre que validation_queue et save_queue soient idle (vide + aucun en cours)
         while not self.validation_queue.is_idle() or not self.save_queue.is_idle():
-            time.sleep(1)
+            time.sleep(0.1)
 
     def stop(self):
         """
@@ -256,7 +256,7 @@ class ValidationWorkerPool:
 
         logger.info("ValidationWorkerPool terminé (validation + sauvegarde)")
 
-    def switch_phase(self, phase: PhaseBase, store: Store) -> None:
+    def switch_phase(self, phase: PhaseProtocol, store: Store) -> None:
         """
         Change la phase de tous les workers (Validation + Save).
 

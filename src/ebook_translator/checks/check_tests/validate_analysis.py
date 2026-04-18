@@ -1,7 +1,6 @@
 import json
 from typing import override
 
-from ebook_translator.analysis.validator import AnalysisValidator
 from ebook_translator.checks.check_tests.base import (
     AnalysisErrorData,
     Check,
@@ -12,7 +11,8 @@ from ebook_translator.checks.check_tests.base import (
 )
 from ebook_translator.checks.retry_helper import retry_with_reasoning
 from ebook_translator.logger import get_logger
-from ebook_translator.segmentation.chapter_chunk import ChapterChunk
+from ebook_translator.segmentation.chapter_chunk import ChapterChunk, ChapterPartChunk
+from ebook_translator.validator.analysis_validator import AnalysisValidator
 
 logger = get_logger(__name__)
 
@@ -25,9 +25,14 @@ class AnalysisChecks(Check[AnalysisErrorData]):
 
     @override
     def validate(self, context: ValidationContext) -> CheckResult[AnalysisErrorData]:
-        chunk_name = (
-            context.chunk.name if isinstance(context.chunk, ChapterChunk) else "unknown"
-        )
+        match context.chunk:
+            case ChapterChunk(name=str(name)):
+                chunk_name = name
+            case ChapterPartChunk(chapter=ChapterChunk(name=str(name))):
+                chunk_name = name
+            case _:
+                chunk_name = "unknown"
+
         logger.debug(f"[AnalysisChecks] 🔍 Début validation pour {chunk_name}")
 
         response = context.translated_texts[0]
@@ -54,7 +59,7 @@ class AnalysisChecks(Check[AnalysisErrorData]):
 
         # 2. Valider structure ContexteTraduction
         analysis_dict, error.missing_sections = AnalysisValidator.validate(
-            analysis_dict
+            analysis_dict, context.chunk
         )
         if error.missing_sections:
             # Limiter l'affichage à 5 premières sections
@@ -72,7 +77,8 @@ class AnalysisChecks(Check[AnalysisErrorData]):
                 error_message=f"Missing sections in analysis for {chunk_name}: {', '.join(error.missing_sections)}",
             )
 
-        context.translated_texts[0] = json.dumps(analysis_dict)
+        # 3. Mettre à jour le contexte avec le JSON validé
+        context.translated_texts[0] = json.dumps(analysis_dict, ensure_ascii=False)
 
         # Succès : compter les termes du glossaire pour stats
         num_terms = len(analysis_dict.get("glossaire", []))
@@ -91,9 +97,13 @@ class AnalysisChecks(Check[AnalysisErrorData]):
                 "Correction impossible: context.llm est None (mode lecture seule)"
             )
 
-        name = (
-            context.chunk.name if isinstance(context.chunk, ChapterChunk) else "unknown"
-        )
+        match context.chunk:
+            case ChapterChunk(name=str(name)):
+                name = name
+            case ChapterPartChunk(chapter=ChapterChunk(name=str(name))):
+                name = name
+            case _:
+                name = "unknown"
 
         # Log détaillé selon le type d'erreur
         if error_data.invalid_json:
@@ -105,7 +115,7 @@ class AnalysisChecks(Check[AnalysisErrorData]):
                 f"({missing_count} section(s))"
             )
 
-        def render_prompt(attempt: int, use_reasoning: bool) -> str:
+        def render_prompt(attempt: int, use_reasoning: bool) -> tuple[str, str]:
             if context.llm is None:
                 raise ValueError("context.llm est None")
 
@@ -127,6 +137,8 @@ class AnalysisChecks(Check[AnalysisErrorData]):
                     chapter_name=name,
                     target_language=context.target_language,
                     missing_sections=error_data.missing_sections,
+                    incomplete_response=context.translated_texts[0],
+                    chapter_text=context.chunk.prepare_for_prompt([]),
                 )
 
         def validate_result(llm_output: str) -> bool:
@@ -164,7 +176,6 @@ class AnalysisChecks(Check[AnalysisErrorData]):
             validate_result=validate_result,
             context_name="AnalysisChecks",
             max_attempts=2,
-            llm_content=context.chunk.mark_lines_to_numbered([]),
         )
 
         if success:

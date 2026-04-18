@@ -11,12 +11,13 @@ Ces tests vérifient :
 import tempfile
 from pathlib import Path
 
-from ebook_translator.glossary import Glossary
 from ebook_translator.quality import (
     QualityValidator,
     TerminologyChecker,
     UntranslatedDetector,
 )
+
+from ebook_translator.glossary import Glossary
 
 
 class TestUntranslatedDetector:

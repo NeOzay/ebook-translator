@@ -18,11 +18,11 @@ Référence technique complète des standards de code pour **ebook-translator**.
 
 ### Mode strict obligatoire
 
-Le projet utilise **Pyright en mode strict**. Toutes les erreurs de typage doivent être corrigées.
+Le projet utilise **basedpyright en mode strict**. Toutes les erreurs de typage doivent être corrigées.
 
 ```bash
 # Vérifier les types
-poetry run pyright src/
+uv run basedpyright src/
 
 # Doit retourner : "0 errors, 0 warnings"
 ```
@@ -852,17 +852,17 @@ def test_with_fixtures(sample_chunk, mock_llm):
 
 ```bash
 # Formater le code
-poetry run black src/ tests/
+uv run black src/ tests/
 
 # Trier les imports
-poetry run isort src/ tests/
+uv run isort src/ tests/
 
 # Linting
-poetry run ruff check src/ tests/
-poetry run ruff check --fix src/ tests/  # Auto-fix
+uv run ruff check src/ tests/
+uv run ruff check --fix src/ tests/  # Auto-fix
 
 # Tout en une fois
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 ### Conventions
@@ -879,7 +879,7 @@ poetry run pre-commit run --all-files
 ### Avant chaque commit
 
 - [ ] Tous les paramètres/retours typés
-- [ ] Pyright strict sans erreurs
+- [ ] basedpyright strict sans erreurs
 - [ ] Docstrings format Google UNIQUEMENT pour nouvelles fonctions publiques
 - [ ] Exceptions spécifiques (pas `Exception`)
 - [ ] Logging au lieu de print()
@@ -889,9 +889,9 @@ poetry run pre-commit run --all-files
 ### Vérification
 
 ```bash
-poetry run pytest                       # Tests
-poetry run pyright src/                 # Types
-poetry run pre-commit run --all-files   # Qualité
+uv run pytest                       # Tests
+uv run basedpyright src/                 # Types
+uv run pre-commit run --all-files   # Qualité
 ```
 
 ---

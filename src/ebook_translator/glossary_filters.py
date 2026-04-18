@@ -224,8 +224,9 @@ GRAMMATICAL_STOPWORDS = {
 # Utilisés pour filtrage additionnel
 EXCLUDE_PATTERNS: dict[str, Callable[[str], bool]] = {
     "single_letter": lambda word: len(word) == 1,  # A, B, C, etc.
-    "two_letters_lowercase": lambda word: len(word) == 2
-    and word.islower(),  # am, is, at, etc.
+    "two_letters_lowercase": lambda word: (
+        len(word) == 2 and word.islower()
+    ),  # am, is, at, etc.
 }
 
 

@@ -5,18 +5,14 @@ Exécuteur de phases.
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
 from ebook_translator.logger import get_logger
-from ebook_translator.pipeline.base import ExecutionMode
+from ebook_translator.pipeline.base import ExecutionMode, PhaseProtocol
 from ebook_translator.pipeline.context import ChunkContext, PhaseContext, PhaseStats
 from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.validation.validation_queue import ValidationItem
-
-if TYPE_CHECKING:
-    from ebook_translator.pipeline.base import PhaseBase
 
 logger = get_logger(__name__)
 
@@ -38,7 +34,7 @@ class PhaseExecutor:
         stats = executor.run()
     """
 
-    def __init__(self, phase: PhaseBase, context: PhaseContext):
+    def __init__(self, phase: PhaseProtocol, context: PhaseContext):
         """
         Initialise l'exécuteur.
 
@@ -62,9 +58,11 @@ class PhaseExecutor:
         start_time = time.time()
 
         logger.info(f"=== Starting Phase: {self.phase.name} ===")
+        check_names = [c.name for c in self.phase.checks]
         logger.info(
             f"Configuration: max_tokens={self.phase.max_tokens}, "
-            f"overlap={self.phase.overlap_ratio}, mode={self.phase.execution_mode.value}"
+            f"overlap={self.phase.overlap_ratio}, mode={self.phase.execution_mode.value}, "
+            f"checks={check_names}"
         )
 
         # 1. Hook before_phase
@@ -74,7 +72,7 @@ class PhaseExecutor:
         chunks = self.phase.get_chunks()
         if any(not isinstance(c, self.phase.chunk_type) for c in chunks):
             raise TypeError(
-                f"Chunks returned by get_chunks() must be of type "
+                f"Chunks returned by get_chunks() of {self.phase.name} phase must be of type "
                 f"{self.phase.chunk_type.__name__}"
             )
         self.stats.chunks_total = len(chunks)
@@ -112,7 +110,7 @@ class PhaseExecutor:
         """Configure le ValidationWorkerPool pour cette phase."""
 
         # Switch vers le store de cette phase
-        store = self.context.store_manager.get_store(self.phase.store_key())
+        store = self.phase.get_store()
         # Update phase name dans le pool
         self.context.validation_pool.switch_phase(self.phase, store)
 
@@ -155,14 +153,13 @@ class PhaseExecutor:
             self.phase.before_chunk(chunk, chunk_context)
 
             # 3. Render prompt
-            prompt = self.phase.render_prompt(chunk, chunk_context)
+            sys_prompt, user_prompt = self.phase.render_prompt(chunk, chunk_context)
 
             # 4. LLM query
             context_str = f"{self.phase.name}_chunk_{chunk.index:03d}"
-            source_content = self.phase.source_content(chunk, chunk_context)
-            llm_config = self.phase.llm_config(chunk, chunk_context)
+            llm_config = self.phase.get_llm_config(chunk, chunk_context)
             llm_output = self.context.llm.query(
-                prompt, source_content, log_name=context_str, config=llm_config
+                sys_prompt, user_prompt, log_name=context_str, config=llm_config
             )
 
             # 5. Parse

@@ -10,15 +10,19 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ..config import TemplateNames
+from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
+from ebook_translator.validator.translation_context import ContexteTraduction
+
+from ..config import PhaseTemplate, RetryTemplate, Template
 from ..segmentation import Chunk, TranslatedChunk
 from .template_params import (
+    AnalyzeIncremental,
     AnalyzeSimplifiedParams,
+    GlossaryParams,
     MissingLinesParams,
     RefineParams,
     RetryAnalysisInvalidJsonParams,
     RetryAnalysisMissingSectionsParams,
-    RetryFragmentsFlexibleParams,
     RetryFragmentsParams,
     RetryPunctuationParams,
     RetrySentenceParams,
@@ -50,49 +54,64 @@ class TemplateRenderer:
     def __init__(
         self,
         prompt_dir: str = "template",
+        glossary_max_terms: int = 25,
+        genre: str = "fiction",
     ):
         """
         Initialise le renderer avec une instance LLM.
 
         Args:
             llm: Instance LLM pour accéder à render_prompt()
+            glossary_max_terms: Nombre maximum de termes envoyés au LLM dans le glossaire
         """
         self.env = Environment(
             loader=FileSystemLoader(prompt_dir),
             autoescape=select_autoescape(["html", "xml"]),
         )
+        self._glossary_max_terms = glossary_max_terms
+        self._genre = genre
 
     # -----------------------------------
     # 🔹 Rendu du template
     # -----------------------------------
-    def render_prompt(self, template_name: TemplateNames, **kwargs: Any) -> str:
+    def render_prompt(self, template_name: Template, **kwargs: Any) -> tuple[str, str]:
         """
         Rend un template Jinja2 avec les variables données.
 
-        Note:
-            Cette méthode est conservée pour rétrocompatibilité.
-            Pour une API typée et simplifiée, utilisez `self.renderer.render_XXX()`.
-
-        Example:
-            >>> # API recommandée (typée)
-            >>> prompt = llm.renderer.render_translate(target_language="fr")
-            >>>
-            >>> # API legacy (non typée, conservée pour compatibilité)
-            >>> prompt = llm.render_prompt("translate_base.jinja", target_language="fr")
+        Méthode de bas niveau utilisée en interne par toutes les méthodes `render_XXX`.
+        Préférer les méthodes typées (`render_translate`, `render_refine`, etc.) pour
+        un usage applicatif.
 
         Args:
             template_name: Nom du fichier template (ex: "translate_base.jinja")
-            **kwargs: Variables à passer au template
+                ou tuple de deux noms (system_template, user_template).
+            **kwargs: Variables à passer au(x) template(s).
 
         Returns:
-            Prompt rendu
+            `tuple[str, str]` (system, user)
+
+        Example:
+            >>> # Prompt simple (system uniquement)
+            >>> prompt = renderer.render_prompt("translate_base.jinja", target_language="fr")
+            >>>
+            >>> # Prompt double (system + user)
+            >>> system, user = renderer.render_prompt(
+            ...     ("system.jinja", "user.jinja"),
+            ...     target_language="fr"
+            ... )
         """
-        template = self.env.get_template(template_name.value)
-        return template.render(**kwargs)
+
+        system = self.env.get_template(template_name.get_system()).render(**kwargs)
+        user = self.env.get_template(template_name.get_user()).render(**kwargs)
+        return (system, user)
 
     def render_translate(
-        self, target_language: str, literary_context: dict[str, Any] | None = None
-    ) -> str:
+        self,
+        target_language: str,
+        source_text: str,
+        glossary: Glossary,
+        literary_context: ContexteTraduction | None = None,
+    ) -> tuple[str, str]:
         """
         Rend le template translate_base.jinja (Phase 1 - Traduction initiale).
 
@@ -112,10 +131,13 @@ class TemplateRenderer:
         """
         params: TranslateParams = {
             "target_language": target_language,
+            "source_text": source_text,
+            "glossary": glossary.collect_entry(source_text, self._glossary_max_terms),
+            "literary_context": (
+                literary_context["analyse"] if literary_context else None
+            ),
         }
-        if literary_context is not None:
-            params["literary_context"] = literary_context
-        return self.render_prompt(TemplateNames.First_Pass_Template, **params)
+        return self.render_prompt(PhaseTemplate.First_Pass_Template, **params)
 
     def render_refine(
         self,
@@ -123,8 +145,8 @@ class TemplateRenderer:
         store: Store,
         glossary: Glossary,
         target_language: str,
-        literary_context: dict[str, Any] | None = None,
-    ) -> str:
+        literary_context: ContexteTraduction | None = None,
+    ) -> tuple[str, str]:
         """
         Rend le template refine.jinja (Phase 2 - Affinage avec glossaire).
 
@@ -150,7 +172,7 @@ class TemplateRenderer:
             Prompt système rendu prêt pour envoi au LLM
 
         Raises:
-            ValueError: Si la traduction initiale est manquante (Phase 1 incomplète)
+           Error: Si la traduction initiale est manquante (Phase 1 incomplète)
 
         Example:
             >>> prompt = renderer.render_refine(
@@ -171,35 +193,28 @@ class TemplateRenderer:
 
         initial_translation = str(translated_chunk)
 
-        # 2. Extraire texte original (head + body + tail)
-        original_text = str(chunk)
+        head, original_text, tail = chunk.prepare_for_prompt_split()
 
-        # 3. Exporter glossaire appris en Phase 1
-        glossary_export = glossary.export_for_prompt(max_terms=50, min_confidence=0.5)
-
-        # 4. Calculer nombre de lignes attendues (body uniquement)
-        expected_count = chunk.get_body_size()
-
-        # 5. Construire paramètres typés
         params: RefineParams = {
             "target_language": target_language,
+            "head_context": head,
             "original_text": original_text,
+            "tail_context": tail,
             "initial_translation": initial_translation,
-            "glossaire": glossary_export or "Aucun terme dans le glossaire.",
-            "expected_count": expected_count,
+            "glossary": glossary.collect_entry(original_text, self._glossary_max_terms),
+            "literary_context": (
+                literary_context["analyse"] if literary_context else None
+            ),
         }
 
-        if literary_context is not None:
-            params["literary_context"] = literary_context
-
-        return self.render_prompt(TemplateNames.Refine_Template, **params)
+        return self.render_prompt(PhaseTemplate.Refine_Template, **params)
 
     def render_missing_lines(
         self,
         chunk: Chunk,
         missing_indices: list[int],
         target_language: str,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         Rend le template retry_missing_lines_targeted.jinja (Correction lignes manquantes).
 
@@ -230,7 +245,7 @@ class TemplateRenderer:
         """
         # 1. Construire source_content avec numérotation sélective
         # Seules les lignes manquantes sont marquées <N/>
-        source_content = chunk.mark_lines_to_numbered(missing_indices)
+        source_content = chunk.prepare_for_prompt(missing_indices)
 
         # 2. Générer message d'erreur contextuel
         num_missing = len(missing_indices)
@@ -250,7 +265,7 @@ class TemplateRenderer:
         }
 
         return self.render_prompt(
-            TemplateNames.Retry_Missing_Lines_Targeted_Template, **params
+            RetryTemplate.Retry_Missing_Lines_Targeted_Template, **params
         )
 
     def render_retry_fragments(
@@ -260,8 +275,8 @@ class TemplateRenderer:
         incorrect_translation: str,
         expected_separators: int,
         actual_separators: int,
-        mode: Literal["NORMAL", "FLEXIBLE"] = "NORMAL",
-    ) -> str:
+        mode: Literal["strict", "flexible"] = "strict",
+    ) -> tuple[str, str]:
         """
         Rend le template de retry pour correction du nombre de fragments.
 
@@ -285,7 +300,7 @@ class TemplateRenderer:
             Prompt système rendu prêt pour envoi au LLM
 
         Raises:
-            ValueError: Si le mode n'est pas "NORMAL" ou "FLEXIBLE"
+           Error: Si le mode n'est pas "NORMAL" ou "FLEXIBLE"
 
         Example:
             >>> # Première tentative en mode NORMAL
@@ -307,28 +322,18 @@ class TemplateRenderer:
             ...     mode="FLEXIBLE"
             ... )
         """
-        if mode == "FLEXIBLE":
-            params_flexible: RetryFragmentsFlexibleParams = {
-                "target_language": target_language,
-                "original_text": original_text,
-                "incorrect_translation": incorrect_translation,
-                "expected_separators": expected_separators,
-                "actual_separators": actual_separators,
-            }
-            return self.render_prompt(
-                TemplateNames.Retry_Fragments_Flexible_Template, **params_flexible
-            )
-        else:  # mode == "NORMAL"
-            params_normal: RetryFragmentsParams = {
-                "target_language": target_language,
-                "original_text": original_text,
-                "incorrect_translation": incorrect_translation,
-                "expected_separators": expected_separators,
-                "actual_separators": actual_separators,
-            }
-            return self.render_prompt(
-                TemplateNames.Retry_Fragments_Template, **params_normal
-            )
+
+        params_normal: RetryFragmentsParams = {
+            "target_language": target_language,
+            "original_text": original_text,
+            "incorrect_translation": incorrect_translation,
+            "expected_separators": expected_separators,
+            "actual_separators": actual_separators,
+            "mode": mode,
+        }
+        return self.render_prompt(
+            RetryTemplate.Retry_Fragments_Template, **params_normal
+        )
 
     def render_retry_punctuation(
         self,
@@ -337,7 +342,7 @@ class TemplateRenderer:
         incorrect_translation: str,
         expected_pairs: int,
         actual_pairs: int,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         Rend le template retry_punctuation.jinja (Correction paires de guillemets).
 
@@ -373,7 +378,7 @@ class TemplateRenderer:
             "actual_pairs": actual_pairs,
         }
 
-        return self.render_prompt(TemplateNames.Retry_Punctuation_Template, **params)
+        return self.render_prompt(RetryTemplate.Retry_Punctuation_Template, **params)
 
     def render_retry_sentence(
         self,
@@ -381,7 +386,7 @@ class TemplateRenderer:
         target_language: str,
         missing_indices: list[int],
         previous_translation: TranslatedChunk | None = None,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         Rend le template retry_sentence.jinja (Correction nombre de phrases).
 
@@ -415,9 +420,9 @@ class TemplateRenderer:
         """
         # 1. Construire source_content avec numérotation sélective
         # Seules les lignes manquantes sont marquées <N/>
-        source_content = chunk.mark_lines_to_numbered(missing_indices)
+        source_content = chunk.prepare_for_prompt(missing_indices)
         previous_content = (
-            previous_translation.mark_lines_to_numbered(missing_indices)
+            previous_translation.prepare_for_prompt(missing_indices)
             if previous_translation
             else ""
         )
@@ -433,10 +438,9 @@ class TemplateRenderer:
             "original_text": source_content,
             "previous_translation": previous_content,
             "missing_indices": indices_preview,
-            "num_lines": num_missing,
         }
 
-        return self.render_prompt(TemplateNames.Retry_Sentence_Template, **params)
+        return self.render_prompt(RetryTemplate.Retry_Sentence_Template, **params)
 
     # -----------------------------------
     # 🔹 Phase 0 : Analyse littéraire
@@ -444,14 +448,11 @@ class TemplateRenderer:
 
     def render_analyze_incremental(
         self,
-        chapter_name: str,
-        current_block: int,
-        total_blocks: int,
+        chunk: ChapterPartChunk,
         partial_analysis_json: str,
-        block_text: str,
-        is_last_block: bool,
-        genre: str = "fiction",
-    ) -> str:
+        target_language: str,
+        genre: str | None = None,
+    ) -> tuple[str, str]:
         """
         Rend le template analyze_chapter_incremental.jinja (Phase 0 - Blocs 2, 3, ..., N).
 
@@ -497,55 +498,31 @@ class TemplateRenderer:
             ...     genre="fiction"
             ... )
         """
-        return self.render_prompt(
-            TemplateNames.Analyze_Incremental,
-            chapter_name=chapter_name,
-            current_block=current_block,
-            total_blocks=total_blocks,
-            partial_analysis_json=partial_analysis_json,
-            block_text=block_text,
-            is_last_block=is_last_block,
-            genre=genre,
-        )
+        chapter_name: str = chunk.chapter.name
+        current_block: int = chunk.part + 1  # index 0-based -> block 1-based
+        total_blocks: int = chunk.total_parts
+        block_text: str = chunk.prepare_for_prompt([])
+        genre = genre or self._genre
 
-    def render_chapter_grouping(self, filenames: list[str]) -> str:
-        """
-        Rend le template chapter_grouping.jinja (Détection de chapitres - Fallback LLM).
+        params: AnalyzeIncremental = {
+            "chapter_name": chapter_name,
+            "current_block": current_block,
+            "total_blocks": total_blocks,
+            "partial_analysis_json": partial_analysis_json,
+            "block_text": block_text,
+            "is_last_block": chunk.is_last(),
+            "genre": genre,
+            "target_language": target_language,
+        }
 
-        Ce template est utilisé comme fallback lorsque la détection automatique
-        basée sur les patterns regex produit des résultats ambigus. Le LLM analyse
-        les noms de fichiers de la spine EPUB et groupe logiquement les fichiers
-        en chapitres.
-
-        Args:
-            filenames: Liste des noms de fichiers HTML dans l'ordre de la spine EPUB
-
-        Returns:
-            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
-
-        Example:
-            >>> prompt = renderer.render_chapter_grouping(
-            ...     filenames=[
-            ...         "prologue.xhtml",
-            ...         "chapter1.xhtml",
-            ...         "chapter1_a.xhtml",
-            ...         "insert1.xhtml",
-            ...         "chapter2.xhtml",
-            ...     ]
-            ... )
-            >>> json_output = llm.query(prompt, "", use_json_mode=True)
-            >>> # Attendu: {"chapters": [{"chapter_name": "Prologue", "files": [...]}]}
-        """
-        return self.render_prompt(
-            TemplateNames.Chapter_Grouping_Template,
-            filenames=filenames,
-        )
+        return self.render_prompt(PhaseTemplate.Analyze_Incremental, **params)
 
     def render_analyze_simplified(
         self,
-        chapter_name: str,
+        chunk: ChapterPartChunk,
         target_language: str,
-    ) -> str:
+        genre: str | None = None,
+    ) -> tuple[str, str]:
         """
         Rend le template analyze_chapter_simplified.jinja (Phase 0 - Analyse simplifiée).
 
@@ -574,13 +551,17 @@ class TemplateRenderer:
             >>> json_output = llm.query(prompt, "", use_json_mode=True)
             >>> # Attendu: {"chapitre": "Chapter 1", "analyse": {...}, "glossaire": [...]}
         """
+        chapter_text: str = chunk.prepare_for_prompt([])
+        genre = genre or self._genre
         params: AnalyzeSimplifiedParams = {
-            "chapter_name": chapter_name,
+            "chapter_name": chunk.chapter.name,
             "target_language": target_language,
+            "chapter_text": chapter_text,
+            "genre": genre,
         }
 
         return self.render_prompt(
-            TemplateNames.Analyze_Simplified_Template,
+            PhaseTemplate.Analyze_Simplified_Template,
             **params,
         )
 
@@ -590,7 +571,7 @@ class TemplateRenderer:
         target_language: str,
         json_error_message: str,
         invalid_response: str,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         Rend le template retry_correct_analysis_invalid_json.jinja.
 
@@ -623,7 +604,7 @@ class TemplateRenderer:
         }
 
         return self.render_prompt(
-            TemplateNames.Retry_Analysis_Invalid_Json_Template,
+            RetryTemplate.Retry_Analysis_Invalid_Json_Template,
             **params,
         )
 
@@ -632,7 +613,9 @@ class TemplateRenderer:
         chapter_name: str,
         target_language: str,
         missing_sections: list[str],
-    ) -> str:
+        incomplete_response: str,
+        chapter_text: str,
+    ) -> tuple[str, str]:
         """
         Rend le template retry_correct_analysis_missing_sections.jinja.
 
@@ -659,9 +642,41 @@ class TemplateRenderer:
             "chapter_name": chapter_name,
             "target_language": target_language,
             "missing_sections": missing_sections,
+            "incomplete_response": incomplete_response,
+            "chapter_text": chapter_text,
         }
 
         return self.render_prompt(
-            TemplateNames.Retry_Analysis_Missing_Sections_Template,
+            RetryTemplate.Retry_Analysis_Missing_Sections_Template,
             **params,
         )
+
+    # -----------------------------------
+    # 🔹 Phase 0 : Glossaire
+    # -----------------------------------
+
+    def render_glossary(
+        self,
+        chunk: Chunk,
+        target_language: str,
+        genre: str | None = None,
+        glossary: Glossary | None = None,
+    ) -> tuple[str, str]:
+        """
+        Placeholder pour futur template de correction du glossaire.
+
+        Ce template sera utilisé pour corriger les entrées du glossaire qui sont
+        incorrectes, incomplètes ou mal formatées. Il fournira des instructions
+        spécifiques selon le type d'erreur
+        """
+        block_text = chunk.prepare_for_prompt([])
+        genre = genre or self._genre
+        params: GlossaryParams = {
+            "block_text": block_text,
+            "target_language": target_language,
+            "genre": genre,
+            "existing_glossary": (
+                glossary.collect_entry_with_conflicts(block_text) if glossary else None
+            ),
+        }
+        return self.render_prompt(PhaseTemplate.Glossary, **params)

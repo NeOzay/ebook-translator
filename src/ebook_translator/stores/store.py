@@ -146,15 +146,15 @@ class Store:
                 return data
 
             except OSError as e:
-                logger.error(f"⚠️  Erreur lecture cache {cache_file.name}: {e}")
+                logger.error(f"Erreur lecture cache {cache_file.name}: {e}")
                 return {}
             except json.JSONDecodeError as e:
-                logger.error(f"⚠️  Cache corrompu {cache_file.name}: {e}")
+                logger.warning(f"Cache corrompu {cache_file.name}: {e}")
                 # Tenter de sauvegarder une backup avant de retourner un cache vide
                 backup_file = cache_file.with_suffix(".json.backup")
                 try:
                     cache_file.rename(backup_file)
-                    logger.error(f"📦 Backup sauvegardée: {backup_file.name}")
+                    logger.info(f"Backup sauvegardée: {backup_file.name}")
                 except Exception:
                     pass
                 return {}
@@ -398,17 +398,21 @@ class Store:
 
     def get_from_file(
         self,
-        file_name: str ,
+        file_name: str,
     ) -> dict[str, str]:
         """
-        Récupère toutes les traductions pour un fichier HTML donné.
+        Récupère toutes les traductions sauvegardées pour un fichier source.
 
         Args:
-            html_page: L'objet HtmlPage contenant le fichier source
+            file_name: Chemin du fichier source
 
         Returns:
-            Dictionnaire {clé: texte_traduit} où clé peut être int ou str
-            Les clés sont soit des index de ligne, soit un identifiant de texte original
+            Dictionnaire {clé: texte_traduit} où clé peut être str (index) ou (identifiant)
+
+        Example:
+            >>> store = Store()
+            >>> translations = store.get_from_file("file.html")
+            >>> print(translations)  # {"0": "Bonjour", "1": "Monde"}
         """
         return self._load_cache(self._get_cache_file(file_name))
 

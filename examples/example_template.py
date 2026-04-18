@@ -6,13 +6,14 @@ Usage: python test_template_manual.py [template_name]
 
 import io
 import sys
+from enum import Enum
 from pathlib import Path
 
 from ebooklib import epub
-from src.ebook_translator.config import TemplateNames
-from src.ebook_translator.llm.template_renderers import TemplateRenderer
 
+from ebook_translator.config import PhaseTemplate, RetryTemplate
 from ebook_translator.glossary import Glossary
+from ebook_translator.llm.template_renderers import TemplateRenderer
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.stores.store import Store
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
@@ -29,7 +30,7 @@ source_epub = Path(
 source_book = epub.read_epub(source_epub)  # type: ignore
 html_items, target_book = extract_html_items_in_spine_order(source_book)
 
-segmentator = Segmentator(html_items, 500)
+segmentator = Segmentator(source_book, 500)
 
 chunk = next(segmentator.get_all_segments())
 
@@ -43,11 +44,15 @@ renderer = TemplateRenderer()
 analyze_simplified = renderer.render_analyze_simplified(
     chapter_name="Chapitre 1: Introduction",
     target_language="français",
+    chapter_text="Je suis un texte de chapitre à analyser pour en extraire le genre et faire un résumé narratif.",
 )
 
 
 translate_base = renderer.render_translate(
     target_language="français",
+    source_text="Je suis un texte à traduire.",
+    glossary=glossary,
+    literary_context=None,
 )
 
 try:
@@ -85,16 +90,16 @@ retry_correct_fragments = renderer.render_retry_fragments(
     target_language="français",
     actual_separators=3,
     expected_separators=2,
-    mode="NORMAL",
+    mode="strict",
     original_text="Text with </>separator</>",
-    incorrect_translation="Texte avec séparateur",
+    incorrect_translation="Texte </>avec </>séparateur</>",
 )
 
 retry_correct_fragments_flexible = renderer.render_retry_fragments(
     target_language="français",
     actual_separators=0,
     expected_separators=2,
-    mode="FLEXIBLE",
+    mode="flexible",
     original_text="Text with </>separator</>",
     incorrect_translation="Texte avec séparateur",
 )
@@ -119,38 +124,48 @@ retry_analysis_missing_sections = renderer.render_retry_analysis_missing_section
     chapter_name="Chapitre 1: Introduction",
     target_language="français",
     missing_sections=["analyse.resume_narratif", "glossaire[0].sexe"],
+    chapter_text="Je suis un texte de chapitre à analyser pour en extraire le genre et faire un résumé narratif.",
+    incomplete_response='{"analyse": {}, "glossaire": [{"terme": "Sakamoto", "definition": "Un personnage important."}]}',
 )
 
-TEMPLATES: dict[TemplateNames, str] = {
-    TemplateNames.First_Pass_Template: translate_base,
-    TemplateNames.Refine_Template: translate_refine,
-    TemplateNames.Retry_Missing_Lines_Targeted_Template: retry_translate_missing,
-    TemplateNames.Retry_Sentence_Template: retry_translate_sentence,
-    TemplateNames.Retry_Fragments_Template: retry_correct_fragments,
-    TemplateNames.Retry_Fragments_Flexible_Template: retry_correct_fragments_flexible,
-    TemplateNames.Retry_Punctuation_Template: retry_correct_punctuation,
-    TemplateNames.Analyze_Simplified_Template: analyze_simplified,
-    TemplateNames.Retry_Analysis_Invalid_Json_Template: retry_analysis_invalid_json,
-    TemplateNames.Retry_Analysis_Missing_Sections_Template: retry_analysis_missing_sections,
-}
+TEMPLATES: list[tuple[Enum | str, str | tuple[str, str]]] = [
+    (PhaseTemplate.First_Pass_Template, translate_base),
+    (PhaseTemplate.Refine_Template, translate_refine),
+    (RetryTemplate.Retry_Missing_Lines_Targeted_Template, retry_translate_missing),
+    (RetryTemplate.Retry_Sentence_Template, retry_translate_sentence),
+    (RetryTemplate.Retry_Fragments_Template, retry_correct_fragments),
+    ("Retry_Fragments_Flexible_Template", retry_correct_fragments_flexible),
+    (RetryTemplate.Retry_Punctuation_Template, retry_correct_punctuation),
+    (PhaseTemplate.Analyze_Simplified_Template, analyze_simplified),
+    (RetryTemplate.Retry_Analysis_Invalid_Json_Template, retry_analysis_invalid_json),
+    (
+        RetryTemplate.Retry_Analysis_Missing_Sections_Template,
+        retry_analysis_missing_sections,
+    ),
+]
 
 
-def save_template_output(template_name: TemplateNames, output_dir: Path):
+def save_template_output(
+    template: tuple[Enum | str, str | tuple[str, str]], output_dir: Path
+):
     """Rend un template et sauvegarde la sortie dans un fichier."""
-    if template_name not in TEMPLATES:
-        print(f"❌ Template '{template_name}' inconnu.")
-        return
 
-    prompt = TEMPLATES[template_name]
+    template_name, prompt = template
 
     try:
         # Sauvegarder dans un fichier
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / f"{template_name.name}_output.txt"
+        name = template_name.name if isinstance(template_name, Enum) else template_name
+        output_file = output_dir / f"{name}_output.txt"
+        print(output_file.name)
         with output_file.open("w", encoding="utf-8") as f:
-            f.write(prompt)
+            if isinstance(prompt, tuple):
+                f.write("--- SYSTEM ---\n")
+                f.write("\n\n--- USER ---\n".join(prompt))
+            else:
+                f.write(prompt)
 
-        print(f"✅ Sortie sauvegardée dans: {output_file}")
+        # print(f"✅ Sortie sauvegardée dans: {output_file}")
 
     except Exception as e:
         print("\n❌ ERREUR lors du rendu:")

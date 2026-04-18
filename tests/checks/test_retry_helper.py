@@ -3,8 +3,9 @@
 from unittest.mock import Mock
 
 from ebook_translator.checks.base import ValidationContext
-from ebook_translator.checks.retry_helper import retry_with_reasoning
 from ebook_translator.segment import Chunk
+
+from ebook_translator.checks.retry_helper import retry_with_reasoning
 
 
 def create_mock_context(llm_mock: Mock | None = None) -> ValidationContext:

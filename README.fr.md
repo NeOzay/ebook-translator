@@ -37,7 +37,7 @@
 
 2. **Installer les dépendances**:
    ```bash
-   poetry install
+   uv sync
    ```
 
 3. **Configurer les clés API**:
@@ -113,7 +113,7 @@ Voir [start.py](start.py) pour un exemple de configuration complète avec tous l
 
 **Vérification des types**:
 ```bash
-pyright src/ebook_translator
+basedpyright src/ebook_translator
 ```
 
 **Exécuter les tests**:
