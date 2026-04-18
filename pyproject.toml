@@ -109,17 +109,6 @@ extend-exclude = '''
 )/
 '''
 
-[tool.isort]
-profile = "black"
-line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-src_paths = ["src", "tests"]
-skip_glob = ["**/migrations/*", "**/__pycache__/*"]
-
 [tool.ruff]
 # Configuration Ruff pour linting moderne
 line-length = 88
@@ -185,7 +174,6 @@ dev = [
     "pytest>=9.0.2,<10.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
     "black>=25.12.0,<26.0.0",
-    "isort>=7.0.0,<8.0.0",
     "ruff>=0.14.9,<1.0.0",
     "pre-commit>=4.5.0,<5.0.0",
     "basedpyright>=1.36.2,<2.0.0",
