@@ -17,7 +17,9 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import Literal, NotRequired, Self, TypedDict
+from typing import Literal, Self, TypedDict
+
+from template.types import GlossaryEntry, GlossaryMultipleValueEntry
 
 from ebook_translator.validator.translation_context import (
     SexeType,
@@ -95,24 +97,6 @@ def _get_confidence_level(score: float) -> Literal["low", "medium", "high"]:
         return "medium"
     else:
         return "low"
-
-
-class GlossaryEntry(TypedDict):
-    terme: str
-    traduction: str
-    sexe: str
-    type: str
-    weight: NotRequired[int]
-    confiance: Literal["low", "medium", "high"]
-
-
-class GlossaryMultipleValueEntry(TypedDict):
-    terme: str
-    traductions: list[tuple[str, int]]  # Traductions possibles avec leurs poids
-    sexes: list[tuple[str, int]]
-    types: list[tuple[str, int]]
-    weight: int
-    confidence: Literal["low", "medium", "high"]
 
 
 class GlossaryStatistics(TypedDict):

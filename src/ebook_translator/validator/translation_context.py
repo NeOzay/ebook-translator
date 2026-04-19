@@ -7,45 +7,10 @@ la traduction et réduisant la complexité de ~67% par rapport à ChapterAnalysi
 
 from typing import TYPE_CHECKING, Literal, TypedDict
 
+from template.types import AnalyseLitteraire
+
 if TYPE_CHECKING:
     from ebook_translator.segmentation.chunk import Scope
-
-type AnalyseLitteraireKey = Literal[
-    "resume_narratif",
-    "tonalite_ambiance",
-    "style_ecriture",
-    "themes_images_cles",
-    "references_culturelles",
-    "pistes_traduction",
-]
-
-
-class AnalyseLitteraire(TypedDict):
-    """Analyse littéraire synthétique du chapitre."""
-
-    resume_narratif: str
-    """Résumé narratif (max 5 lignes)"""
-
-    tonalite_ambiance: str
-    """Tonalité et ambiance générale"""
-
-    style_ecriture: str
-    """Style d'écriture observé"""
-
-    themes_images_cles: str
-    """Thèmes et images clés du chapitre"""
-
-    references_culturelles: str
-    """Références culturelles présentes"""
-
-    pistes_traduction: list[str]
-    """Liste de pistes concrètes pour la traduction.
-
-    Exemples:
-    - "Préserver le ton ironique et les dialogues vifs"
-    - "Adapter l'idiome 'break a leg' en équivalent français"
-    - "Conserver le rythme rapide des phrases courtes"
-    """
 
 
 TermType = Literal[
