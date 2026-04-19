@@ -1,9 +1,10 @@
 import json
 import re
 from functools import cache
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from template.types import LLMTermeGlossaire
+if TYPE_CHECKING:
+    from template.types import LLMTermeGlossaire
 
 from ebook_translator.validator.translation_context import REQUIRED_TERME_FIELDS
 

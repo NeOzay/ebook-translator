@@ -15,21 +15,21 @@ from ebook_translator.validator.translation_context import ContexteTraduction
 
 from ..config import PhaseTemplate, RetryTemplate, Template
 from ..segmentation import Chunk, TranslatedChunk
-from .template_params import (
-    AnalyzeIncremental,
-    AnalyzeSimplifiedParams,
-    GlossaryParams,
-    MissingLinesParams,
-    RefineParams,
-    RetryAnalysisInvalidJsonParams,
-    RetryAnalysisMissingSectionsParams,
-    RetryFragmentsParams,
-    RetryPunctuationParams,
-    RetrySentenceParams,
-    TranslateParams,
-)
 
 if TYPE_CHECKING:
+    from template.template_params import (
+        AnalyzeChapterParams,
+        GlossaryParams,
+        MissingLinesParams,
+        RefineParams,
+        RetryAnalysisInvalidJsonParams,
+        RetryAnalysisMissingSectionsParams,
+        RetryFragmentsParams,
+        RetryPunctuationParams,
+        RetrySentenceParams,
+        TranslateParams,
+    )
+
     from ..glossary import Glossary
     from ..stores import Store
 
@@ -69,6 +69,15 @@ class TemplateRenderer:
             autoescape=select_autoescape(["html", "xml"]),
         )
         self._glossary_max_terms = glossary_max_terms
+        self._genre = genre
+
+    def set_genre(self, genre: str) -> None:
+        """
+        Met à jour le genre littéraire utilisé dans les templates.
+
+        Args:
+            genre: Nouveau genre littéraire (ex: "fiction", "non-fiction", "fantasy", "science-fiction")
+        """
         self._genre = genre
 
     # -----------------------------------
@@ -136,6 +145,7 @@ class TemplateRenderer:
             "literary_context": (
                 literary_context["analyse"] if literary_context else None
             ),
+            "genre": self._genre,
         }
         return self.render_prompt(PhaseTemplate.First_Pass_Template, **params)
 
@@ -199,12 +209,13 @@ class TemplateRenderer:
             "target_language": target_language,
             "head_context": head,
             "original_text": original_text,
-            "tail_context": tail,
             "initial_translation": initial_translation,
+            "tail_context": tail,
             "glossary": glossary.collect_entry(original_text, self._glossary_max_terms),
             "literary_context": (
                 literary_context["analyse"] if literary_context else None
             ),
+            "genre": self._genre,
         }
 
         return self.render_prompt(PhaseTemplate.Refine_Template, **params)
@@ -446,124 +457,37 @@ class TemplateRenderer:
     # 🔹 Phase 0 : Analyse littéraire
     # -----------------------------------
 
-    def render_analyze_incremental(
+    def render_analyze_chapter(
         self,
         chunk: ChapterPartChunk,
-        partial_analysis_json: str,
         target_language: str,
-        genre: str | None = None,
+        partial_analysis_json: str | None = None,
     ) -> tuple[str, str]:
         """
-        Rend le template analyze_chapter_incremental.jinja (Phase 0 - Blocs 2, 3, ..., N).
-
-        Ce template est utilisé pour enrichir progressivement l'analyse littéraire
-        d'un chapitre en traitant les blocs suivants (~4000 tokens chacun).
-
-        Met à jour la structure JSON existante en ajoutant de nouvelles informations
-        sans jamais supprimer les données précédentes (approche cumulative).
 
         Args:
-            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
-            current_block: Numéro du bloc actuel (2, 3, ..., N)
-            total_blocks: Nombre total de blocs pour ce chapitre
-            partial_analysis_json: JSON stringifié de l'analyse partielle (blocs 1...current_block-1)
-            block_text: Contenu textuel du bloc actuel (~4000 tokens)
-            is_last_block: True si c'est le dernier bloc (active status="complete")
-            genre: Genre littéraire du livre (défaut: "fiction")
 
         Returns:
             Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
 
-        Example:
-            >>> # Bloc 2/3
-            >>> prompt = renderer.render_analyze_incremental(
-            ...     chapter_name="Chapter 1",
-            ...     current_block=2,
-            ...     total_blocks=3,
-            ...     partial_analysis_json='{"chapter_name": "Chapter 1", ...}',
-            ...     block_text="The next morning...",
-            ...     is_last_block=False,
-            ...     genre="fiction"
-            ... )
-            >>> json_output = llm.query(prompt, "", use_json_mode=True)
-            >>>
-            >>> # Dernier bloc 3/3
-            >>> prompt = renderer.render_analyze_incremental(
-            ...     chapter_name="Chapter 1",
-            ...     current_block=3,
-            ...     total_blocks=3,
-            ...     partial_analysis_json='{"chapter_name": "Chapter 1", ...}',
-            ...     block_text="And they lived happily ever after.",
-            ...     is_last_block=True,  # Activera status="complete"
-            ...     genre="fiction"
-            ... )
         """
         chapter_name: str = chunk.chapter.name
         current_block: int = chunk.part + 1  # index 0-based -> block 1-based
         total_blocks: int = chunk.total_parts
         block_text: str = chunk.prepare_for_prompt([])
-        genre = genre or self._genre
 
-        params: AnalyzeIncremental = {
+        params: AnalyzeChapterParams = {
             "chapter_name": chapter_name,
             "current_block": current_block,
             "total_blocks": total_blocks,
-            "partial_analysis_json": partial_analysis_json,
-            "block_text": block_text,
+            "existing_analysis": partial_analysis_json,
+            "chapter_text": block_text,
             "is_last_block": chunk.is_last(),
-            "genre": genre,
+            "genre": self._genre,
             "target_language": target_language,
         }
 
-        return self.render_prompt(PhaseTemplate.Analyze_Incremental, **params)
-
-    def render_analyze_simplified(
-        self,
-        chunk: ChapterPartChunk,
-        target_language: str,
-        genre: str | None = None,
-    ) -> tuple[str, str]:
-        """
-        Rend le template analyze_chapter_simplified.jinja (Phase 0 - Analyse simplifiée).
-
-        Ce nouveau template simplifié remplace les templates analyze_chapter_initial.jinja
-        et analyze_chapter_incremental.jinja pour réduire la complexité de ~67%.
-
-        Génère un ContexteTraduction avec :
-        - Analyse littéraire orientée traduction (pistes concrètes)
-        - Glossaire avec propositions de traduction directement exploitables
-        - Format JSON simplifié (12 champs vs 30+ dans ChapterAnalysis)
-
-        Args:
-            chunk: Chunk contenant le texte du chapitre à analyser
-            chapter_name: Nom du chapitre (ex: "Chapter 1", "Prologue")
-            target_language: Langue cible pour les propositions de traduction
-
-        Returns:
-            Prompt système rendu prêt pour envoi au LLM avec use_json_mode=True
-
-        Example:
-            >>> prompt = renderer.render_analyze_simplified(
-            ...     chunk=chapter_chunk,
-            ...     chapter_name="Chapter 1",
-            ...     target_language="français"
-            ... )
-            >>> json_output = llm.query(prompt, "", use_json_mode=True)
-            >>> # Attendu: {"chapitre": "Chapter 1", "analyse": {...}, "glossaire": [...]}
-        """
-        chapter_text: str = chunk.prepare_for_prompt([])
-        genre = genre or self._genre
-        params: AnalyzeSimplifiedParams = {
-            "chapter_name": chunk.chapter.name,
-            "target_language": target_language,
-            "chapter_text": chapter_text,
-            "genre": genre,
-        }
-
-        return self.render_prompt(
-            PhaseTemplate.Analyze_Simplified_Template,
-            **params,
-        )
+        return self.render_prompt(PhaseTemplate.Analyze_Chapter, **params)
 
     def render_retry_analysis_invalid_json(
         self,
@@ -659,7 +583,6 @@ class TemplateRenderer:
         self,
         chunk: Chunk,
         target_language: str,
-        genre: str | None = None,
         glossary: Glossary | None = None,
     ) -> tuple[str, str]:
         """
@@ -670,11 +593,10 @@ class TemplateRenderer:
         spécifiques selon le type d'erreur
         """
         block_text = chunk.prepare_for_prompt([])
-        genre = genre or self._genre
         params: GlossaryParams = {
             "block_text": block_text,
             "target_language": target_language,
-            "genre": genre,
+            "genre": self._genre,
             "existing_glossary": (
                 glossary.collect_entry_with_conflicts(block_text) if glossary else None
             ),

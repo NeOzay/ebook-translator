@@ -5,7 +5,6 @@ Gestionnaire de stores pour les phases.
 from pathlib import Path
 
 from ebook_translator.pipeline.base import PhaseProtocol
-from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.stores.store import Store
 
 
@@ -21,10 +20,6 @@ class StoreManager:
         manager = StoreManager(Path("cache"), [InitialPhase, RefinedPhase])
         # Accéder au store d'une phase
         initial_store = manager.get_store("initial")
-        # Lire depuis une phase
-        translation = manager.get("initial", chunk)
-        # Lire avec fallback (refined → initial → None)
-        translation = manager.get_with_fallback(chunk, ["refined", "initial"])
     ```
     """
 
@@ -68,57 +63,6 @@ class StoreManager:
                 f"Available phases: {list(self._stores.keys())}"
             )
         return self._stores[phase_name]
-
-    def get_translate(
-        self, phase_name: str, chunk: Chunk
-    ) -> tuple[dict[int, str], bool]:
-        """
-        Helper: lit la traduction d'un chunk depuis le store d'une phase.
-
-        - Args:
-            * phase_name: Nom de la phase
-            * chunk: Chunk dont on veut la traduction
-        - Returns:
-            `tuple` contenant:
-            * `dict[line_index: texte_traduit ou chaine vide]`
-            * `bool` indiquant si au moins une traduction est manquante
-        """
-        try:
-            store = self.get_store(phase_name)
-
-            return store.get_from_chunk(chunk)
-        except Exception as e:
-            raise ValueError(
-                f"Error getting translation from phase '{phase_name}': {e}"
-            ) from e
-
-    def get_with_fallback(
-        self,
-        chunk: Chunk,
-        phase_order: list[str],
-    ) -> dict[int, str] | None:
-        """
-        Lit avec fallback depuis plusieurs phases.
-
-        Essaie de lire depuis la première phase, puis la seconde, etc.
-        jusqu'à trouver une traduction ou épuiser la liste.
-
-        - Args:
-            * `chunk`: Chunk dont on veut la traduction
-            * `phase_order``: Liste des phases dans l'ordre de priorité
-            (ex: ['refined', 'initial'] = refined d'abord, sinon initial)
-        - Return:
-            * `dict[line_index, translated_text]`, ou `None` si pas trouvé
-        - Example:
-        ```python
-            translation = manager.get_with_fallback(chunk, ["refined", "initial"])
-        ```
-        """
-        for phase_name in phase_order:
-            result, has_missing = self.get_translate(phase_name, chunk)
-            if not has_missing:
-                return result
-        return None
 
     def has_phase(self, phase_name: str) -> bool:
         """

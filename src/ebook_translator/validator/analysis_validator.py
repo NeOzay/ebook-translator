@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any
 
 from annotationlib import get_annotations
 
-from .translation_context import AnalyseLitteraire, ContexteTraduction
+from .translation_context import ContexteTraduction
 
 if TYPE_CHECKING:
+    from template.types import AnalyseLitteraire
+
     from ebook_translator.segmentation.chunk import Chunk
 
 

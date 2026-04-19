@@ -12,14 +12,19 @@ qui réduit de ~67% les tokens LLM par rapport à ChapterAnalysis.
 LiteraryAnalysisPhase se trouve dans pipeline.phases.literary_analysis.
 """
 
-from template.types import LLMTermeGlossaire
+# from template.types import LLMTermeGlossaire
+
+from typing import TYPE_CHECKING
 
 from .analysis_validator import AnalysisValidator
-from .translation_context import AnalyseLitteraire, ContexteTraduction
+from .translation_context import ContexteTraduction
+
+if TYPE_CHECKING:
+    from .translation_context import AnalyseLitteraire
 
 __all__ = [
     "ContexteTraduction",
     "AnalyseLitteraire",
-    "LLMTermeGlossaire",
+    # "LLMTermeGlossaire",
     "AnalysisValidator",
 ]

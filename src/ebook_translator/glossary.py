@@ -17,15 +17,16 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import Literal, Self, TypedDict
+from typing import TYPE_CHECKING, Literal, Self, TypedDict
 
-from template.types import (
-    GlossaryEntry,
-    GlossaryEntrySexe,
-    GlossaryEntryType,
-    GlossaryMultipleValueEntry,
-    LLMTermeGlossaire,
-)
+if TYPE_CHECKING:
+    from template.types import (
+        GlossaryEntry,
+        GlossaryEntrySexe,
+        GlossaryEntryType,
+        GlossaryMultipleValueEntry,
+        LLMTermeGlossaire,
+    )
 
 
 def _get_most_frequent(d: dict[str, int]) -> str | None:
@@ -232,8 +233,8 @@ class Glossary:
             return None
 
         translation_weigths = list(term["translations"].values())
-        confiance = _get_confidence_level(_compute_confidence(translation_weigths))
-        if confiance == "low" and _compute_dominance(translation_weigths) < 0.95:
+        confidance = _get_confidence_level(_compute_confidence(translation_weigths))
+        if confidance == "low" and _compute_dominance(translation_weigths) < 0.95:
             return None
         term_type = _get_most_frequent(term["term_types"]) or ""
         sexe = _get_most_frequent(term["sexes"]) or ""
@@ -245,7 +246,7 @@ class Glossary:
             "type": term_type,
             "sexe": sexe,
             "weight": weight,
-            "confiance": confiance,
+            "confidence": confidance,
         }
         self._entries_cache[source_term] = entry
         return entry
@@ -263,13 +264,13 @@ class Glossary:
 
         term = self._glossary[source_term]
         weight = sum(term["translations"].values())
-        translations = _get_possible_translations(term["translations"], confidence)
+        _get_possible_translations(term["translations"], confidence)
 
         v = _compute_confidence(list(term["translations"].values()))
 
         return {
             "terme": source_term,
-            "traductions": translations,
+            "traductions": _get_possible_translations(term["translations"], confidence),
             "types": _get_possible_translations(term["term_types"], confidence),
             "sexes": _get_possible_translations(term["sexes"], confidence),
             "weight": weight,
@@ -301,7 +302,7 @@ class Glossary:
             "traduction": translation.lower(),
             "type": terme_type,
             "sexe": sexe,
-            "confiance": "high",
+            "confidence": "high",
         }
 
         self._user[terme] = term
@@ -411,7 +412,7 @@ class Glossary:
             if not term:
                 continue
             print(
-                f"{term['terme']} ({term['confiance']}, {term.get('weight', '?')}) → {term['traduction']} (type: {term['type']}, sexe: {term['sexe']})"
+                f"{term['terme']} ({term['confidence']}, {term.get('weight', '?')}) → {term['traduction']} (type: {term['type']}, sexe: {term['sexe']})"
             )
 
     def print_conflicts(self) -> None:

@@ -13,21 +13,12 @@ Tu es un correcteur d'analyses littéraires. Une analyse du chapitre "Chapitre 1
     "themes_images_cles": "Thèmes principaux et images récurrentes",
     "references_culturelles": "Références historiques, littéraires, culturelles",
     "pistes_traduction": ["Piste concrète 1", "Piste concrète 2"]
-  },
-  "glossaire": {
-    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
-    "entrees": [
-      ["terme", "type", "sexe", "traduction"]
-    ]
   }
 }
 ```
 
-### Contraintes glossaire
+### Contraintes
 
-- `type` : personnage, lieu, creature, titre, objet, terme_technique, reference_culturelle
-- `sexe` : m, f, nc
-- `proposition_traduction` : exactement un seul terme
 - `pistes_traduction` : tableau JSON de chaînes
 
 ### Format de sortie

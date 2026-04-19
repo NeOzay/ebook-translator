@@ -13,12 +13,6 @@ Tu es un correcteur de syntaxe JSON. Ta tâche est de corriger une analyse litt�
     "themes_images_cles": "...",
     "references_culturelles": "...",
     "pistes_traduction": ["...", "..."]
-  },
-  "glossaire": {
-    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
-    "entrees": [
-      ["terme", "type", "sexe", "traduction"]
-    ]
   }
 }
 ```
@@ -27,6 +21,7 @@ Tu es un correcteur de syntaxe JSON. Ta tâche est de corriger une analyse litt�
 
 - Guillemets non échappés dans les valeurs : `"Il dit "Bonjour""` → `"Il dit \"Bonjour\""`
 - Virgule finale avant `}` ou `]`
+- Virgule manquante entre éléments d'un tableau
 - Texte ou commentaire hors JSON
 - Guillemets simples au lieu de doubles
 

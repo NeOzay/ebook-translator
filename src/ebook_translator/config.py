@@ -44,11 +44,10 @@ class PhaseTemplate(Template):
     def __init__(self, s: str) -> None:
         self.prefix = "phase/"
 
-    Analyze_Incremental = "analyze_chapter_incremental"
-    Analyze_Simplified_Template = "analyze_chapter_simplified"
+    Analyze_Chapter = "analyze_chapter"
     First_Pass_Template = "translate_base"
     Refine_Template = "translate_refine"
-    Glossary = "test_glossary"
+    Glossary = "glossary"
 
 
 class RetryTemplate(Template):

@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_file_cache = {}
+
 
 class Store:
     """
@@ -48,7 +50,7 @@ class Store:
         cache_dir: Répertoire où sont stockés les fichiers de cache
     """
 
-    def __init__(self, cache_dir: Path) -> None:
+    def __init__(self, cache_dir: Path, fallback: Store | None = None) -> None:
         """
         Initialise le store avec un répertoire de cache.
 
@@ -59,6 +61,7 @@ class Store:
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        self._fallback = fallback
         # Protection thread-safe : Lock par fichier de cache
         # Clé = chemin absolu du fichier cache, Valeur = Lock dédié
         self._file_locks: dict[str, threading.Lock] = {}
@@ -221,6 +224,23 @@ class Store:
                         temp_file.unlink()
                 raise  # Re-lever car c'est critique
 
+    def set_fallback(self, fallback_store: Store) -> None:
+        """
+        Définit un store de fallback pour les recherches de traductions.
+
+        Si une traduction n'est pas trouvée dans ce store, la recherche
+        se fera dans le store de fallback (ex: phase précédente).
+
+        Args:
+            fallback_store: Instance de Store à utiliser comme fallback
+
+        Example:
+            >>> previous_store = Store(Path("cache/previous"))
+            >>> current_store = Store(Path("cache/current"))
+            >>> current_store.set_fallback(previous_store)
+        """
+        self._fallback = fallback_store
+
     def save(
         self,
         source_file: str,
@@ -284,7 +304,6 @@ class Store:
         cache_file = self._get_cache_file(source_file)
         data = self._load_cache(cache_file)
 
-        # Essayer d'abord par index
         return data.get(line_index, None)
 
     def get_all(

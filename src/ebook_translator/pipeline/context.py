@@ -3,14 +3,13 @@ Contextes de données pour le système de phases.
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ebooklib import epub
 
 from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
-from ebook_translator.segmentation import Chapters, Chunk
+from ebook_translator.segmentation import Chapters
 from ebook_translator.validation import ValidationWorkerPool
 
 if TYPE_CHECKING:
@@ -157,44 +156,3 @@ class ChunkContext:
 
     glossary: Glossary
     """Glossaire optionnel pour cohérence terminologique"""
-
-    def get_previous_translation(
-        self,
-        chunk: Chunk,
-        phase_name: str,
-    ) -> tuple[dict[int, str], bool]:
-        """
-        Helper: récupère la traduction d'un chunk depuis une phase précédente.
-
-        Args:
-            chunk: Chunk dont on veut la traduction
-            phase_name: Nom de la phase source (ex: 'initial')
-
-        Returns:
-            Tuple (traductions, has_missing) où:
-            - traductions: Mapping line_index -> translated_text (ou chaîne vide si manquante)
-            - has_missing: True si au moins une traduction est manquante, False sinon
-
-        Example:
-            # Dans RefinementPhase.render_prompt()
-            initial_translation, has_missing = context.get_previous_translation(chunk, "initial")
-            if not has_missing:
-                return render_refine(chunk, initial_translation, ...)
-        """
-        return self.store_manager.get_translate(phase_name, chunk)
-
-    def export_glossary(self, path: Path) -> bool:
-        """
-        Helper: exporte le glossaire vers un fichier.
-
-        Args:
-            path: Chemin du fichier de sortie
-
-        Returns:
-            True si exporté avec succès, False sinon
-        """
-        try:
-            # self.glossary.export_to_file(path)
-            return True
-        except Exception:
-            return False

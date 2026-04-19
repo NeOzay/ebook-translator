@@ -85,7 +85,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
             return ({}, True)  # Analyse manquante
         return ({0: cached_json}, False)  # Analyse trouvée
 
-    def _get_previous_chunk_json(self, chunk: ChapterPartChunk) -> str:
+    def _get_previous_chunk_json(self, chunk: ChapterPartChunk) -> str | None:
         """Récupère le JSON d'analyse du chunk précédent depuis le store.
 
         Args:
@@ -95,7 +95,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
             JSON stringifié du chunk précédent, ou chaîne vide si introuvable.
         """
         if chunk.is_first():
-            return ""
+            return None
 
         all_cached = self.get_store().get_from_file(chunk.chapter.name)
         prefix = f"{chunk.index - 1}_"
@@ -107,12 +107,8 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
                     for k, v in analysis_data.items()
                     if k in ["chapitre", "analyse"]
                 }
-                analysis_data["glossaire"] = {
-                    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
-                    "entrees": [],
-                }
-                return json.dumps(analysis_data, ensure_ascii=False)
-        return ""
+                return json.dumps(analysis_data, ensure_ascii=False, index=2)
+        return None
 
     @override
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
@@ -120,12 +116,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         if not isinstance(chunk, ChapterPartChunk):
             raise ValueError("chunk must be ChapterPartChunk")
 
-        if chunk.is_first():
-            return context.llm.renderer.render_analyze_simplified(
-                chunk=chunk,
-                target_language=context.target_language,
-            )
-        return context.llm.renderer.render_analyze_incremental(
+        return context.llm.renderer.render_analyze_chapter(
             chunk=chunk,
             target_language=context.target_language,
             partial_analysis_json=self._get_previous_chunk_json(chunk),

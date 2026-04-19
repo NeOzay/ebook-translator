@@ -3,8 +3,6 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, override
 
-from template.types import LLMTermeGlossaire
-
 from ebook_translator.checks import Check
 from ebook_translator.checks.check_tests.validate_glossary import GlossaryChecks
 from ebook_translator.exporter import GlossaryExporter
@@ -15,6 +13,8 @@ from ebook_translator.validation.validation_queue import SaveItem
 from ebook_translator.validator.glossary_validator import GlossaryValidator
 
 if TYPE_CHECKING:
+    from template.types import LLMTermeGlossaire
+
     from ebook_translator.llm.llm_config import LLMConfig
 
 logger = get_logger(__name__)

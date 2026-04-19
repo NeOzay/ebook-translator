@@ -7,13 +7,10 @@ la traduction et réduisant la complexité de ~67% par rapport à ChapterAnalysi
 
 from typing import TYPE_CHECKING, TypedDict
 
-from template.types import AnalyseLitteraire, GlossaryEntrySexe, GlossaryEntryType
-
 if TYPE_CHECKING:
-    from ebook_translator.segmentation.chunk import Scope
+    from template.types import AnalyseLitteraire
 
-TermType = GlossaryEntryType
-SexeType = GlossaryEntrySexe
+    from ebook_translator.segmentation.chunk import Scope
 
 
 class ContexteTraduction(TypedDict):

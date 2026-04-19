@@ -25,13 +25,11 @@ Structure Markdown générée:
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
-from template.types import AnalyseLitteraireKey
-
 from ebook_translator.exporter.helper import normalize_text, save_markdown, slugify
 from ebook_translator.validator.translation_context import ContexteTraduction
 
 if TYPE_CHECKING:
-    pass
+    from template.types import AnalyseLitteraireKey
 
 
 # ------------------------------

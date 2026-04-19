@@ -1,14 +1,12 @@
 """Re-export des paramètres de templates depuis le submodule template/."""
 
 from template.template_params import (
-    AnalyzeIncremental,
-    AnalyzeSimplifiedParams,
+    AnalyzeChapterParams,
     GlossaryParams,
     MissingLinesParams,
     RefineParams,
     RetryAnalysisInvalidJsonParams,
     RetryAnalysisMissingSectionsParams,
-    RetryFragmentsFlexibleParams,
     RetryFragmentsParams,
     RetryPunctuationParams,
     RetrySentenceParams,
@@ -16,14 +14,12 @@ from template.template_params import (
 )
 
 __all__ = [
-    "AnalyzeIncremental",
-    "AnalyzeSimplifiedParams",
+    "AnalyzeChapterParams",
     "GlossaryParams",
     "MissingLinesParams",
     "RefineParams",
     "RetryAnalysisInvalidJsonParams",
     "RetryAnalysisMissingSectionsParams",
-    "RetryFragmentsFlexibleParams",
     "RetryFragmentsParams",
     "RetryPunctuationParams",
     "RetrySentenceParams",

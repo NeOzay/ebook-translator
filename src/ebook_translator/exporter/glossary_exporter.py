@@ -1,8 +1,11 @@
 from pathlib import Path
-
-from template.types import LLMTermeGlossaire
+from typing import TYPE_CHECKING
 
 from ebook_translator.exporter.helper import save_markdown
+
+if TYPE_CHECKING:
+    from template.types import LLMTermeGlossaire
+
 
 MISSING = "—"
 

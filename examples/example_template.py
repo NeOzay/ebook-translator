@@ -33,6 +33,9 @@ html_items, target_book = extract_html_items_in_spine_order(source_book)
 segmentator = Segmentator(source_book, 500)
 
 chunk = next(segmentator.get_all_segments())
+chapter_chunk = next(
+    segmentator.get_all_chapters_by_spine()
+)  # Premier chapitre pour test
 
 glossary = Glossary()
 
@@ -41,12 +44,15 @@ renderer = TemplateRenderer()
 # Templates disponibles avec leurs paramètres par défaut
 # === TRANSLATE Templates ===
 
-analyze_simplified = renderer.render_analyze_simplified(
-    chapter_name="Chapitre 1: Introduction",
-    target_language="français",
-    chapter_text="Je suis un texte de chapitre à analyser pour en extraire le genre et faire un résumé narratif.",
+analyze_first_chunk = renderer.render_analyze_chapter(
+    target_language="français", chunk=next(chapter_chunk.split_chunk(100000, 0))
 )
 
+analyze_next_chunk = renderer.render_analyze_chapter(
+    target_language="français",
+    chunk=next(chapter_chunk.split_chunk(100000, 0)),
+    partial_analysis_json='{"chapitre": "Chapitre 1: Introduction", "analyse": {"resume_narratif": "Ceci est un résumé narratif du chapitre.", "genre": "fantasy", "pistes_traduction": ["Piste 1: Traduire \'Sakamoto\' par \'Sakamoto\' (nom propre)", "Piste 2: \'Matrice\' peut être traduit par \'Matrix\' ou \'Matrice\', selon le contexte."], "glossaire": [{"terme": "Sakamoto", "type": "personnage", "sexe": "m", "proposition_traduction": "Sakamoto"}, {"terme": "Matrice", "type": "objet", "sexe": "nc", "proposition_traduction": "Matrix ou Matrice"}]}}',
+)
 
 translate_base = renderer.render_translate(
     target_language="français",
@@ -136,7 +142,8 @@ TEMPLATES: list[tuple[Enum | str, str | tuple[str, str]]] = [
     (RetryTemplate.Retry_Fragments_Template, retry_correct_fragments),
     ("Retry_Fragments_Flexible_Template", retry_correct_fragments_flexible),
     (RetryTemplate.Retry_Punctuation_Template, retry_correct_punctuation),
-    (PhaseTemplate.Analyze_Simplified_Template, analyze_simplified),
+    (PhaseTemplate.Analyze_Chapter, analyze_first_chunk),
+    ("Analyze_Chapter_With_Partial_JSON", analyze_next_chunk),
     (RetryTemplate.Retry_Analysis_Invalid_Json_Template, retry_analysis_invalid_json),
     (
         RetryTemplate.Retry_Analysis_Missing_Sections_Template,

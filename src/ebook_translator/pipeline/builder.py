@@ -351,6 +351,7 @@ class PipelineBuilder:
     def __init__(self) -> None:
         self._epub_path: Path | None = None
         self._output_epub: Path | None = None
+        self._epub_genre: str | None = None
         self._target_language: str | None = None
         self._llm_builder: LLMBuilder | None = None
         self._phases_builder: PhasesBuilder | None = None
@@ -382,6 +383,18 @@ class PipelineBuilder:
             self pour chaînage.
         """
         self._output_epub = path if isinstance(path, Path) else Path(path)
+        return self
+
+    def genre(self, genre: str) -> Self:
+        """Genre littéraire du livre (ex: 'fantasy', 'science-fiction').
+
+        Args:
+            genre: Genre du livre, utilisé pour guider l'analyse littéraire.
+
+        Returns:
+            self pour chaînage.
+        """
+        self._epub_genre = genre
         return self
 
     def language(self, target: str) -> Self:
@@ -503,6 +516,11 @@ class PipelineBuilder:
             raise ValueError("PipelineBuilder: .phases() requis")
 
         llm = self._llm_builder.build()
+        if self._epub_genre is not None:
+            llm.renderer.set_genre(
+                self._epub_genre
+            )  # Configure le genre pour les prompts
+
         phases = self._phases_builder.build()
 
         pipeline = Pipeline(
