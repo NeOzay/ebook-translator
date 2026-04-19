@@ -3,11 +3,17 @@
     "venv": ".venv",
     "executionEnvironments": [
         {
-            "root": "src"
+            "root": "src",
+            "extraPaths": ["."]
+        },
+        {
+            "root": "template",
+            "extraPaths": ["src"]
         }
     ],
     "include": [
-        "src"
+        "src",
+        "template"
     ],
     "typeCheckingMode": "strict",
     "useLibraryCodeForTypes": true
