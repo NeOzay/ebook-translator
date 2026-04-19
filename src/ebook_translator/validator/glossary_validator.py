@@ -3,16 +3,15 @@ import re
 from functools import cache
 from typing import Any, cast
 
-from ebook_translator.validator.translation_context import (
-    REQUIRED_TERME_FIELDS,
-    TermeGlossaire,
-)
+from template.types import LLMTermeGlossaire
+
+from ebook_translator.validator.translation_context import REQUIRED_TERME_FIELDS
 
 
 def _validate_and_convert_glossary_entries(
     entrees: list[tuple[str, ...]],
     missing_sections: list[str],
-) -> list[TermeGlossaire]:
+) -> list[LLMTermeGlossaire]:
     """
     Convertit le format compact (liste de listes) en liste de dicts.
 
@@ -21,7 +20,7 @@ def _validate_and_convert_glossary_entries(
                  dans l'ordre : [terme, type, sexe, description_role, notes_traduction, proposition_traduction]
 
     Returns:
-        Liste de TermeGlossaire (dicts) avec clés correspondant à l'ordre fixe des colonnes
+        Liste de LLMTermeGlossaire (dicts) avec clés correspondant à l'ordre fixe des colonnes
 
     Example:
         >>> entrees = [["Alice", "personnage", "f", "Protagoniste", "Conserver", "Alice"]]
@@ -29,7 +28,7 @@ def _validate_and_convert_glossary_entries(
         [{"terme": "Alice", "type": "personnage", "sexe": "f", ...}]
     """
     size = 4
-    glossary_entries: list[TermeGlossaire] = []
+    glossary_entries: list[LLMTermeGlossaire] = []
     for index, entry in enumerate(entrees):
         if len(entry) != size:
             missing_sections.append(
@@ -96,7 +95,7 @@ def _check_glossary_entry(
 class GlossaryValidator:
     @staticmethod
     @cache
-    def load(data: str) -> list[TermeGlossaire]:
+    def load(data: str) -> list[LLMTermeGlossaire]:
         raw_data = json.loads(data)
         validated_data, missing_sections = GlossaryValidator.validate(raw_data)
         if missing_sections:
@@ -106,7 +105,7 @@ class GlossaryValidator:
         return validated_data
 
     @staticmethod
-    def validate(data: dict[str, Any]) -> tuple[list[TermeGlossaire], list[str]]:
+    def validate(data: dict[str, Any]) -> tuple[list[LLMTermeGlossaire], list[str]]:
         missing_sections: list[str] = []
         glossaire_list: list[Any] = []
 

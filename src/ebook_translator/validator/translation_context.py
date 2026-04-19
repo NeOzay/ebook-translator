@@ -5,48 +5,15 @@ Ce module définit le nouveau format d'analyse littéraire, optimisé pour
 la traduction et réduisant la complexité de ~67% par rapport à ChapterAnalysis.
 """
 
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from template.types import AnalyseLitteraire
+from template.types import AnalyseLitteraire, GlossaryEntrySexe, GlossaryEntryType
 
 if TYPE_CHECKING:
     from ebook_translator.segmentation.chunk import Scope
 
-
-TermType = Literal[
-    "personnage",
-    "lieu",
-    "creature",
-    "titre",
-    "objet",
-    "terme_technique",
-    "reference_culturelle",
-]
-SexeType = Literal["m", "f", "nc"]
-
-
-class TermeGlossaire(TypedDict):
-    """Terme à inclure dans le glossaire avec sa traduction proposée."""
-
-    terme: str
-    """Terme original dans la langue source"""
-
-    type: TermType | str
-    """Type de terme pour catégorisation"""
-
-    sexe: SexeType | str
-    """Sexe pour personnages/créatures (m=masculin, f=féminin, nc=non concerné)"""
-
-    # description_role: str
-    """Description brève ou rôle du terme dans le récit"""
-
-    # notes_traduction: str
-    """Notes pour guider la décision de traduction"""
-
-    proposition_traduction: str
-    """Proposition de traduction UNIQUE (un seul terme, pas de liste).
-
-    """
+TermType = GlossaryEntryType
+SexeType = GlossaryEntrySexe
 
 
 class ContexteTraduction(TypedDict):
@@ -68,7 +35,7 @@ class ContexteTraduction(TypedDict):
     analyse: AnalyseLitteraire
     """Analyse littéraire synthétique"""
 
-    # glossaire: list[TermeGlossaire]
+    # glossaire: list[LLMTermeGlossaire]
     """Glossaire des termes importants avec traductions proposées"""
 
     scope: Scope

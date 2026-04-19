@@ -1,7 +1,8 @@
 from pathlib import Path
 
+from template.types import LLMTermeGlossaire
+
 from ebook_translator.exporter.helper import save_markdown
-from ebook_translator.validator.translation_context import TermeGlossaire
 
 MISSING = "—"
 
@@ -24,7 +25,7 @@ def _escape_table_cell(s: str) -> str:
     return s
 
 
-def _format_glossaire_table(entries: list[TermeGlossaire]) -> list[str]:
+def _format_glossaire_table(entries: list[LLMTermeGlossaire]) -> list[str]:
     """
     Génère la table Markdown du glossaire.
 
@@ -40,7 +41,7 @@ def _format_glossaire_table(entries: list[TermeGlossaire]) -> list[str]:
     if not entries:
         return ["> Aucun terme pertinent identifié."]
 
-    sorted_entries: list[TermeGlossaire] = sorted(
+    sorted_entries: list[LLMTermeGlossaire] = sorted(
         entries, key=lambda e: (e["type"], e["terme"].lower())
     )
 
@@ -77,7 +78,7 @@ def _format_glossaire_table(entries: list[TermeGlossaire]) -> list[str]:
 class GlossaryExporter:
     @staticmethod
     def save_glossary_markdown(
-        glossary: list[TermeGlossaire],
+        glossary: list[LLMTermeGlossaire],
         output_path: Path | str,
     ) -> None:
         text = "\n".join(_format_glossaire_table(glossary))

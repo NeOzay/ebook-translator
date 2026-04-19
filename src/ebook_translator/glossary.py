@@ -19,12 +19,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Literal, Self, TypedDict
 
-from template.types import GlossaryEntry, GlossaryMultipleValueEntry
-
-from ebook_translator.validator.translation_context import (
-    SexeType,
-    TermeGlossaire,
-    TermType,
+from template.types import (
+    GlossaryEntry,
+    GlossaryEntrySexe,
+    GlossaryEntryType,
+    GlossaryMultipleValueEntry,
+    LLMTermeGlossaire,
 )
 
 
@@ -169,7 +169,7 @@ class Glossary:
     # API basique : Apprentissage et récupération
     # =========================================================================
 
-    def learn(self, term: TermeGlossaire) -> None:
+    def learn(self, term: LLMTermeGlossaire) -> None:
         """
         Enregistre une traduction observée.
 
@@ -280,8 +280,8 @@ class Glossary:
         self,
         terme: str,
         translation: str,
-        sexe: SexeType,
-        terme_type: TermType,
+        sexe: GlossaryEntrySexe,
+        terme_type: GlossaryEntryType,
     ) -> Self:
         """
         Valide manuellement une traduction.

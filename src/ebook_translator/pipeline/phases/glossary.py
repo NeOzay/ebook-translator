@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, override
 
+from template.types import LLMTermeGlossaire
+
 from ebook_translator.checks import Check
 from ebook_translator.checks.check_tests.validate_glossary import GlossaryChecks
 from ebook_translator.exporter import GlossaryExporter
@@ -11,7 +13,6 @@ from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, Ph
 from ebook_translator.segmentation.chunk import Chunk
 from ebook_translator.validation.validation_queue import SaveItem
 from ebook_translator.validator.glossary_validator import GlossaryValidator
-from ebook_translator.validator.translation_context import TermeGlossaire
 
 if TYPE_CHECKING:
     from ebook_translator.llm.llm_config import LLMConfig
@@ -105,7 +106,7 @@ class GlossaryPhase(PhaseBase):
         return {0: response}
 
     def _populate_glossary(
-        self, termes: list[TermeGlossaire], chunk_index: int
+        self, termes: list[LLMTermeGlossaire], chunk_index: int
     ) -> None:
         """
         Peuple le glossaire depuis l'analyse d'un chapitre.
