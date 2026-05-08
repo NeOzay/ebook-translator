@@ -6,17 +6,19 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, override
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast, override
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ebook_translator.checks import Check, ValidationPipeline
+from ebook_translator.checks.content_check import ChunkSource, ContentCheck
 from ebook_translator.llm.clients.client import ClientProviderProtocol
 from ebook_translator.llm.llm_config import JsonRequestConfig, LLMConfig
 from ebook_translator.segmentation.chunk import Chunk, ChunkProtocol
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.stores.store import Store
 from ebook_translator.translation.parser import parse_llm_translation_output
+from ebook_translator.validation.failure import ValidationFailure, from_pydantic_error
 from template.types import ConvertibleModel
 
 if TYPE_CHECKING:
@@ -105,8 +107,54 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any](Protocol):
     ) -> SaveItem: ...
 
 
+def validate_payload[M: ConvertibleModel[Any]](
+    payload_type: type[M],
+    content_checks: tuple[ContentCheck[M, Any], ...],
+    raw: str | M,
+    source: ChunkSource,
+) -> M | list[ValidationFailure[Any]]:
+    """Pipeline de validation unifié : schéma puis contenu.
+
+    Étapes :
+        1. Si `raw` est déjà une instance de `ConvertibleModel`, considère
+           le schéma comme validé (cas Phase 0 / glossaire via Instructor).
+        2. Sinon, `payload_type.model_validate(raw)`. Toute `ValidationError`
+           remonte sous forme de `ValidationFailure` typés via
+           `from_pydantic_error` et la fonction sort immédiatement (le
+           contenu n'est pas vérifié sur un schéma KO).
+        3. Si schéma OK, exécute chaque `ContentCheck` ; collecte toutes les
+           failures non-nulles. Si au moins une, retourne la liste ; sinon
+           retourne le payload typé.
+
+    Returns:
+        - `M` validé schéma + contenu, ou
+        - `list[ValidationFailure]` (1+ erreurs schéma OU 1+ erreurs contenu,
+          jamais un mix : la fonction court-circuite après échec schéma).
+    """
+
+    if isinstance(raw, ConvertibleModel):
+        payload: M = cast(M, raw)
+    else:
+        try:
+            payload = payload_type.model_validate(raw)
+        except ValidationError as e:
+            return list(from_pydantic_error(e))
+
+    content_failures: list[ValidationFailure[Any]] = []
+    for check in content_checks:
+        content_failures.extend(check.run(payload, source))
+    if content_failures:
+        return content_failures
+    return payload
+
+
 @dataclass
-class PhaseBase[ChunkType: ChunkProtocol = Chunk](ABC, PhaseProtocol[ChunkType]):  # type: ignore
+class PhaseBase[
+    ChunkType: ChunkProtocol = Chunk,
+    M: ConvertibleModel[Any] = ConvertibleModel[Any],
+](
+    ABC, PhaseProtocol[ChunkType]
+):  # type: ignore
     """
     Classe de base abstraite pour toutes les phases.
 
@@ -156,7 +204,26 @@ class PhaseBase[ChunkType: ChunkProtocol = Chunk](ABC, PhaseProtocol[ChunkType])
     checks: tuple[Check[Any], ...] = field(
         init=False, default_factory=tuple[Check[Any], ...]
     )
-    """Liste des checks de validation pour cette phase"""
+    """Liste des checks de validation pour cette phase (legacy, étape 9 dépose)"""
+
+    # === Configuration nouvelle API (étape 5+) ===
+
+    payload_type: ClassVar[type[ConvertibleModel[Any]]] = cast(
+        "type[ConvertibleModel[Any]]", ConvertibleModel
+    )
+    """Modèle Pydantic du payload LLM. Sous-classes migrées (étape 6+) le
+    surchargent (`LineIndexedTranslation`, `AnalyseChapter`, `LLMGlossaryModel`).
+
+    `ClassVar` plutôt que dataclass field : doit être une donnée de classe
+    pas d'instance (sinon le `default_factory` écrase la valeur posée par
+    la sous-classe à l'instanciation).
+    """
+
+    content_checks: ClassVar[tuple[ContentCheck[Any, Any], ...]] = ()
+    """Checks contenu post-parsing (nouveau Protocol). Chaque check porte
+    son propre `retry_strategy` et `max_attempts` ; il n'y a pas d'override
+    au niveau phase. Pour le chemin schéma KO (Pydantic), voir
+    `llm.retry_registry.SCHEMA_RETRY_STRATEGY` / `SCHEMA_MAX_ATTEMPTS`."""
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
@@ -314,6 +381,26 @@ class PhaseBase[ChunkType: ChunkProtocol = Chunk](ABC, PhaseProtocol[ChunkType])
             Dictionnaire de configuration LLM
         """
         return self.llm
+
+    def validate(
+        self, raw: str | M, source: ChunkSource
+    ) -> M | list[ValidationFailure[Any]]:
+        """Pipeline de validation unifié pour cette phase.
+
+        Délègue à la fonction libre `validate_payload`. Voir sa docstring
+        pour la sémantique (court-circuit schéma KO, séparation
+        schéma/contenu, sortie typée).
+
+        Aucune phase existante ne l'appelle en étape 5 ; les phases sont
+        migrées une par une à partir de l'étape 6.
+        """
+
+        # `payload_type` est une `ClassVar[type[ConvertibleModel[Any]]]` au
+        # niveau de PhaseBase ; les sous-classes la rétrécissent à leur `M`
+        # concret. Le cast ré-aligne le type de retour avec le `M` du
+        # paramètre générique de la classe pour les consommateurs.
+        result = validate_payload(self.payload_type, self.content_checks, raw, source)
+        return cast("M | list[ValidationFailure[Any]]", result)
 
     def process_llm_response(
         self, chunk: ChunkType, response: str, context: ChunkContext

@@ -17,11 +17,11 @@ Bénéfices:
     - Gestion d'erreurs centralisée et callbacks thread-safe
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from typing import TYPE_CHECKING, TypedDict
-
-from ebook_translator.pipeline.base import PhaseProtocol
 
 from ..logger import get_logger
 from .save_worker import SaveWorker
@@ -29,6 +29,8 @@ from .validation_queue import SaveQueue, ValidationItem, ValidationQueue
 from .validation_worker import ValidationWorker
 
 if TYPE_CHECKING:
+    from ebook_translator.pipeline.base import PhaseProtocol
+
     from ..checks import ValidationPipeline
     from ..llm import LLM
     from ..stores.store import Store

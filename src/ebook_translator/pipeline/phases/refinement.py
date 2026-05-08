@@ -11,17 +11,30 @@ from ebook_translator.checks import (
     PunctuationCheck,
     SentenceCheck,
 )
+from ebook_translator.checks.content import (
+    FragmentCountCheck as ContentFragmentCountCheck,
+)
+from ebook_translator.checks.content import (
+    LineCountCheck as ContentLineCountCheck,
+)
+from ebook_translator.checks.content import (
+    PunctuationCheck as ContentPunctuationCheck,
+)
+from ebook_translator.checks.content import (
+    SentenceCheck as ContentSentenceCheck,
+)
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.segmentation.segmentator import Chunk
+from template.phase.translation_models import LineIndexedTranslation
 
 logger = get_logger(__name__)
 
 
 @dataclass
-class RefinementPhase(PhaseBase[Chunk]):
+class RefinementPhase(PhaseBase[Chunk, LineIndexedTranslation]):
     """
     Phase 2: Raffinage avec glossaire (petits blocs, séquentiel).
 
@@ -54,6 +67,16 @@ class RefinementPhase(PhaseBase[Chunk]):
         FragmentCountCheck(),
         PunctuationCheck(),
         SentenceCheck(),
+    )
+
+    # Nouvelle API (étape 5+). Cohabite avec `checks` legacy ; le worker
+    # unifié de l'étape 7 lira `payload_type` + `content_checks`.
+    payload_type = LineIndexedTranslation
+    content_checks = (
+        ContentLineCountCheck(),
+        ContentFragmentCountCheck(),
+        ContentPunctuationCheck(),
+        ContentSentenceCheck(),
     )
 
     @override

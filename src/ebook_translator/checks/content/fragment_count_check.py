@@ -1,0 +1,55 @@
+"""Check : préservation du nombre de séparateurs `</>` par ligne.
+
+Émet **une `ValidationFailure[FragmentDiagnostic]` par ligne en échec**.
+Cohérent avec le mode `replace` du registre et `RetryFragmentsParams` qui
+traite une ligne à la fois — chaque failure pilote un retry indépendant.
+"""
+
+from __future__ import annotations
+
+from typing import ClassVar
+
+from template.phase.translation_models import LineIndexedTranslation
+
+from ...constants import FRAGMENT_SEPARATOR
+from ...validation.diagnostics import ErreursType, FragmentDiagnostic
+from ...validation.failure import ValidationFailure
+from ...validation.retry_strategy import RetryStrategy
+from ..content_check import ChunkSource
+
+
+class FragmentCountCheck:
+    """Le nombre de `</>` par ligne traduite égale celui de la source."""
+
+    error_type: ClassVar[ErreursType] = ErreursType.FRAGMENT_COUNT_MISMATCH
+    retry_strategy: ClassVar[RetryStrategy] = RetryStrategy.PROGRESSIVE_REASONING
+    max_attempts: ClassVar[int] = 2
+
+    def run(
+        self,
+        payload: LineIndexedTranslation,
+        source: ChunkSource,
+    ) -> list[ValidationFailure[FragmentDiagnostic]]:
+        failures: list[ValidationFailure[FragmentDiagnostic]] = []
+        for index in source.line_indices:
+            if index not in payload.lines:
+                continue
+            expected = source.text_at(index).count(FRAGMENT_SEPARATOR)
+            actual = payload.lines[index].count(FRAGMENT_SEPARATOR)
+            if expected == actual:
+                continue
+            failures.append(
+                ValidationFailure[FragmentDiagnostic](
+                    error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
+                    msg=(
+                        f"ligne {index}: {actual} séparateur(s) </>, "
+                        f"{expected} attendu(s)"
+                    ),
+                    ctx={
+                        "line": index,
+                        "expected_pairs": expected,
+                        "actual_pairs": actual,
+                    },
+                )
+            )
+        return failures
