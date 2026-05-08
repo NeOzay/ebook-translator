@@ -1,20 +1,17 @@
 {
-    "venvPath": ".",
-    "venv": ".venv",
-    "executionEnvironments": [
-        {
-            "root": "src",
-            "extraPaths": ["."]
-        },
-        {
-            "root": "template",
-            "extraPaths": ["src"]
-        }
-    ],
-    "include": [
-        "src",
-        "template"
-    ],
-    "typeCheckingMode": "strict",
-    "useLibraryCodeForTypes": true
+  "venvPath": ".",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "extraPaths": [
+        "."
+      ]
+    }
+  ],
+  "include": [
+    "src"
+  ],
+  "typeCheckingMode": "strict",
+  "useLibraryCodeForTypes": true
 }

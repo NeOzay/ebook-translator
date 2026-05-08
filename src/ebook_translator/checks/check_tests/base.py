@@ -10,9 +10,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
+    from ebook_translator.segmentation.chunk import ChunkProtocol
+
     from ...llm import LLM
     from ...pipeline.context import ChunkContext
-    from ...segmentation import Chunk, TranslatedChunk
+    from ...segmentation import TranslatedChunk
 
 
 # =============================================================================
@@ -265,7 +267,7 @@ class ValidationContext:
         >>> context = ValidationContext(
         ...     chunk=chunk,
         ...     translated_texts={0: "Bonjour", 1: "Monde"},
-        ...     original_texts={0: "Hello", 1: "World"},
+        ...     original_texts={0: "Hello", 1: "World"},validation_worker.py:176:19
         ...     llm=llm,
         ...     target_language="fr",
         ...     phase="initial",
@@ -273,7 +275,7 @@ class ValidationContext:
         ... )
     """
 
-    chunk: Chunk
+    chunk: ChunkProtocol
     translated_texts: dict[int, str]
     original_texts: dict[int, str]
     llm: LLM | None

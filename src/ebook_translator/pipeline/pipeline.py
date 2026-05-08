@@ -12,11 +12,11 @@ from ebook_translator.glossary import Glossary
 from ebook_translator.htmlpage import BilingualFormat, HtmlPage
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import PhaseName, PhaseProtocol
-from ebook_translator.pipeline.context import PhaseContext, PhaseStats
+from ebook_translator.pipeline.context import CommunContext, PhaseContext, PhaseStats
 from ebook_translator.pipeline.executor import PhaseExecutor
 from ebook_translator.pipeline.phases.dummy_phase import DummyPhase
 from ebook_translator.pipeline.store_manager import StoreManager
-from ebook_translator.transition.base import TransitionBase, TransitionContext
+from ebook_translator.segmentation import Chapters
 from ebook_translator.translation.epub_handler import (
     copy_epub_metadata,
     extract_html_items_in_spine_order,
@@ -76,7 +76,6 @@ class Pipeline:
         epub_path: str | Path,
         phases: list[PhaseProtocol],
         cache_dir: str | Path | None = None,
-        transitions: dict[tuple[str, str], type[TransitionBase]] | None = None,
         num_validation_workers: int = 2,
     ):
         """
@@ -104,7 +103,6 @@ class Pipeline:
                 cache_dir if isinstance(cache_dir, Path) else Path(cache_dir)
             )
         self.phases = phases
-        self.transitions = transitions or {}
         self.num_validation_workers = num_validation_workers
 
         # Créer cache_dir
@@ -116,7 +114,6 @@ class Pipeline:
         # Infrastructure (créée au démarrage)
         self.store_manager: StoreManager | None = None
         self.validation_pool: ValidationWorkerPool | None = None
-        self.glossary = Glossary()
 
     def _validate_dependencies(self) -> None:
         """
@@ -128,7 +125,7 @@ class Pipeline:
         executed_phases: set[str] = set()
 
         for phase_class in self.phases:
-            for dep_class in phase_class.depends_on:
+            for dep_class in phase_class.get_dependencies():
                 if dep_class.name not in executed_phases:
                     raise ValueError(
                         f"Phase '{phase_class.name}' depends on '{dep_class.name}', "
@@ -138,59 +135,6 @@ class Pipeline:
             executed_phases.add(phase_class.name)
 
         logger.info(f"✅ Phase dependencies validated: {list(executed_phases)}")
-
-    def _execute_transition(
-        self,
-        prev_phase_class: PhaseProtocol,
-        phase_class: PhaseProtocol,
-        stats: dict[PhaseName, PhaseStats],
-    ) -> None:
-        """
-        Exécute la transition entre deux phases si définie.
-
-        Args:
-            prev_phase_class: Classe de la phase précédente
-            phase_class: Classe de la phase actuelle
-            stats: Statistiques des phases précédentes
-
-        Raises:
-            RuntimeError: Si la transition bloque (can_proceed retourne False)
-        """
-        transition_key = (prev_phase_class.name, phase_class.name)
-
-        if transition_key not in self.transitions:
-            return
-
-        # Garantir que l'infrastructure est initialisée
-        assert self.store_manager is not None, "StoreManager not initialized"
-        assert self.validation_pool is not None, "ValidationWorkerPool not initialized"
-
-        logger.info(f"\n🔄 Transition: {prev_phase_class.name} → {phase_class.name}")
-
-        transition_class = self.transitions[transition_key]
-        transition = transition_class()
-
-        transition_context = TransitionContext(
-            store_manager=self.store_manager,
-            validation_pool=self.validation_pool,
-            previous_stats=stats.copy(),
-            glossary=self.glossary,
-        )
-
-        # Vérifier si la transition peut continuer
-        can_proceed, msg = transition.can_proceed(transition_context)
-        logger.info(f"  • {transition.name}: {msg}")
-
-        if not can_proceed:
-            raise RuntimeError(
-                f"❌ Transition bloquée: {transition.name}\n"
-                f"Raison: {msg}\n"
-                f"La phase '{phase_class.name}' ne peut pas démarrer."
-            )
-
-        # Préparer la phase suivante
-        transition.prepare_next_phase(transition_context)
-        logger.info(f"  • Transition completed: {transition.name}")
 
     def run(
         self,
@@ -231,7 +175,6 @@ class Pipeline:
         logger.info(f"  • Langue cible: {target_language}")
         logger.info(f"  • Cache: {self.cache_dir}")
         logger.info(f"  • Phases: {[p.name for p in self.phases]}")
-        logger.info(f"  • Transitions: {list(self.transitions.keys())}")
 
         try:
             # =================================================================
@@ -253,10 +196,19 @@ class Pipeline:
             logger.info(f"  • Stores créés: {self.store_manager.list_phases()}")
 
             # Glossaire
-            if glossary is not None:
-                self.glossary = glossary
+            self.glossary = glossary or Glossary()
 
             logger.info(f"  • Glossaire Path: {self.glossary.cache_path or 'None'}")
+
+            CommunContext(
+                target_language=target_language,
+                llm=self.llm,
+                glossary=self.glossary,
+                store_manager=self.store_manager,
+                book=source_book,
+                html_pages=html_items,
+                chapters=Chapters(source_book),
+            )
 
             # ValidationWorkerPool (sera reconfiguré par chaque phase)
             # Créer un pipeline/store dummy pour initialisation (sera remplacé par PhaseExecutor)
@@ -292,23 +244,10 @@ class Pipeline:
                 logger.info("=" * 70)
 
                 # -------------------------------------------------------------
-                # Exécuter transition (si définie)
-                # -------------------------------------------------------------
-                if i > 0:
-                    prev_phase_class = self.phases[i - 1]
-                    self._execute_transition(prev_phase_class, phase_object, stats)
-
-                # -------------------------------------------------------------
                 # Créer contexte de phase
                 # -------------------------------------------------------------
                 context = PhaseContext(
-                    target_language=target_language,
-                    html_items=html_items,
-                    llm=self.llm,
-                    store_manager=self.store_manager,
                     validation_pool=self.validation_pool,
-                    glossary=self.glossary,
-                    book=source_book,
                     previous_phases=stats.copy(),
                 )
 

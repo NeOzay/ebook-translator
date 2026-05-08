@@ -13,9 +13,8 @@ from annotationlib import get_annotations
 from .translation_context import ContexteTraduction
 
 if TYPE_CHECKING:
+    from ebook_translator.segmentation.chunk import ChunkProtocol
     from template.types import AnalyseLitteraire
-
-    from ebook_translator.segmentation.chunk import Chunk
 
 
 class AnalysisValidator:
@@ -34,7 +33,7 @@ class AnalysisValidator:
 
     @staticmethod
     def validate(
-        data: dict[str, Any], chunk: Chunk | None = None
+        data: dict[str, Any], chunk: ChunkProtocol | None = None
     ) -> tuple[ContexteTraduction, list[str]]:
         """
         Valide un contexte JSON contre le schéma ContexteTraduction.

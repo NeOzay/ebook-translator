@@ -8,11 +8,12 @@ Ce module fournit :
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from typing import TYPE_CHECKING
 
 from ebook_translator.config import Config
 from ebook_translator.logger import get_logger
+from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
 from ebook_translator.segmentation.chapter_detector import (
     ChapterInfo,  # re-export pour __init__.py
     SequentialChapterDetector,
@@ -153,7 +154,7 @@ class Chapters:
 
     def iter_chapter_chunks(
         self, encoding: str = Config.DEFAULT_ENCODING
-    ) -> Iterator[ChapterChunk]:
+    ) -> Generator[ChapterChunk]:
         """Génère un ChapterChunk par chapitre (non vide).
 
         Args:
@@ -183,8 +184,8 @@ class Chapters:
             ChapterInfo du chapitre, ou None si non trouvé
         """
         # Cas 1 : ChapterPartChunk avec attribut .chapter
-        if hasattr(chunk, "chapter"):
-            for name in chunk.chapter.files_names:  # type: ignore[attr-defined]
+        if isinstance(chunk, ChapterPartChunk):
+            for name in chunk.chapter.files_names:
                 if name in self._file_to_info:
                     return self._file_to_info[name]
 

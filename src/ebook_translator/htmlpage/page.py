@@ -2,7 +2,7 @@
 Classe principale HtmlPage pour parser et manipuler les pages HTML des EPUB.
 """
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterable, Iterator
 from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup
@@ -74,7 +74,7 @@ class HtmlPage:
         self.soup = BeautifulSoup(html_content, "html.parser")
         self.to_translate: dict[TagKey, TextFragment] = {}
         self.texts: dict[TagKey, TextFragment] = {}
-        self.all_dump = False
+        self._all_dump = False
         self._replacer = TextReplacer(self.soup)
 
     def dump(self) -> Iterator[tuple[TagKey, str]]:
@@ -93,7 +93,7 @@ class HtmlPage:
             >>> for tag_key, text in page.dump():
             ...     print(f"{tag_key}: {text}")
         """
-        if self.all_dump:
+        if self._all_dump:
             yield from self.get_texts()
             return
 
@@ -130,7 +130,7 @@ class HtmlPage:
         if current_parent and current_fragments:
             yield self._store_fragments(index, current_parent, current_fragments)
 
-        self.all_dump = True
+        self._all_dump = True
 
     def get_texts(
         self,
@@ -211,7 +211,7 @@ class HtmlPage:
             )
 
         # Si tous les textes ont été remplacés, sauvegarder le contenu
-        if self.all_dump and not self.to_translate:
+        if self._all_dump and not self.to_translate:
             self._save_content()
 
     def _should_ignore_fragment(self, fragment: NavigableString) -> bool:
@@ -361,8 +361,8 @@ class HtmlPage:
 
 
 def get_texts(
-    epub_htmls: list[epub.EpubHtml],
-) -> Iterator[tuple[TagKey, str]]:
+    epub_htmls: Iterable[epub.EpubHtml],
+) -> Generator[tuple[TagKey, str]]:
     """
     Génère des tuples (page, tag_key, texte) pour tous les fichiers EPUB.
 

@@ -3,10 +3,9 @@ Phase 2: Raffinage avec glossaire et petits blocs.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, override
+from typing import override
 
 from ebook_translator.checks import (
-    Check,
     FragmentCountCheck,
     LineCountCheck,
     PunctuationCheck,
@@ -47,18 +46,21 @@ class RefinementPhase(PhaseBase[Chunk]):
     max_tokens: int = field(default=300)
     overlap_ratio: float = field(default=1.0)  # 100% overlap pour contexte complet
     execution_mode = ExecutionMode.SEQUENTIAL
-
+    max_workers: int = field(default=1, init=False)
     depends_on = (InitialTranslationPhase,)  # Nécessite Phase 1
 
-    checks: tuple[Check[Any], ...] = field(
-        default=(
-            LineCountCheck(),
-            FragmentCountCheck(),
-            PunctuationCheck(),
-            SentenceCheck(),
-        ),
-        init=False,
+    checks = (
+        LineCountCheck(),
+        FragmentCountCheck(),
+        PunctuationCheck(),
+        SentenceCheck(),
     )
+
+    @override
+    def before_phase(self) -> None:  # noqa: B027
+        store = self.get_store()
+        initial_translation = self.context.store_manager.get_store(PhaseName.INITIAL)
+        store.set_fallback(initial_translation)
 
     @override
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:

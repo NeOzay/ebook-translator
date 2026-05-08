@@ -9,21 +9,21 @@ import queue
 import threading
 from typing import TYPE_CHECKING
 
-from ebook_translator.pipeline.base import PhaseProtocol
-
 from ..checks import ValidationContext, ValidationPipeline
 from ..logger import get_logger
 from .validation_queue import SaveItem, SaveQueue, ValidationItem, ValidationQueue
 
 if TYPE_CHECKING:
+    from ebook_translator.pipeline.base import PhaseProtocol
+    from ebook_translator.segmentation.chunk import ChunkProtocol
+
     from ..llm import LLM
-    from ..segmentation.segmentator import Chunk
 
 logger = get_logger(__name__)
 
 
 def default_save_item_builder(
-    chunk: Chunk,
+    chunk: ChunkProtocol,
     final_result: dict[int, str],
 ) -> SaveItem:
     # Préparer SaveItem pour sauvegarde asynchrone

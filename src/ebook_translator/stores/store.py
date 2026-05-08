@@ -26,15 +26,156 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ebook_translator.segmentation.chunk import ChunkProtocol
+
 from ..logger import get_logger
 
 if TYPE_CHECKING:
-    from ..htmlpage import HtmlPage, TagKey
+    from ..htmlpage import TagKey
     from ..segmentation.segmentator import Chunk
 
 logger = get_logger(__name__)
 
-_file_cache = {}
+_data_cache: dict[Path, dict[str, str]] = {}
+
+_lockfiles: dict[str, threading.Lock] = {}
+
+_global_lock = threading.Lock()  # Lock global pour protéger l'accès aux caches et locks
+
+
+def _get_lock_for_file(cache_file: Path) -> threading.Lock:
+    """Récupère ou crée un Lock pour un fichier de cache donné.
+
+    Args:
+        cache_file: Chemin du fichier de cache
+
+    Returns:
+        Lock associé à ce fichier de cache
+    """
+    cache_key = str(cache_file.absolute())
+    with _global_lock:  # Protéger l'accès au dict des locks
+        if cache_key not in _lockfiles:
+            _lockfiles[cache_key] = threading.Lock()
+        return _lockfiles[cache_key]
+
+
+def _load_cache(cache_file: Path) -> dict[str, str]:
+    """
+    Charge un fichier de cache JSON de manière thread-safe.
+
+    Le cache contient un dictionnaire plat où les clés peuvent être :
+    - Des index de ligne (sérialisés en string par JSON) : "0", "1", "2"...
+    - Des textes originaux (pour fallback) : "Hello world", "Goodbye"...
+
+    Args:
+        cache_file: Chemin du fichier de cache
+
+    Returns:
+        Dictionnaire {clé: texte_traduit} où clé peut être int ou str
+        Retourne un dictionnaire vide si le fichier n'existe pas ou en cas d'erreur
+
+    Note:
+        Thread-safe : Utilise un Lock par fichier pour éviter les lectures
+        pendant qu'un autre thread écrit (PermissionError sur Windows).
+    """
+    if not cache_file.exists():
+        return {}
+
+    file_lock = _get_lock_for_file(cache_file)
+
+    with file_lock:  # Bloquer pendant la lecture
+        try:
+            # Lire le contenu, puis fermer explicitement avant de parser
+            # Cela garantit que le fichier est fermé au niveau OS avant de retourner
+            with open(cache_file, encoding="utf-8") as f:
+                content = f.read()
+
+            # Parser après fermeture du fichier
+            data: dict[str, str] = json.loads(content)
+            return data
+
+        except OSError as e:
+            logger.error(f"Erreur lecture cache {cache_file.name}: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            logger.warning(f"Cache corrompu {cache_file.name}: {e}")
+            # Tenter de sauvegarder une backup avant de retourner un cache vide
+            backup_file = cache_file.with_suffix(".json.backup")
+            try:
+                cache_file.rename(backup_file)
+                logger.info(f"Backup sauvegardée: {backup_file.name}")
+            except Exception:
+                pass
+            return {}
+
+
+def _save_cache(cache_file: Path, translations_by_index: dict[str, str]) -> None:
+    """
+    Sauvegarde les traductions dans un fichier de cache JSON de manière thread-safe.
+
+    Les clés int sont converties en string par la sérialisation JSON.
+    Format de sortie : {"0": "Bonjour", "1": "Monde", ...}
+
+    Args:
+        cache_file: Chemin du fichier de cache
+        translations_by_index: Dictionnaire {index: texte_traduit}
+
+    Raises:
+        IOError: Si l'écriture du fichier échoue (erreur critique)
+
+    Note:
+        Thread-safe : Utilise un Lock par fichier pour éviter les écritures
+        concurrentes et les PermissionError sur Windows. Plus besoin de retry!
+    """
+    data = dict(
+        sorted(
+            translations_by_index.items(),
+            key=lambda item: int(item[0]) if item[0].isdigit() else item[0],
+        )
+    )
+
+    file_lock = _get_lock_for_file(cache_file)
+
+    with file_lock:  # Bloquer pendant l'écriture
+        # Utiliser un nom temporaire UNIQUE pour éviter les collisions
+        # (même si le Lock garantit l'exclusivité, mieux vaut être prudent)
+        temp_file = cache_file.with_suffix(f".json.tmp.{uuid.uuid4().hex[:8]}")
+        try:
+            # Écrire dans un fichier temporaire
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                # Forcer flush avant fermeture (important sur Windows)
+                f.flush()
+                os.fsync(f.fileno())
+
+                # Renommer de manière atomique avec os.replace()
+                # Retry court uniquement pour os.replace() (Windows peut mettre du temps à libérer le verrou)
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        os.replace(str(temp_file), str(cache_file))
+                        break  # Succès
+                    except PermissionError:
+                        if attempt == max_retries - 1:
+                            raise  # Dernière tentative échouée
+                        # Micro-délai pour laisser Windows libérer le verrou
+                        time.sleep(0.01)  # 10ms
+
+        except OSError as e:
+            logger.error(f"❌ Erreur sauvegarde cache {cache_file.name}: {e}")
+            # Nettoyer le fichier temporaire si nécessaire
+            if temp_file.exists():
+                with contextlib.suppress(Exception):
+                    temp_file.unlink()
+                raise  # Re-lever car c'est critique
+
+
+def _clear_cache() -> None:
+    with _global_lock:
+        _data_cache.clear()
+        for name, lock in _lockfiles.items():
+            if not lock.locked():
+                _lockfiles.pop(name)
 
 
 class Store:
@@ -58,16 +199,17 @@ class Store:
             cache_dir: Répertoire où sauvegarder les fichiers de traduction.
                       Créé automatiquement s'il n'existe pas.
         """
-        self.cache_dir = cache_dir
+        self.cache_dir = cache_dir.absolute()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        self._key_cache = str(self.cache_dir)
         self._fallback = fallback
         # Protection thread-safe : Lock par fichier de cache
         # Clé = chemin absolu du fichier cache, Valeur = Lock dédié
         self._file_locks: dict[str, threading.Lock] = {}
         self._file_locks_lock = threading.Lock()  # Protéger accès au dict lui-même
 
-    def _get_cache_file(self, source_file: str) -> Path:
+    def _get_cache_file_name(self, source_file: str | Path) -> Path:
         """
         Génère le chemin du fichier de cache basé sur le fichier source.
 
@@ -80,149 +222,72 @@ class Store:
         Returns:
             Path du fichier de cache JSON
         """
+        source_file = str(source_file)
         # Convertit le chemin en un nom de fichier sûr
-        safe_name = (
-            str(Path(source_file)).replace("\\", "_").replace("/", "_").replace(":", "")
-        )
+        safe_name = source_file.replace("\\", "_").replace("/", "_").replace(":", "")
 
         # Hash court pour garantir l'unicité
         file_hash = hashlib.md5(source_file.encode()).hexdigest()[:8]
 
         return self.cache_dir / f"{safe_name}_{file_hash}.json"
 
-    def _get_file_lock(self, cache_file: Path) -> threading.Lock:
+    def _get(
+        self, file_name: Path | str, line_index: str, use_fallback: bool
+    ) -> str | None:
         """
-        Récupère ou crée le Lock associé à un fichier de cache.
-
-        Cette méthode garantit qu'un seul Lock existe par fichier de cache,
-        permettant une synchronisation thread-safe des opérations lecture/écriture.
+        Récupère une traduction spécifique depuis un fichier de cache.
 
         Args:
-            cache_file: Chemin du fichier de cache
+            line_index: Index de la ligne (sous forme de string)
 
         Returns:
-            Lock dédié à ce fichier de cache
-
-        Note:
-            Thread-safe : utilise _file_locks_lock pour protéger l'accès au dictionnaire.
+            Le texte traduit si trouvé, None sinon
         """
-        cache_key = str(cache_file.absolute())
+        file_key = self.cache_dir / self._get_cache_file_name(file_name)
+        if file_key not in _data_cache:
+            _data_cache[file_key] = _load_cache(file_key)
+        data = _data_cache[file_key].get(line_index)
+        if data is None and use_fallback and self._fallback is not None:
+            return self._fallback._get(file_name, line_index, use_fallback=True)
+        return data
 
-        with self._file_locks_lock:
-            if cache_key not in self._file_locks:
-                self._file_locks[cache_key] = threading.Lock()
-            return self._file_locks[cache_key]
-
-    def _load_cache(self, cache_file: Path) -> dict[str, str]:
+    def _get_all(
+        self, file_name: Path | str, line_indices: list[str], use_fallback: bool
+    ) -> dict[str, str | None]:
         """
-        Charge un fichier de cache JSON de manière thread-safe.
-
-        Le cache contient un dictionnaire plat où les clés peuvent être :
-        - Des index de ligne (sérialisés en string par JSON) : "0", "1", "2"...
-        - Des textes originaux (pour fallback) : "Hello world", "Goodbye"...
+        Récupère plusieurs traductions depuis un fichier de cache.
 
         Args:
             cache_file: Chemin du fichier de cache
+            line_indices: Liste d'index de lignes (sous forme de string)
 
         Returns:
-            Dictionnaire {clé: texte_traduit} où clé peut être int ou str
-            Retourne un dictionnaire vide si le fichier n'existe pas ou en cas d'erreur
-
-        Note:
-            Thread-safe : Utilise un Lock par fichier pour éviter les lectures
-            pendant qu'un autre thread écrit (PermissionError sur Windows).
+            Dictionnaire {line_index: texte_traduit ou None}
         """
-        if not cache_file.exists():
-            return {}
+        file_key = self._key_cache / self._get_cache_file_name(file_name)
+        missing_indices: list[str] | None = None
+        results: dict[str, str | None] = {}
+        has_fallback = use_fallback and self._fallback is not None
+        if file_key not in _data_cache:
+            _data_cache[file_key] = _load_cache(file_key)
 
-        file_lock = self._get_file_lock(cache_file)
+        data = _data_cache[file_key]
+        for idx in line_indices:
+            if idx in data:
+                results[idx] = data[idx]
+            elif has_fallback:
+                missing_indices = (
+                    [idx] if missing_indices is None else missing_indices.append(idx)
+                )
+            else:
+                results[idx] = None
 
-        with file_lock:  # Bloquer pendant la lecture
-            try:
-                # Lire le contenu, puis fermer explicitement avant de parser
-                # Cela garantit que le fichier est fermé au niveau OS avant de retourner
-                with open(cache_file, encoding="utf-8") as f:
-                    content = f.read()
-
-                # Parser après fermeture du fichier
-                data: dict[str, str] = json.loads(content)
-                return data
-
-            except OSError as e:
-                logger.error(f"Erreur lecture cache {cache_file.name}: {e}")
-                return {}
-            except json.JSONDecodeError as e:
-                logger.warning(f"Cache corrompu {cache_file.name}: {e}")
-                # Tenter de sauvegarder une backup avant de retourner un cache vide
-                backup_file = cache_file.with_suffix(".json.backup")
-                try:
-                    cache_file.rename(backup_file)
-                    logger.info(f"Backup sauvegardée: {backup_file.name}")
-                except Exception:
-                    pass
-                return {}
-
-    def _save_cache(
-        self, cache_file: Path, translations_by_index: dict[str, str]
-    ) -> None:
-        """
-        Sauvegarde les traductions dans un fichier de cache JSON de manière thread-safe.
-
-        Les clés int sont converties en string par la sérialisation JSON.
-        Format de sortie : {"0": "Bonjour", "1": "Monde", ...}
-
-        Args:
-            cache_file: Chemin du fichier de cache
-            translations_by_index: Dictionnaire {index: texte_traduit}
-
-        Raises:
-            IOError: Si l'écriture du fichier échoue (erreur critique)
-
-        Note:
-            Thread-safe : Utilise un Lock par fichier pour éviter les écritures
-            concurrentes et les PermissionError sur Windows. Plus besoin de retry!
-        """
-        data = dict(
-            sorted(
-                translations_by_index.items(),
-                key=lambda item: int(item[0]) if item[0].isdigit() else item[0],
+        if missing_indices and self._fallback is not None:
+            fallback_results = self._fallback._get_all(
+                file_name, missing_indices, use_fallback=True
             )
-        )
-
-        file_lock = self._get_file_lock(cache_file)
-
-        with file_lock:  # Bloquer pendant l'écriture
-            # Utiliser un nom temporaire UNIQUE pour éviter les collisions
-            # (même si le Lock garantit l'exclusivité, mieux vaut être prudent)
-            temp_file = cache_file.with_suffix(f".json.tmp.{uuid.uuid4().hex[:8]}")
-            try:
-                # Écrire dans un fichier temporaire
-                with open(temp_file, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                    # Forcer flush avant fermeture (important sur Windows)
-                    f.flush()
-                    os.fsync(f.fileno())
-
-                # Renommer de manière atomique avec os.replace()
-                # Retry court uniquement pour os.replace() (Windows peut mettre du temps à libérer le verrou)
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        os.replace(str(temp_file), str(cache_file))
-                        break  # Succès
-                    except PermissionError:
-                        if attempt == max_retries - 1:
-                            raise  # Dernière tentative échouée
-                        # Micro-délai pour laisser Windows libérer le verrou
-                        time.sleep(0.01)  # 10ms
-
-            except OSError as e:
-                logger.error(f"❌ Erreur sauvegarde cache {cache_file.name}: {e}")
-                # Nettoyer le fichier temporaire si nécessaire
-                if temp_file.exists():
-                    with contextlib.suppress(Exception):
-                        temp_file.unlink()
-                raise  # Re-lever car c'est critique
+            results.update(fallback_results)
+        return results
 
     def set_fallback(self, fallback_store: Store) -> None:
         """
@@ -259,10 +324,10 @@ class Store:
             >>> store = Store()
             >>> store.save("file.html", 0, "Bonjour")
         """
-        cache_file: Path = self._get_cache_file(source_file)
-        data = self._load_cache(cache_file)
+        cache_file: Path = self._get_cache_file_name(source_file)
+        data = _load_cache(cache_file)
         data[line_index] = translated_text
-        self._save_cache(cache_file, data)
+        _save_cache(cache_file, data)
 
     def save_all(self, source_file: str, translations_dict: dict[str, str]) -> None:
         """
@@ -276,22 +341,24 @@ class Store:
             >>> store = Store()
             >>> store.save_all("file.html", {0: "Bonjour", 1: "Monde"})
         """
-        cache_file = self._get_cache_file(source_file)
-        data = self._load_cache(cache_file)
+        cache_file = self._get_cache_file_name(source_file)
+        data = _load_cache(cache_file)
         data.update(translations_dict)
-        self._save_cache(cache_file, data)
+        _save_cache(cache_file, data)
 
     def get(
         self,
         source_file: str,
         line_index: str,
+        use_fallback: bool = True,
     ) -> str | None:
         """
-        Récupère une traduction depuis le disque.
+        Récupère une traduction depuis le disque (lent).
 
         Args:
             source_file: Chemin du fichier source
             line_index: Index de la ligne (TagKey.index)
+            use_fallback: Si True et valeur absente, consulte le store fallback
 
         Returns:
             Le texte traduit si trouvé, None sinon
@@ -301,15 +368,16 @@ class Store:
             >>> translation = store.get("file.html", 0)
             >>> print(translation)  # "Bonjour" ou None
         """
-        cache_file = self._get_cache_file(source_file)
-        data = self._load_cache(cache_file)
+        v = self._get(source_file, line_index, use_fallback)
+        _clear_cache()
 
-        return data.get(line_index, None)
+        return v
 
     def get_all(
         self,
         source_file: str,
         line_indices: list[str],
+        use_fallback: bool = True,
     ) -> dict[str, str | None]:
         """
         Récupère plusieurs traductions depuis le disque.
@@ -317,6 +385,7 @@ class Store:
         Args:
             source_file: Chemin du fichier source
             line_indices: Liste d'index de lignes (TagKey.index)
+            use_fallback: Si True et valeur absente, consulte le store fallback
 
         Returns:
             Dictionnaire {line_index: texte_traduit ou None}
@@ -326,16 +395,15 @@ class Store:
             >>> translations = store.get_all("file.html", [0, 1])
             >>> print(translations)  # {0: "Bonjour", 1: "Monde"}
         """
-        cache_file = self._get_cache_file(source_file)
-        data = self._load_cache(cache_file)
 
-        result: dict[str, str | None] = {}
-        for idx in line_indices:
-            result[idx] = data.get(idx)
+        result = self._get_all(source_file, line_indices, use_fallback)
+        _clear_cache()
 
         return result
 
-    def get_from_chunk(self, chunk: Chunk) -> tuple[dict[int, str], bool]:
+    def get_from_chunk(
+        self, chunk: ChunkProtocol, use_fallback: bool = True
+    ) -> tuple[dict[int, str], bool]:
         """Récupère les traductions pour tous les textes du body d'un chunk.
 
         Utilise la méthode `chunk.fetch()` pour parcourir efficacement les fichiers
@@ -343,6 +411,9 @@ class Store:
 
         Args:
             chunk (Chunk): Le chunk contenant les textes à traduire.
+            use_fallback: Si True et valeur absente, consulte le store fallback.
+                          Passer False pour vérifier uniquement le store courant
+                          (ex: cache check de l'executor).
 
         Returns:
             Tuple[Dict[int, str], bool]: Un tuple contenant:
@@ -358,30 +429,23 @@ class Store:
         result: dict[int, str] = {}
         has_missing = False
 
-        # Cache des traductions par fichier pour éviter les rechargements
-        # Stocke le dictionnaire de traductions pour chaque fichier source
-        file_cache: dict[str, dict[str, str]] = {}
-
         for index, (html_page, tag_key, _original_text) in enumerate(
             chunk.fetch_body()
         ):
             source_path = html_page.epub_html.file_name
 
-            # Charger les traductions du fichier si pas encore en cache
-            if source_path not in file_cache:
-                file_cache[source_path] = self._load_translations_for_file(html_page)
-
-            data = file_cache[source_path]
-            # Essayer d'abord par index, puis par texte original (fallback)
-            translated = data.get(tag_key.index)
+            translated = self._get(source_path, tag_key.index, use_fallback)
 
             result[index] = translated or ""
             if translated is None:
                 has_missing = True
+        _clear_cache()
 
         return result, has_missing
 
-    def get_all_from_chunk(self, chunk: Chunk) -> tuple[dict[TagKey, str], bool]:
+    def get_all_from_chunk(
+        self, chunk: Chunk, use_fallback: bool = True
+    ) -> tuple[dict[TagKey, str], bool]:
         """
         Récupère toutes les traductions pour les textes d'un chunk (Head + Body + Tail).
 
@@ -390,40 +454,34 @@ class Store:
 
         Args:
             chunk: Le chunk contenant les textes à traduire
+            use_fallback: Si True et valeur absente, consulte le store fallback.
         """
         result: dict[TagKey, str] = {}
         has_missing = False
 
-        # Cache des traductions par fichier pour éviter les rechargements
-        # Stocke le dictionnaire de traductions pour chaque fichier source
-        file_cache: dict[str, dict[str, str]] = {}
-
         for html_page, tag_key, _original_text in chunk.fetch_all():
             source_path = html_page.epub_html.file_name
 
-            # Charger les traductions du fichier si pas encore en cache
-            if source_path not in file_cache:
-                file_cache[source_path] = self._load_translations_for_file(html_page)
-
-            data = file_cache[source_path]
-            # Essayer d'abord par index, puis par texte original (fallback)
-            translated = data.get(tag_key.index)
+            translated = self.get(source_path, tag_key.index, use_fallback)
 
             result[tag_key] = translated or ""
             if translated is None:
                 has_missing = True
+        _clear_cache()
 
         return result, has_missing
 
     def get_from_file(
         self,
         file_name: str,
+        use_fallback: bool = True,
     ) -> dict[str, str]:
         """
         Récupère toutes les traductions sauvegardées pour un fichier source.
 
         Args:
             file_name: Chemin du fichier source
+            use_fallback: Si True, merge avec le store fallback (store courant prioritaire)
 
         Returns:
             Dictionnaire {clé: texte_traduit} où clé peut être str (index) ou (identifiant)
@@ -433,22 +491,12 @@ class Store:
             >>> translations = store.get_from_file("file.html")
             >>> print(translations)  # {"0": "Bonjour", "1": "Monde"}
         """
-        return self._load_cache(self._get_cache_file(file_name))
+        data = _load_cache(self._get_cache_file_name(file_name))
+        if use_fallback and self._fallback is not None:
+            fallback_data = self._fallback.get_from_file(file_name, use_fallback=True)
+            return {**fallback_data, **data}
 
-    def _load_translations_for_file(self, html_page: HtmlPage) -> dict[str, str]:
-        """
-        Charge les traductions depuis le cache pour un fichier HTML donné.
-
-        Args:
-            html_page: L'objet HtmlPage contenant le fichier source
-
-        Returns:
-            Dictionnaire {clé: texte_traduit} où clé peut être int ou str
-            Les clés sont soit des index de ligne, soit des textes originaux
-        """
-        source_file = html_page.epub_html.file_name
-        cache_file = self._get_cache_file(source_file)
-        return self._load_cache(cache_file)
+        return data
 
     def clear(self, source_file: str) -> None:
         """
@@ -461,7 +509,7 @@ class Store:
             >>> store = Store()
             >>> store.clear("file.html")
         """
-        cache_file = self._get_cache_file(source_file)
+        cache_file = self._get_cache_file_name(source_file)
         if cache_file.exists():
             cache_file.unlink()
 

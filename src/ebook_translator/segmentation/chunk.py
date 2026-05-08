@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from typing import Literal, Protocol
 
 from ebook_translator.config import Config
 from ebook_translator.segmentation.helper import turn_resource_to_chunks
@@ -7,14 +8,46 @@ from ebook_translator.segmentation.helper import turn_resource_to_chunks
 from ..htmlpage import HtmlPage, TagKey
 
 type Scope = list[tuple[str, int]]
+type Scope2 = dict[str, tuple[int, int] | Literal[-1]]
 """
 Liste de tuples (file_name, line_number) où line_number est -1 pour "tout le fichier".
 Premier tuple : début, dernier tuple : fin, tuples intermédiaires : fichiers traversés.
 """
 
 
+class ChunkProtocol(Protocol):
+    index: int
+    head: dict[TagKey, str]
+    body: dict[TagKey, str]
+    tail: dict[TagKey, str]
+    token_count: int
+    token_encoding: str
+
+    @property
+    def scope(self) -> Scope: ...
+    def fetch_body(self) -> Iterator[tuple[HtmlPage, TagKey, str]]: ...
+    def fetch_all(self) -> Iterator[tuple[HtmlPage, TagKey, str]]: ...
+    def __str__(self) -> str: ...
+    def prepare_for_prompt(
+        self,
+        index_to_mark: list[int] | None = None,
+        include_head: bool = True,
+        include_tail: bool = True,
+    ) -> str: ...
+    def prepare_for_prompt_split(
+        self,
+        index_to_mark: list[int] | None = None,
+    ) -> tuple[str, str, str]: ...
+    def split_chunk(
+        self, max_tokens: int, overlap_ratio: float, head_tail_balance: float
+    ) -> Iterator["ChunkProtocol"]: ...
+    def get_body_size(self) -> int: ...
+    def get_head_size(self) -> int: ...
+    def get_tail_size(self) -> int: ...
+
+
 @dataclass
-class Chunk:
+class Chunk(ChunkProtocol):
     """
     Représente un morceau de contenu EPUB à traduire.
 
@@ -154,12 +187,18 @@ class Chunk:
         tail_str = "\n\n".join(self.tail.values()) if self.tail else ""
         return head_str, body_str, tail_str
 
-    def split_chunk(self, max_tokens: int, overlap_ratio: float) -> Iterator[Chunk]:
+    def split_chunk(
+        self,
+        max_tokens: int,
+        overlap_ratio: float,
+        head_tail_balance: float = 0.75,
+    ) -> Iterator[Chunk]:
         yield from turn_resource_to_chunks(
             iter(self.body.items()),
             max_tokens,
             overlap_ratio,
             self.token_encoding,
+            head_tail_balance=head_tail_balance,
         )
 
     def calculate_scope(self) -> Scope:
@@ -197,10 +236,10 @@ class Chunk:
         scope: list[tuple[str, int]] = [(debut_file, debut_line)]
 
         # Collecter tous les fichiers intermédiaires
-        seen_files: set[str] = {debut_file}
+        seen_files: set[str] = {debut_file, fin_file}
         for tag_key in self.body:
             file_name = tag_key.page.epub_html.file_name
-            if file_name not in seen_files and file_name != fin_file:
+            if file_name not in seen_files:
                 # Fichier intermédiaire : -1 pour "tout le fichier"
                 scope.append((file_name, -1))
                 seen_files.add(file_name)

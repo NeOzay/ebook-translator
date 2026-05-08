@@ -6,17 +6,25 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, override
+
+from pydantic import BaseModel
 
 from ebook_translator.checks import Check, ValidationPipeline
-from ebook_translator.segmentation.chunk import Chunk
+from ebook_translator.llm.clients.client import ClientProviderProtocol
+from ebook_translator.llm.llm_config import JsonRequestConfig, LLMConfig
+from ebook_translator.segmentation.chunk import Chunk, ChunkProtocol
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.stores.store import Store
 from ebook_translator.translation.parser import parse_llm_translation_output
+from template.types import ConvertibleModel
 
 if TYPE_CHECKING:
-    from ebook_translator.llm.llm_config import LLMConfig
-    from ebook_translator.pipeline.context import ChunkContext, PhaseContext, PhaseStats
+    from ebook_translator.pipeline.context import (
+        ChunkContext,
+        PhaseContext,
+        PhaseStats,
+    )
     from ebook_translator.validation import SaveItem
     from ebook_translator.validator.translation_context import ContexteTraduction
 
@@ -38,7 +46,7 @@ class PhaseName(StrEnum):
     REFINEMENT = "refinement"
 
 
-class PhaseProtocol(Protocol):
+class PhaseProtocol[ChunkType: ChunkProtocol = Any](Protocol):
     """Interface structurelle des phases du pipeline.
 
     Utilisée par Pipeline, PhaseExecutor, StoreManager et ValidationWorkerPool
@@ -51,38 +59,54 @@ class PhaseProtocol(Protocol):
     """
 
     name: PhaseName
+    output_type: Literal["Text"] | type[BaseModel]
     execution_mode: ExecutionMode
     max_tokens: int
     overlap_ratio: float
-    chunk_type: type[Any]
-    depends_on: tuple[Any, ...]
-    checks: tuple[Check[Any], ...]
+    chunk_type: type[ChunkType]
 
-    def store_key(self) -> str: ...
+    @classmethod
+    def store_key(cls) -> str: ...
     def put_context(self, context: PhaseContext) -> None: ...
-    def validation_pipeline(self) -> ValidationPipeline: ...
+    @classmethod
+    def validation_pipeline(cls) -> ValidationPipeline: ...
     def before_phase(self) -> None: ...
     def after_phase(self, stats: PhaseStats) -> None: ...
-    def get_chunks(self) -> Sequence[Chunk]: ...
+    def get_chunks(self) -> Sequence[ChunkType]: ...
     def get_store(self) -> Store: ...
     def get_worker_count(self) -> int: ...
-    def get_translation_cache(self, chunk: Chunk) -> tuple[dict[int, str], bool]: ...
-    def before_chunk(self, chunk: Chunk, context: ChunkContext) -> None: ...
-    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]: ...
-    def get_llm_config(self, chunk: Chunk, context: ChunkContext) -> LLMConfig: ...
+    @classmethod
+    def get_checks(cls) -> tuple[Check[Any], ...]: ...
+    @classmethod
+    def get_dependencies(cls) -> tuple[type[PhaseProtocol], ...]: ...
+    def get_translation_cache(
+        self, chunk: ChunkType
+    ) -> tuple[dict[int, str], bool]: ...
+    def before_chunk(self, chunk: ChunkType, context: ChunkContext) -> None: ...
+    def render_prompt(
+        self, chunk: ChunkType, context: ChunkContext
+    ) -> tuple[str, str]: ...
+    def get_llm_config(
+        self, chunk: ChunkType, context: ChunkContext
+    ) -> (
+        LLMConfig
+        | ClientProviderProtocol
+        | JsonRequestConfig[ConvertibleModel[Any]]
+        | None
+    ): ...
     def process_llm_response(
-        self, chunk: Chunk, response: str, context: ChunkContext
+        self, chunk: ChunkType, response: str, context: ChunkContext
     ) -> dict[int, str]: ...
     def after_chunk(
-        self, chunk: Chunk, result: dict[int, str], context: ChunkContext
+        self, chunk: ChunkType, result: dict[int, str], context: ChunkContext
     ) -> None: ...
     def save_item_builder(
-        self, chunk: Chunk, final_result: dict[int, str]
+        self, chunk: ChunkType, final_result: dict[int, str]
     ) -> SaveItem: ...
 
 
 @dataclass
-class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
+class PhaseBase[ChunkType: ChunkProtocol = Chunk](ABC, PhaseProtocol[ChunkType]):  # type: ignore
     """
     Classe de base abstraite pour toutes les phases.
 
@@ -110,27 +134,34 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
     name: PhaseName = field(init=False)
     """Identifiant unique de la phase (ex: 'initial', 'refined', 'quality')"""
 
+    output_type: Literal["Text"] | type[BaseModel] = field(init=False, default="Text")
+
     chunk_type: type[ChunkType] = field(init=False)
     """Type de chunk traité par cette phase"""
 
-    max_tokens: int = field(default=0)
+    max_tokens: int = field()
     """Nombre maximum de tokens par segment"""
 
-    llm_config: LLMConfig = field(default_factory=lambda: {})
+    llm: ClientProviderProtocol | LLMConfig | None = field(default=None)
 
     overlap_ratio: float = field(default=0.0)
     """Ratio de chevauchement entre segments (0.15 = 15%)"""
 
+    head_tail_balance: float = field(default=0.75)
+    """Facteur de balance pour le chevauchement head/tail (0.75 = 75% head, 25% tail)"""
+
     execution_mode: ExecutionMode = field(init=False)
     """Mode d'exécution: PARALLEL ou SEQUENTIAL"""
 
-    checks: tuple[Check[Any], ...] = field(init=False)
+    checks: tuple[Check[Any], ...] = field(
+        init=False, default_factory=tuple[Check[Any], ...]
+    )
     """Liste des checks de validation pour cette phase"""
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
-    depends_on: tuple[type[PhaseBase], ...] = field(
-        default_factory=tuple[type["PhaseBase"], ...], init=False
+    depends_on: tuple[type[PhaseProtocol], ...] = field(
+        default_factory=tuple[type[PhaseProtocol], ...], init=False
     )
     """Liste des phases dont cette phase dépend"""
 
@@ -161,7 +192,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
 
     # === Hooks (méthodes de classe avec implémentation par défaut) ===
 
-    def get_chunks(self) -> Sequence[Chunk]:
+    def get_chunks(self) -> Sequence[ChunkType]:
         """
         Retourne la liste des chunks à traiter pour cette phase.
 
@@ -170,19 +201,21 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Returns:
             Sequence[Chunk]: Liste des chunks à traiter
         """
-        if self.chunk_type != Chunk:
-            raise TypeError("get_chunks must be overridden for non-Chunk types")
+        if self.chunk_type == Chunk:
+            return cast(
+                list[ChunkType],
+                Segmentator(
+                    epub_source=self.context.html_pages,
+                    max_tokens=self.max_tokens,
+                    overlap_ratio=self.overlap_ratio,
+                    head_tail_balance=self.head_tail_balance,
+                ).get_all_segments(),
+            )
 
-        return list[Chunk](
-            Segmentator(
-                epub_source=self.context.html_items,
-                max_tokens=self.max_tokens,
-                overlap_ratio=self.overlap_ratio,
-            ).get_all_segments()
-        )
+        raise TypeError("get_chunks must be overridden for non-Chunk types")
 
-    @classmethod
-    def get_translation_cache(cls, chunk: Chunk) -> tuple[dict[int, str], bool]:
+    @override
+    def get_translation_cache(self, chunk: ChunkType) -> tuple[dict[int, str], bool]:
         """
         Helper : lit la traduction d'un chunk depuis le store d'une phase.
 
@@ -193,7 +226,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
             1. Dictionnaire `{line_index: texte_traduit ou chaine vide}`
             2. Boolean indiquant si au moins une traduction est manquante
         """
-        return cls.get_store().get_from_chunk(chunk)
+        return self.get_store().get_from_chunk(chunk, use_fallback=False)
 
     def before_phase(self) -> None:  # noqa: B027
         """
@@ -206,7 +239,9 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         """
         pass
 
-    def before_chunk(self, chunk: Chunk, context: ChunkContext) -> None:  # noqa: B027
+    def before_chunk(
+        self, chunk: ChunkType, context: ChunkContext
+    ) -> None:  # noqa: B027
         """
         Hook appelé avant le traitement d'un chunk.
 
@@ -261,7 +296,14 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         """
         ...
 
-    def get_llm_config(self, chunk: ChunkType, context: ChunkContext) -> LLMConfig:
+    def get_llm_config(
+        self, chunk: ChunkType, context: ChunkContext
+    ) -> (
+        LLMConfig
+        | ClientProviderProtocol
+        | JsonRequestConfig[ConvertibleModel[Any]]
+        | None
+    ):
         """
         Retourne la configuration spécifique du LLM pour cette phase.
 
@@ -271,7 +313,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Returns:
             Dictionnaire de configuration LLM
         """
-        return self.llm_config
+        return self.llm
 
     def process_llm_response(
         self, chunk: ChunkType, response: str, context: ChunkContext
@@ -314,7 +356,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
 
     def after_chunk(  # noqa: B027
         self,
-        chunk: Chunk,
+        chunk: ChunkType,
         result: dict[int, str],
         context: ChunkContext,
     ) -> None:
@@ -363,16 +405,16 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         """
         return cls.name
 
-    @classmethod
-    def get_store(cls) -> Store:
+    def get_store(self) -> Store:
         """
         Récupère le store associé à cette phase.
         Returns:
             Instance Store pour cette phase
         """
-        return cls.context.store_manager.get_store(cls.store_key())
+        return self.context.store_manager.get_store(self.store_key())
 
-    def validation_pipeline(self) -> ValidationPipeline:
+    @classmethod
+    def validation_pipeline(cls) -> ValidationPipeline:
         """
         Pipeline de validation pour cette phase.
 
@@ -381,7 +423,7 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         Returns:
             ValidationPipeline configuré avec les checks de la phase
         """
-        return ValidationPipeline(self.checks)
+        return ValidationPipeline(cls.checks)
 
     def get_worker_count(self) -> int:
         """
@@ -395,14 +437,22 @@ class PhaseBase[ChunkType: Chunk = Chunk](ABC):  # type: ignore
         return self.max_workers
 
     @classmethod
-    def put_context(cls, context: PhaseContext) -> None:
+    def get_checks(cls) -> tuple[Check[Any], ...]:
+        return cls.checks
+
+    @classmethod
+    @override
+    def get_dependencies(cls) -> tuple[type[PhaseProtocol], ...]:
+        return cls.depends_on
+
+    def put_context(self, context: PhaseContext) -> None:
         """
         Assigne le contexte de la phase à l'instance.
 
         Args:
             context: Contexte global de la phase
         """
-        cls.context = context
+        self.context = context
 
     def __repr__(self) -> str:
         return (

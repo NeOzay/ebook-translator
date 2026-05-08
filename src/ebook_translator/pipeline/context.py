@@ -3,18 +3,21 @@ Contextes de données pour le système de phases.
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from ebooklib import epub
+from ebooklib.epub import EpubBook, EpubHtml
 
+from ebook_translator.frozen_static import FrozenStatic, link_to
+from ebook_translator.glossary import Glossary
+from ebook_translator.llm.llm import LLM
 from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
-from ebook_translator.segmentation import Chapters
+from ebook_translator.segmentation.chapter import Chapters
+from ebook_translator.segmentation.chunk import ChunkProtocol
 from ebook_translator.validation import ValidationWorkerPool
 
 if TYPE_CHECKING:
-    from ebook_translator.glossary import Glossary
-    from ebook_translator.llm import LLM
+    pass
 
 
 @dataclass
@@ -73,8 +76,34 @@ class PhaseStats:
         )
 
 
-@dataclass
-class PhaseContext:
+class CommunContext(FrozenStatic):
+    llm: ClassVar[LLM]
+    book: ClassVar[EpubBook]
+    html_pages: ClassVar[list[EpubHtml]]
+    chapters: ClassVar[Chapters]
+    glossary: ClassVar[Glossary]
+    store_manager: ClassVar[StoreManager]
+    target_language: ClassVar[str]
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            llm: LLM,
+            book: EpubBook,
+            html_pages: list[EpubHtml],
+            chapters: Chapters,
+            glossary: Glossary,
+            store_manager: StoreManager,
+            target_language: str,
+            _freeze: bool = True,
+        ):
+            pass
+
+
+@link_to(CommunContext)
+class PhaseContext(CommunContext):
     """
     Contexte global d'une phase.
 
@@ -82,39 +111,13 @@ class PhaseContext:
     Contient toutes les informations et ressources nécessaires pour l'exécution.
     """
 
-    target_language: str
-    """Langue cible de la traduction (ex: 'français', 'english')"""
-
-    html_items: list[epub.EpubHtml]
-    """Liste des items HTML à traiter (filename, content)"""
-
-    # Imports retardés pour éviter les cycles
-    llm: LLM
-    """Instance LLM pour les requêtes de traduction"""
-
-    store_manager: StoreManager
-    """Gestionnaire de stores pour accéder aux caches"""
-
     validation_pool: ValidationWorkerPool
     """Pool de validation pour traiter les traductions"""
-
-    glossary: Glossary
-    """Glossaire optionnel pour cohérence terminologique"""
-
-    book: epub.EpubBook
-    """EpubBook source (pour TOC-aware segmentation et noms de chapitres via TOC)"""
-
-    chapters: Chapters = field(init=False)
-    """Gestionnaire de chapitres et analyses littéraires (initialisé automatiquement)"""
 
     previous_phases: dict[PhaseName, PhaseStats] = field(
         default_factory=dict[PhaseName, PhaseStats]
     )
     """Statistiques des phases précédentes (clé: nom de phase)"""
-
-    def __post_init__(self) -> None:
-        """Initialise Chapters automatiquement depuis le livre EPUB."""
-        self.chapters = Chapters(self.book, self.store_manager)
 
     def get_previous_stats(self, phase_name: PhaseName) -> PhaseStats | None:
         """
@@ -129,8 +132,8 @@ class PhaseContext:
         return self.previous_phases.get(phase_name)
 
 
-@dataclass
-class ChunkContext:
+@link_to(CommunContext)
+class ChunkContext(CommunContext):
     """
     Contexte d'un chunk individuel.
 
@@ -138,21 +141,11 @@ class ChunkContext:
     Contient les informations nécessaires pour traiter un chunk spécifique.
     """
 
-    target_language: str
-    """Langue cible de la traduction"""
-
     phase_name: str
     """Nom de la phase en cours"""
 
     chunk_index: int
     """Index du chunk dans la segmentation"""
 
-    # Imports retardés pour éviter les cycles
-    llm: LLM
-    """Instance LLM pour les requêtes de traduction"""
-
-    store_manager: StoreManager
-    """Gestionnaire de stores pour accéder aux caches"""
-
-    glossary: Glossary
-    """Glossaire optionnel pour cohérence terminologique"""
+    previous_chunk: ChunkProtocol | None
+    """Chunk précédent (est None si premier chunk ou chunk traité en parallèle)"""

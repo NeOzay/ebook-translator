@@ -4,7 +4,7 @@ from functools import cache
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from template.types import LLMTermeGlossaire
+    from template.phase.glossary_models import LLMTermeGlossary
 
 from ebook_translator.validator.translation_context import REQUIRED_TERME_FIELDS
 
@@ -12,7 +12,7 @@ from ebook_translator.validator.translation_context import REQUIRED_TERME_FIELDS
 def _validate_and_convert_glossary_entries(
     entrees: list[tuple[str, ...]],
     missing_sections: list[str],
-) -> list[LLMTermeGlossaire]:
+) -> list[LLMTermeGlossary]:
     """
     Convertit le format compact (liste de listes) en liste de dicts.
 
@@ -29,7 +29,7 @@ def _validate_and_convert_glossary_entries(
         [{"terme": "Alice", "type": "personnage", "sexe": "f", ...}]
     """
     size = 4
-    glossary_entries: list[LLMTermeGlossaire] = []
+    glossary_entries: list[LLMTermeGlossary] = []
     for index, entry in enumerate(entrees):
         if len(entry) != size:
             missing_sections.append(
@@ -96,7 +96,7 @@ def _check_glossary_entry(
 class GlossaryValidator:
     @staticmethod
     @cache
-    def load(data: str) -> list[LLMTermeGlossaire]:
+    def load(data: str) -> list[LLMTermeGlossary]:
         raw_data = json.loads(data)
         validated_data, missing_sections = GlossaryValidator.validate(raw_data)
         if missing_sections:
@@ -106,7 +106,7 @@ class GlossaryValidator:
         return validated_data
 
     @staticmethod
-    def validate(data: dict[str, Any]) -> tuple[list[LLMTermeGlossaire], list[str]]:
+    def validate(data: dict[str, Any]) -> tuple[list[LLMTermeGlossary], list[str]]:
         missing_sections: list[str] = []
         glossaire_list: list[Any] = []
 

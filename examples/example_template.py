@@ -11,9 +11,12 @@ from pathlib import Path
 
 from ebooklib import epub
 
-from ebook_translator.config import PhaseTemplate, RetryTemplate
 from ebook_translator.glossary import Glossary
-from ebook_translator.llm.template_renderers import TemplateRenderer
+from ebook_translator.llm.template_renderers import (
+    PhaseTemplate,
+    RetryTemplate,
+    TemplateRenderer,
+)
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.stores.store import Store
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
@@ -33,7 +36,7 @@ html_items, target_book = extract_html_items_in_spine_order(source_book)
 segmentator = Segmentator(source_book, 500)
 
 chunk = next(segmentator.get_all_segments())
-chapter_chunk = next(
+chapter_chunks = list(
     segmentator.get_all_chapters_by_spine()
 )  # Premier chapitre pour test
 
@@ -45,13 +48,34 @@ renderer = TemplateRenderer()
 # === TRANSLATE Templates ===
 
 analyze_first_chunk = renderer.render_analyze_chapter(
-    target_language="français", chunk=next(chapter_chunk.split_chunk(100000, 0))
+    target_language="français", chunk=next(chapter_chunks[0].split_chunk(100000, 0))
 )
 
 analyze_next_chunk = renderer.render_analyze_chapter(
     target_language="français",
-    chunk=next(chapter_chunk.split_chunk(100000, 0)),
+    chunk=next(chapter_chunks[1].split_chunk(100000, 0)),
     partial_analysis_json='{"chapitre": "Chapitre 1: Introduction", "analyse": {"resume_narratif": "Ceci est un résumé narratif du chapitre.", "genre": "fantasy", "pistes_traduction": ["Piste 1: Traduire \'Sakamoto\' par \'Sakamoto\' (nom propre)", "Piste 2: \'Matrice\' peut être traduit par \'Matrix\' ou \'Matrice\', selon le contexte."], "glossaire": [{"terme": "Sakamoto", "type": "personnage", "sexe": "m", "proposition_traduction": "Sakamoto"}, {"terme": "Matrice", "type": "objet", "sexe": "nc", "proposition_traduction": "Matrix ou Matrice"}]}}',
+)
+
+analyze_bootstrap = renderer.render_analyze_chapter_layered(
+    target_language="français",
+    chunk=next(chapter_chunks[0].split_chunk(5000, 0)),
+    bootstrap=True,
+)
+
+
+analyze_seed = renderer.render_analyze_chapter_layered(
+    target_language="français",
+    chunk=next(chapter_chunks[1].split_chunk(5000, 0)),
+    seed_analysis_json='{"chapitre": "Chapitre 1: Introduction", "analyse": {"resume_narratif": "Ceci est un résumé narratif du chapitre.", "genre": "fantasy", "pistes_traduction": ["Piste 1: Traduire \'Sakamoto\' par \'Sakamoto\' (nom propre)", "Piste 2: \'Matrice\' peut être traduit par \'Matrix\' ou \'Matrice\', selon le contexte."], "glossaire": [{"terme": "Sakamoto", "type": "personnage", "sexe": "m", "proposition_traduction": "Sakamoto"}, {"terme": "Matrice", "type": "objet", "sexe": "nc", "proposition_traduction": "Matrix ou Matrice"}]}}',
+)
+
+it = chapter_chunks[0].split_chunk(5000, 0)
+next(it)  # Ignorer le premier chunk pour simuler l'incrémental
+analyze_incremental = renderer.render_analyze_chapter_layered(
+    target_language="français",
+    chunk=next(it),
+    existing_analysis_json='{"chapitre": "Chapitre 1: Introduction", "analyse": {"resume_narratif": "Ceci est un résumé narratif du chapitre.", "genre": "fantasy", "pistes_traduction": ["Piste 1: Traduire \'Sakamoto\' par \'Sakamoto\' (nom propre)", "Piste 2: \'Matrice\' peut être traduit par \'Matrix\' ou \'Matrice\', selon le contexte."], "glossaire": [{"terme": "Sakamoto", "type": "personnage", "sexe": "m", "proposition_traduction": "Sakamoto"}, {"terme": "Matrice", "type": "objet", "sexe": "nc", "proposition_traduction": "Matrix ou Matrice"}]}}',
 )
 
 translate_base = renderer.render_translate(
@@ -144,6 +168,9 @@ TEMPLATES: list[tuple[Enum | str, str | tuple[str, str]]] = [
     (RetryTemplate.Retry_Punctuation_Template, retry_correct_punctuation),
     (PhaseTemplate.Analyze_Chapter, analyze_first_chunk),
     ("Analyze_Chapter_With_Partial_JSON", analyze_next_chunk),
+    ("Analyze_Chapter_Layered_Bootstrap", analyze_bootstrap),
+    ("Analyze_Chapter_Layered_Seed", analyze_seed),
+    ("Analyze_Chapter_Layered_Incremental", analyze_incremental),
     (RetryTemplate.Retry_Analysis_Invalid_Json_Template, retry_analysis_invalid_json),
     (
         RetryTemplate.Retry_Analysis_Missing_Sections_Template,

@@ -38,7 +38,7 @@ class ChapterPartChunk(Chunk):
         Returns:
             ChapterPartChunk avec tous les attributs du Chunk source
         """
-        if chapter.index >= 100:
+        if chunk.index >= 100:
             raise ValueError(
                 "Chapter index must be less than 100 for proper global indexing."
             )
@@ -80,7 +80,7 @@ class ChapterChunk(Chunk):
         # Métadonnées du chapitre
         self.name = chapter_info.name
         self.files = chapter_info.files.copy()
-        self.files_names = chapter_info.file_names
+        self.files_names = chapter_info.file_names.copy()
 
         # Extraire texte de tous les fichiers du chapitre
         for tag_key, text in get_texts(chapter_info.files):
@@ -89,9 +89,16 @@ class ChapterChunk(Chunk):
 
     @override
     def split_chunk(
-        self, max_tokens: int, overlap_ratio: float
+        self,
+        max_tokens: int,
+        overlap_ratio: float,
+        head_tail_balance: float = 0.75,
     ) -> Iterator[ChapterPartChunk]:
-        chunks = list(super().split_chunk(max_tokens, overlap_ratio))
+        chunks = list(
+            super().split_chunk(
+                max_tokens, overlap_ratio, head_tail_balance=head_tail_balance
+            )
+        )
 
         for chunk in chunks:
             yield ChapterPartChunk.from_chunk(chunk, self, len(chunks))

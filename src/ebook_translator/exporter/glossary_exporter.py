@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 from ebook_translator.exporter.helper import save_markdown
 
 if TYPE_CHECKING:
-    from template.types import LLMTermeGlossaire
-
+    from template.phase.glossary_models import LLMTermeGlossary
 
 MISSING = "—"
 
@@ -28,11 +27,11 @@ def _escape_table_cell(s: str) -> str:
     return s
 
 
-def _format_glossaire_table(entries: list[LLMTermeGlossaire]) -> list[str]:
+def _format_glossaire_table(entries: list[LLMTermeGlossary]) -> list[str]:
     """
     Génère la table Markdown du glossaire.
 
-    Colonnes: Terme | Type | Sexe | Rôle | Notes | Proposition
+    Colonnes: Terme | Type | Sexe | Proposition
     Tri: par type puis terme (alpha insensible à la casse)
 
     Args:
@@ -44,36 +43,24 @@ def _format_glossaire_table(entries: list[LLMTermeGlossaire]) -> list[str]:
     if not entries:
         return ["> Aucun terme pertinent identifié."]
 
-    sorted_entries: list[LLMTermeGlossaire] = sorted(
-        entries, key=lambda e: (e["type"], e["terme"].lower())
+    sorted_entries: list[LLMTermeGlossary] = sorted(
+        entries, key=lambda e: (e["type"], e["terme"])
     )
 
     lines: list[str] = []
-    # En-têtes
-    lines.append("| Terme | Type | Sexe | Rôle | Notes | Proposition |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
+    lines.append("| Terme | Type | Sexe | Proposition |")
+    lines.append("| --- | --- | --- | --- |")
 
     for e in sorted_entries:
-        terme = _escape_table_cell(e.get("terme", MISSING)) or MISSING
-        type_ = _escape_table_cell(e.get("type", MISSING)) or MISSING
-        sexe = _expand_sexe(e.get("sexe", "nc"))
-        role = _escape_table_cell(e.get("description_role", MISSING)) or MISSING
-        notes_raw = e.get("notes_traduction", MISSING)
-        notes = _escape_table_cell(notes_raw) if notes_raw else MISSING
-        proposition_raw = e.get("proposition_traduction", MISSING)
-        proposition = (
-            _escape_table_cell(proposition_raw) if proposition_raw else MISSING
-        )
-
-        # Mise en forme légère: notes en italique, proposition en gras
-        notes_fmt = f"_{notes}_" if notes != MISSING else notes
+        terme = _escape_table_cell(e["terme"]) or MISSING
+        type_ = _escape_table_cell(e["type"]) or MISSING
+        sexe = _expand_sexe(e["sexe"])
+        proposition = _escape_table_cell(e["proposition_traduction"]) or MISSING
         proposition_fmt = (
             f"**{proposition}**" if proposition != MISSING else proposition
         )
 
-        lines.append(
-            f"| {terme} | {type_} | {sexe} | {role} | {notes_fmt} | {proposition_fmt} |"
-        )
+        lines.append(f"| {terme} | {type_} | {sexe} | {proposition_fmt} |")
 
     return lines
 
@@ -81,7 +68,7 @@ def _format_glossaire_table(entries: list[LLMTermeGlossaire]) -> list[str]:
 class GlossaryExporter:
     @staticmethod
     def save_glossary_markdown(
-        glossary: list[LLMTermeGlossaire],
+        glossary: list[LLMTermeGlossary],
         output_path: Path | str,
     ) -> None:
         text = "\n".join(_format_glossaire_table(glossary))

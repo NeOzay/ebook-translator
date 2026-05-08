@@ -12,8 +12,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ebook_translator.segmentation.chunk import ChunkProtocol
+
     from ..pipeline.context import ChunkContext
-    from ..segmentation import Chunk, TranslatedChunk
+    from ..segmentation import TranslatedChunk
 
 
 @dataclass
@@ -32,7 +34,7 @@ class ValidationItem:
         ... )
     """
 
-    chunk: Chunk
+    chunk: ChunkProtocol
     chunk_info: ChunkContext
     translated_texts: dict[int, str]
     previous_translated_texts: TranslatedChunk | None = None
@@ -70,7 +72,7 @@ class SaveItem:
         ... )
     """
 
-    chunk: Chunk
+    chunk: ChunkProtocol
     final_result: dict[int, str]
     source_files: dict[str, dict[str, str]]  # Clés de ligne sont des strings (JSON)
     on_save: Callable[[SaveItem], None] | None = None

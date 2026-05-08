@@ -6,6 +6,7 @@ en encapsulant toute la logique métier nécessaire (extraction texte,
 export glossaire, calculs, etc.).
 """
 
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -13,11 +14,11 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
 from ebook_translator.validator.translation_context import ContexteTraduction
 
-from ..config import PhaseTemplate, RetryTemplate, Template
-from ..segmentation import Chunk, TranslatedChunk
+from ..segmentation import Chunk, ChunkProtocol, TranslatedChunk
 
 if TYPE_CHECKING:
     from template.template_params import (
+        AnalyzeChapterLayeredParams,
         AnalyzeChapterParams,
         GlossaryParams,
         MissingLinesParams,
@@ -32,6 +33,44 @@ if TYPE_CHECKING:
 
     from ..glossary import Glossary
     from ..stores import Store
+
+
+class Template(StrEnum):
+    def __init__(self, s: str) -> None:
+        self.prefix = ""
+
+    def get_templates(self) -> tuple[str, str]:
+        prefix = self.prefix
+        return prefix + self + "_system.jinja", prefix + self + "_user.jinja"
+
+    def get_system(self) -> str:
+        return self.prefix + self + "_system.jinja"
+
+    def get_user(self) -> str:
+        return self.prefix + self + "_user.jinja"
+
+
+class PhaseTemplate(Template):
+    def __init__(self, s: str) -> None:
+        self.prefix = "phase/"
+
+    Analyze_Chapter = "analyze_chapter"
+    Analyze_Chapter_Layered = "analyze_chapter_layered"
+    First_Pass_Template = "translate_base"
+    Refine_Template = "translate_refine"
+    Glossary = "glossary"
+
+
+class RetryTemplate(Template):
+    def __init__(self, s: str) -> None:
+        self.prefix = "retry/"
+
+    Retry_Analysis_Invalid_Json_Template = "retry_correct_analysis_invalid_json"
+    Retry_Analysis_Missing_Sections_Template = "retry_correct_analysis_missing_sections"
+    Retry_Fragments_Template = "retry_correct_fragments"
+    Retry_Missing_Lines_Targeted_Template = "retry_translate_missing_lines_targeted"
+    Retry_Sentence_Template = "retry_translate_sentence"
+    Retry_Punctuation_Template = "retry_correct_punctuation"
 
 
 class TemplateRenderer:
@@ -222,7 +261,7 @@ class TemplateRenderer:
 
     def render_missing_lines(
         self,
-        chunk: Chunk,
+        chunk: ChunkProtocol,
         missing_indices: list[int],
         target_language: str,
     ) -> tuple[str, str]:
@@ -393,7 +432,7 @@ class TemplateRenderer:
 
     def render_retry_sentence(
         self,
-        chunk: Chunk,
+        chunk: ChunkProtocol,
         target_language: str,
         missing_indices: list[int],
         previous_translation: TranslatedChunk | None = None,
@@ -488,6 +527,58 @@ class TemplateRenderer:
         }
 
         return self.render_prompt(PhaseTemplate.Analyze_Chapter, **params)
+
+    def render_analyze_chapter_layered(
+        self,
+        chunk: ChapterPartChunk,
+        target_language: str,
+        existing_analysis_json: str | None = None,
+        seed_analysis_json: str | None = None,
+        bootstrap: bool = False,
+    ) -> tuple[str, str]:
+        chapter_name: str = chunk.chapter.name
+        current_block: int = chunk.part + 1  # index 0-based -> block 1-based
+        total_blocks: int = chunk.total_parts
+        block_text: str = chunk.prepare_for_prompt([])
+
+        if bootstrap:
+            params: AnalyzeChapterLayeredParams = {
+                "target_language": target_language,
+                "chapter_name": chapter_name,
+                "current_block": current_block,
+                "total_blocks": total_blocks,
+                "chapter_text": block_text,
+                "is_last_block": chunk.is_last(),
+                "genre": self._genre,
+            }
+        elif current_block == 1 and seed_analysis_json:
+            params = {
+                "target_language": target_language,
+                "chapter_name": chapter_name,
+                "current_block": current_block,
+                "total_blocks": total_blocks,
+                "chapter_text": block_text,
+                "is_last_block": chunk.is_last(),
+                "genre": self._genre,
+                "previous_chapter_analysis": seed_analysis_json,  # TODO: Passer l'analyse du chapitre précédent pour contexte inter-chapitre
+            }
+        elif existing_analysis_json is not None:
+            params = {
+                "target_language": target_language,
+                "chapter_name": chapter_name,
+                "current_block": current_block,
+                "total_blocks": total_blocks,
+                "chapter_text": block_text,
+                "is_last_block": chunk.is_last(),
+                "genre": self._genre,
+                "existing_analysis": existing_analysis_json,
+            }
+        else:
+            raise ValueError(
+                "Paramètres insuffisants pour déterminer le mode d'analyse (bootstrap, seed ou incremental)"
+            )
+
+        return self.render_prompt(PhaseTemplate.Analyze_Chapter_Layered, **params)
 
     def render_retry_analysis_invalid_json(
         self,

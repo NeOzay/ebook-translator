@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from itertools import count
 from typing import TYPE_CHECKING
 
@@ -63,7 +63,15 @@ def turn_resource_to_chunks(
     max_tokens: int,
     overlap_ratio: float = 0,
     encoding_name: str = Config.DEFAULT_ENCODING,
-) -> Iterator[Chunk]:
+    head_tail_balance: float = 0.5,  # Proportion du chevauchement allouée au head vs tail (0.5 = égal, 0.7 = 70% head, 30% tail)
+) -> Generator[Chunk]:
+
+    if head_tail_balance < 0 or head_tail_balance > 1:
+        raise ValueError(
+            f"head_tail_balance must be between 0 and 1, got {head_tail_balance}"
+            " (0.5 means equal split between head and tail)"
+        )
+
     def add_fragment_to_body(
         chunk: Chunk, tag_key: TagKey, text: str, token_count: int = 0
     ) -> None:
@@ -96,7 +104,7 @@ def turn_resource_to_chunks(
             - Chunk 2 : head sera rempli avec ["E", "D", "C", "B"] (~3500 tokens)
                         Le budget de 4000 tokens permet d'inclure tout chunk 1 + une partie de chunk 0
         """
-        overlap_budget = calculate_overlap_tokens()
+        overlap_budget = calculate_overlap_tokens(head_tail_balance)
 
         collect_text: dict[TagKey, str] = {}
         for chunk in reversed(previous_chunks.keys()):
@@ -117,8 +125,8 @@ def turn_resource_to_chunks(
         for tag_key in reversed(collect_text):
             current_chunk.head[tag_key] = collect_text[tag_key]
 
-    def calculate_overlap_tokens() -> int:
-        return int(max_tokens * overlap_ratio)
+    def calculate_overlap_tokens(factor: float) -> int:
+        return int(max_tokens * overlap_ratio * factor * 2)
 
     chunk_queue: dict[Chunk, int] = {}
     _create_new_chunk = chunk_generator()
@@ -130,7 +138,7 @@ def turn_resource_to_chunks(
 
         if current_token_count + token_count > max_tokens:
             # Chunk plein : préparer le suivant
-            chunk_queue[current_chunk] = calculate_overlap_tokens()
+            chunk_queue[current_chunk] = calculate_overlap_tokens(1 - head_tail_balance)
             current_chunk.token_count = current_token_count
 
             current_chunk = _create_new_chunk()

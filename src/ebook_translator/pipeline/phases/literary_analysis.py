@@ -3,9 +3,9 @@
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, override
 
-from ebook_translator.checks import AnalysisChecks, Check
+from ebook_translator.checks import AnalysisChecks
 from ebook_translator.exporter import AnalysisExporter
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, PhaseName
@@ -15,7 +15,7 @@ from ebook_translator.validation.validation_queue import SaveItem
 from ebook_translator.validator import AnalysisValidator
 
 if TYPE_CHECKING:
-    from ebook_translator.llm.llm_config import LLMConfig
+    from ebook_translator.llm.llm_config import CompleteLLMConfig
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
     name = PhaseName.LITERARY_ANALYSIS
     chunk_type = ChapterPartChunk
     max_tokens: int = field(  # Un seul bloc par chapitre (vs 4000 multi-blocs avant)
-        default=70000
+        default=5000
     )
     overlap_ratio: float = field(default=0.0, init=False)
     execution_mode = ExecutionMode.SEQUENTIAL
@@ -45,7 +45,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         default=1, init=False
     )  # Analyse séquentielle pour cohérence
 
-    checks: tuple[Check[Any], ...] = field(default=(AnalysisChecks(),), init=False)
+    checks = (AnalysisChecks(),)
 
     @override
     def get_chunks(self) -> Sequence[ChapterPartChunk]:
@@ -57,7 +57,13 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         """
         all_chunks: list[ChapterPartChunk] = []
         for chapter in self.context.chapters.iter_chapter_chunks():
-            all_chunks.extend(chapter.split_chunk(self.max_tokens, self.overlap_ratio))
+            all_chunks.extend(
+                chapter.split_chunk(
+                    self.max_tokens,
+                    self.overlap_ratio,
+                    self.head_tail_balance,
+                )
+            )
         logger.info(
             f"Chapters detected: {len(all_chunks)} chunks "
             f"({[c.chapter.name for c in all_chunks]})"
@@ -65,8 +71,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         return all_chunks
 
     @override
-    @classmethod
-    def get_translation_cache(cls, chunk: Chunk) -> tuple[dict[int, str], bool]:
+    def get_translation_cache(self, chunk: Chunk) -> tuple[dict[int, str], bool]:
         """
         Récupère l'analyse JSON depuis le store si elle existe.
 
@@ -77,7 +82,7 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         """
         if not isinstance(chunk, ChapterPartChunk):
             raise TypeError(f"Expected ChapterPartChunk, got {type(chunk).__name__}")
-        store = cls.get_store()
+        store = self.get_store()
         chapter_name = chunk.chapter.name
         keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
         cached_json = store.get(chapter_name, keyname)
@@ -85,7 +90,9 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
             return ({}, True)  # Analyse manquante
         return ({0: cached_json}, False)  # Analyse trouvée
 
-    def _get_previous_chunk_json(self, chunk: ChapterPartChunk) -> str | None:
+    def _get_previous_chunk_json(
+        self, chunk: ChapterPartChunk, context: ChunkContext
+    ) -> str | None:
         """Récupère le JSON d'analyse du chunk précédent depuis le store.
 
         Args:
@@ -95,10 +102,16 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
             JSON stringifié du chunk précédent, ou chaîne vide si introuvable.
         """
         if chunk.is_first():
-            return None
+            if not isinstance(context.previous_chunk, ChapterPartChunk):
+                return None
+            chapter_name = context.previous_chunk.chapter.name
+            index = context.previous_chunk.total_parts
+        else:
+            chapter_name = chunk.chapter.name
+            index = chunk.index
 
-        all_cached = self.get_store().get_from_file(chunk.chapter.name)
-        prefix = f"{chunk.index - 1}_"
+        all_cached = self.get_store().get_from_file(chapter_name)
+        prefix = f"{index - 1}_"
         for key, value in all_cached.items():
             if key.startswith(prefix):
                 analysis_data = AnalysisValidator.load(value)
@@ -116,14 +129,14 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         if not isinstance(chunk, ChapterPartChunk):
             raise ValueError("chunk must be ChapterPartChunk")
 
-        return context.llm.renderer.render_analyze_chapter(
+        return context.llm.renderer.render_analyze_chapter_layered(
             chunk=chunk,
             target_language=context.target_language,
-            partial_analysis_json=self._get_previous_chunk_json(chunk),
+            existing_analysis_json=self._get_previous_chunk_json(chunk),
         )
 
     @override
-    def get_llm_config(self, chunk: Chunk, context: ChunkContext) -> LLMConfig:
+    def get_llm_config(self, chunk: Chunk, context: ChunkContext) -> CompleteLLMConfig:
         """Active le mode JSON pour parsing structuré."""
         conf = self.llm_config.copy()
         conf["use_json_mode"] = True

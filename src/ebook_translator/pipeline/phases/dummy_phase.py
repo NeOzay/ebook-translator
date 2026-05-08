@@ -7,7 +7,7 @@ from ebook_translator.segmentation.chunk import Chunk
 
 
 @dataclass
-class DummyPhase(PhaseBase):
+class DummyPhase(PhaseBase[Chunk]):
     """Phase factice utilisée pour l'initialisation."""
 
     name = PhaseName.DUMMY

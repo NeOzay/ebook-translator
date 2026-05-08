@@ -8,10 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from tqdm import tqdm
 
+from ebook_translator.llm.llm_config import JsonRequestConfig
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import ExecutionMode, PhaseProtocol
 from ebook_translator.pipeline.context import ChunkContext, PhaseContext, PhaseStats
-from ebook_translator.segmentation.segmentator import Chunk
+from ebook_translator.segmentation.chunk import ChunkProtocol
 from ebook_translator.validation.validation_queue import ValidationItem
 
 logger = get_logger(__name__)
@@ -58,7 +59,7 @@ class PhaseExecutor:
         start_time = time.time()
 
         logger.info(f"=== Starting Phase: {self.phase.name} ===")
-        check_names = [c.name for c in self.phase.checks]
+        check_names = [c.name for c in self.phase.get_checks()]
         logger.info(
             f"Configuration: max_tokens={self.phase.max_tokens}, "
             f"overlap={self.phase.overlap_ratio}, mode={self.phase.execution_mode.value}, "
@@ -114,7 +115,9 @@ class PhaseExecutor:
         # Update phase name dans le pool
         self.context.validation_pool.switch_phase(self.phase, store)
 
-    def _process_chunk(self, chunk: Chunk) -> bool:
+    previous_chunk: ChunkProtocol | None = None
+
+    def _process_chunk(self, chunk: ChunkProtocol) -> bool:
         """
         Traite un chunk (cache check + LLM + parse + submit).
 
@@ -130,13 +133,12 @@ class PhaseExecutor:
 
             # 2. Hook before_chunk
             chunk_context = ChunkContext(
-                target_language=self.context.target_language,
-                llm=self.context.llm,
-                store_manager=self.context.store_manager,
-                glossary=self.context.glossary,
                 phase_name=self.phase.name,
                 chunk_index=chunk.index,
+                previous_chunk=self.previous_chunk,
             )
+
+            self.previous_chunk = chunk
 
             if not has_missing:
                 # Chunk déjà en cache, on le soumet quand même pour validation
@@ -158,9 +160,18 @@ class PhaseExecutor:
             # 4. LLM query
             context_str = f"{self.phase.name}_chunk_{chunk.index:03d}"
             llm_config = self.phase.get_llm_config(chunk, chunk_context)
-            llm_output = self.context.llm.query(
-                sys_prompt, user_prompt, log_name=context_str, config=llm_config
-            )
+            if isinstance(llm_config, JsonRequestConfig):
+                llm_output = self.context.llm.json_query(
+                    sys_prompt,
+                    user_prompt,
+                    log_name=context_str,
+                    config=llm_config.config,
+                    response_model=llm_config.response_model,
+                ).serialized_build()
+            else:
+                llm_output = self.context.llm.query(
+                    sys_prompt, user_prompt, log_name=context_str, config=llm_config
+                )
 
             # 5. Parse
             translated_texts = self.phase.process_llm_response(
@@ -187,7 +198,7 @@ class PhaseExecutor:
             )
             return False
 
-    def _run_parallel(self, chunks: Sequence[Chunk]) -> None:
+    def _run_parallel(self, chunks: Sequence[ChunkProtocol]) -> None:
         """
         Exécution parallèle avec ThreadPoolExecutor.
 
@@ -231,7 +242,7 @@ class PhaseExecutor:
 
                 pbar.update(1)
 
-    def _run_sequential(self, chunks: Sequence[Chunk]) -> None:
+    def _run_sequential(self, chunks: Sequence[ChunkProtocol]) -> None:
         """
         Exécution séquentielle (chunk par chunk).
 

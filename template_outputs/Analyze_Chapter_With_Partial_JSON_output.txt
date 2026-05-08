@@ -43,7 +43,7 @@ Retourne le JSON complet fusionné, avec tous les champs de la structure existan
 
 --- USER ---
 
-Chapitre : "Chapter 1: The Name’s Wein Salema Arbalest" — Bloc 1/1 (dernier bloc)
+Chapitre : "Chapter 2: The Troubled Prince on the Battlefield" — Bloc 1/1 (dernier bloc)
 
 Analyse existante :
 ```json
@@ -52,794 +52,946 @@ Analyse existante :
 
 Nouveau bloc de texte :
 
-Two men strolled down the stone corridor of the royal palace in the Kingdom of Natra. They carried themselves with a certain dignity and pride—even their gait was refined. This was expected of these two longtime vassals of the kingdom.
+The Earthworld Empire had been enjoying a golden age since its founding, spearheaded by a charismatic emperor and supported by his loyal officials and soldiers. The entire continent of Varno was well aware of their splendor. The people of the Empire were proud that they were a part of this glorious age and took it for granted that each successive day would shine brighter than the last.
 
-One was a civil official. The other, a military officer. Though in separate spheres of influence, they were appointed around the same time and remained on friendly terms. In fact, they’d occasionally meet up at the palace to share a spirited discussion or two.
+But this vision came crashing down all too easily.
 
-On this day, however, the hallway wasn’t filled with their usual merry chatter, clouded instead by matching solemn looks.
+Following the Emperor’s death, Earthworld dissolved into complete and total mayhem, and the stormy clouds of uncertainty settled over their future. They depended on the civil officials to keep the Empire from stumbling in the crisis—but the Imperial Court transformed into a den of thieves overnight as all scrounged for more power. Losing their guiding sun, the officials revealed their true nature, unleashing their dark hunger for more power.
 
-There was only one reason for their gloom.
+Of course, there were those who wished to put a stop to this.
 
-“His Royal Majesty’s condition…doesn’t look too promising,” the civil official croaked in a voice thick with emotion.
+Fyshe Blundell, who had returned home from the Kingdom of Natra, was one of them.
 
-Shutting his eyes tightly, the military officer sighed. “Well, with the weather wreaking havoc across the continent—it must be particularly rough on His Royal Majesty, given his physical condition…”
+…Sadly, I’m much too spineless.
 
-“Oh, the whims of the heavens! I’ve heard other countries are in shambles from losing key decision makers.”
+Exiting a room in the Imperial Court, she let out a stifled sigh.
 
-“You know, they say the Emperor himself has fallen ill. Thanks to that, the other royal courts have become dens of wily little devils.”
+Her aide rushed over to greet her from her post outside. “How did it go, Ambassador?”
 
-The civil official sharply exhaled through his nose. “Sure, he might’ve managed to unite the Empire with his charisma, but they say the brighter the light, the darker the shadow becomes when it vanishes… I guess this is all the more true since they’ve yet to name a successor.”
+“They’ve placed me under house arrest for the time being.”
 
-“Well, our own kingdom isn’t much different. But unlike them, we have hope in…” He trailed off as a figure appeared on the far side of the corridor.
+The recent incident with the Kingdom of Natra was her own doing. This was the day they’d dole out her punishment.
 
-No sooner had they confirmed his identity than they immediately stepped aside to salute. This was a rare sight indeed. Not many people in the palace warranted such a display.
+“Thank goodness. They were more lenient than expected. I’m sure your track record was a deciding factor.”
 
-“Prince Wein. Good morning, Your Highness,” they greeted in unison.
+“It’s safe to say it’s because they don’t want me meddling with their affairs anymore.”
 
-Standing before them was a young boy attended by a servant.
+The Kingdom of Natra may have pulled one over on her, but it was a minor country all the same. There were countless more important things to be done here in the Empire. Indeed, an untold number of things. Fyshe had plenty to do, of course.
 
-He was the crown prince of the Kingdom of Natra, Wein Salema Arbalest.
+But she somehow couldn’t let it go.
 
-“Oh, morning,” he replied.
+“Just when the Empire needs me most, and yet…”
 
-He was only sixteen years old—a boy by most standards—but he’d just been appointed as the prince regent, tasked with running government affairs in place of the ailing king.
+It was incredibly frustrating. </>Ugh!</> Her heart filled to the brim with self-hatred.
 
-“What’s with those cheerless expressions? …Is it about my father?”
+“You mustn’t, Ambassador. If you do something while under house arrest, they’ll mete out a harsher punishment.”
 
-The two reverently responded to Wein’s inquiry.
+“I’m well aware of that. I intend to behave myself,” she pledged. “But conducting research should be fine, right?”
 
-“Yes, Your Highness,” confirmed one.
+“Research on…what, exactly?”
 
-“Our deepest apologies. When we received word about His Royal Majesty’s condition…,” started another.
+“The crown prince of Natra.”
 
-“I see,” Wein murmured quietly, placing his hands on their shoulders. “There’s no need to worry any further. </>I</> am here.”
+Her aide looked concerned. “Ambassador, I understand that you were bested, but you </>must</> move on,” she urged.
 
-They trembled lightly under his hands.
+“I don’t care about that. I’m neither angry nor upset with him.”
 
-“Besides, it isn’t just me. We have so many vassals supporting Father all these years. If we join hands, I’m certain we can overcome any national crisis.”
+She was being honest. Sure, she’d have more peace of mind if she blamed everything on him, but she still held him in high regard. He’d held nothing back, and she accepted her defeat.
 
-“Your Highness…”
+The past was in the past. Next time, she’d get him for sure.
 
-“That’s for certain.”
+“Based on intuition alone, he’s likely to have made rapid progress. It may be only a matter of time before he bares his claws at the Empire. I simply wish to prepare our country to ensure we nip it in the bud.”
 
-He serenely smiled over the pair fervently nodding. “There is no time to grieve. We cannot distract him from his recovery. I’ll be expecting the two of you to step up and rise to the occasion.”
+“You may be overthinking matters… But if you insist, Ambassador, I will gladly assist.”
 
-““Y-yes, Your Highness!”” they crooned.
+Fyshe smiled. “I appreciate your help. First, let’s research the time he spent studying in the Empire. I already know a decent amount, but we may uncover something new.”
 
-As he bid them farewell and continued down the corridor with his </>servant, the two gazed after him until he was out of sight, then they sighed and melted into a puddle of complete admiration.
+“Understood. Well then, I’ll arrange for a thorough inspection of the archives,” the aide confirmed before running off to carry out Fyshe’s orders.
 
-“…Oh, I just knew it. Our shining beacon of hope.”
+Fyshe peered out the window to look at the sky, connecting her to the West and the Kingdom of Natra.
 
-“I couldn’t agree more. I’ve heard he was gifted from an early age, but he’s shown so much growth since returning from his studies in the Empire. He’s already managed to stop chaos from erupting in the Imperial Court and is now working toward unifying the kingdom’s vassals.”
+“…I wonder what that little prince is doing right about now.” She chuckled as she strolled down the hallway with thoughts of a worthy adversary weighing on her mind.
 
-“Heh, I bet the Empire will have a jealous fit when they hear this.”
+It’d been two months since the Imperial army left the Kingdom of Natra.
 
-“Let us throw more salt in the wound by further supporting His Highness’s endeavors.”
+Wein gazed down upon hundreds of his soldiers neatly lined up before him, operating as one living, breathing unit, precisely obeying the orders of their commanding officer. Each move was spirited. The mere sight of it was breathtaking.
 
-“Yes, of course.”
+“What do you think, Your Highness?”
 
-The two nodded to each other—gone were their previously dark expressions. In their hearts, they were already imagining a bright future for their kingdom in the prince’s hands.
+“Excellent work,” he praised, nodding to his vassal in satisfaction as he watched the scene from his hilltop pavilion. “I was worried we might wander off course after losing Imperial guidance, but you’ve done a great job polishing them up so far. I was right to entrust them to you, Raklum.”
 
-At the very center of the royal palace was an office set aside for government affairs. Its heavy doors swung open to reveal Wein and his attendant as they stepped inside the room. It was strictly reserved for the king under normal circumstances. But things were far from that, and now Wein was using this room to conduct royal business.
+“Thank you!” belted out Raklum, respectfully bowing his head.
 
-He came to rest in front of a desk stacked with documents and papers. “Ninym, confirm my schedule for today.”
+Though the man was tall with a solid build, he wasn’t the least bit intimidating. This was thanks to his unremarkable facial features, though one could perhaps consider his longer-than-average arms unique. He was one of the commanding officers of the Natra army and handpicked by Wein himself.
 
-His aide was an inconceivably beautiful girl around the same age as Wein, with near-transparent white hair and blazing-red eyes.
+“Be that as it may, Your Highness, all I did was follow orders. I am not deserving of such high praise.”
 
-“In the morning, you are to check these reports and resolve any submitted disputes. In the afternoon, you are scheduled to attend a luncheon meeting and then three conferences, before paying His Royal Majesty a visit.”
+“I know how hard it is to find vassals fit for this job,” Wein insisted. “The fact that it was done at all is thanks to you.”
 
-“That means no one will come in here all morning?”
+“But Your Highness was the one who selected and assigned me to this esteemed post. My deeds are hardly worth a grain of sand,” Raklum said, pushing back.
 
-“Correct.”
+“…Honestly, you never change,” Wein said with a sigh, causing his officer to bow his head even more deeply.
 
-Ah, very good.</> Wein nodded to himself, and then—he screamed at the top of his lungs.
+Then a charming giggle interrupted their exchange. “Tee-hee, you two are so funny!”
 
-“LET’S JUST SELL THIS COUNTRY OFF AND GET THE HELL OUTTA HEEEEEEEEEEERE! All that stuff about ‘joining hands’? Yeah, total BS! This country’s mess ain’t so easy to fix! Not. A. Chance! We’re. Totally. Screwed!”
+It was Wein’s younger sister, Falanya.
 
-“There you go again,” Ninym chided, unfazed by this sudden outburst. She let go of her stiflingly formal tone. “Joking or not, you really shouldn’t say those things out loud, Wein.”
+“Sorry, Falanya. Are you bored?”
 
-“It’s no joke, Ninym! I’m totally serious!”
+“Not at all. It’s interesting to watch the soldiers move with such grace, and I enjoy listening to your conversations. But, Raklum, you really ought to receive his praise. I’m a bit jealous, to be honest. He hardly ever praises me.”
 
-“That’s even worse,” she said with a sigh.
+“You heard her, Raklum.” Wein looked over at him with a wry smile.
 
-Here was the successor of the Kingdom of Natra, the boy expected to save them all—Wein Salema Arbalest.
+With a complicated expression, Raklum finally spoke up. “…I will carve Your Highness’s words into my heart.”
 
-In reality, he was actually a no-good slacker. In fact, his least favorite words were </>duty</>, </>responsibility</>, and </>effort</>.
+“Seems you can’t stand up against my little sister, either. Good work, Falanya. You deserve some praise for that.”
 
-“Ugh, you’re always like this when you’re out of the public eye… At least try being a little more professional, please,” she lamented.
+“Oh no. If you praise me for this, I’m afraid I’ll have to make Raklum act even more stubborn from now on,” she teased.
 
-Ninym Ralei had been at his side since childhood, and as his chief aide, she was one of the few blessed with knowing his true personality. Some would say it went against common sense to assign a young girl as the aide of an equally adolescent crown prince turned regent. Doubly so because he was dealing with national politics.
+The siblings burst into laughter together. Even Raklum let out a small smile.
 
-However, no one in the kingdom’s royal court would ever dare say that was the case—half out of fear of displeasing the crown prince who’d appointed her, half due to her personal achievements and displays of skill.
+“By the way, Wein, I haven’t seen Ninym around recently. Is everything well?”
 
-Wein was able to speak so openly with her because they’d established a relationship with each other, founded on mutual trust and cooperation. This also made them brutally honest when no one else was around. Nonetheless, there was a reason Wein was spitting out these absurd complaints, something that went beyond his own disposition.
+“Hmm? Ah, I had some business I could trust only Ninym with.”
 
-“Hmm? C’mon, what’s with the Little Miss Perfect attitude?! Ninym, you </>do</> realize this country’s dirt-poor, right?!”
+After all, she’d been chosen at birth to serve Wein and had undergone special training for this role, making her incredibly capable of handling any job flawlessly.
 
-“‘Dirt-poor’ is an exaggeration… We simply have severe shortages of labor, resources, and capital. That’s all.”
+“How rare. It may be for work, but I’m surprised you allowed her to leave your side,” Falanya admitted.
 
-“Yeah, that’s what the rest of the world calls dirt-poor!”
+That was the truth. On the whole, Ninym never left Wein’s side.
 
-To backtrack, the Kingdom of Natra was one of the many countries on the continent of Varno. With a population just under five hundred thousand, it was considered a relatively small country.
+“It couldn’t be helped. I couldn’t trust this with anyone else.”
 
-Located at the northernmost tip of the continent, the kingdom experienced short springs and long winters. Not only that, but the majority of the country’s land was made up of barren rock and mountains.
+He’d been reluctant, of course. With her help, it felt as though he could soar over a mountain instead of walk it. When he thought about his mounting piles of work for the day, he couldn’t help but groan a little in his mind.
 
-Even though it boasted a long history, the country possessed limited resources and hardly any industry. In fact, the only thing it was really known for was its snowy landscapes, which brought in a handful of curious travelers every year. But to the average citizen, the bitter cold was more of a curse than a blessing.
+Well, he </>could</> theoretically get someone else to take care of it—but it’d actually be pretty difficult. After all, Wein was the only one who could substitute for the king. With his father appointing the majority of the vassals, their allegiance lay with the king and nation—not Wein. So far, Ninym and Raklum were the only ones who’d pledged their loyalty solely to him and possessed enough talent to participate in high-level politics. Aside from assigning Raklum to carry out the drills, he had no one else to take care of important matters, other than Ninym.
 
-Natra was a historic kingdom, but this was mostly due to its being such an unappealing target that other countries rarely looked its way, never mind actually invading. It’s all thanks to wise and sensible rulers of the past that it’s managed to maintain any semblance of a proper country up until now.
+“Could this work concern the Empire by any chance?” Falanya asked.
 
-All in all, it was a small, vulnerable nation with more than enough potential to be swept away at any moment.
+“Hmm? What makes you think that?”
 
-And that was putting it lightly.
+“I hear you’ve been buying lots of weapons from the Empire lately.”
 
-“Our administration has no funds. And we don’t have any industries to make any cash. We don’t even have the military power to steal any from someone else. And anyone with half a brain ends up leaving the country in pursuit of better opportunities elsewhere! Now that Father’s ill and that storm’s brewin’ across the continent, I’m stuck running the whole freakin’ countryyyy!!”
+Hmm</>, noted Wein. Well, it wasn’t as though he’d been trying to hide anything.
 
-Given all this, his complaining wasn’t totally uncalled for. It was clearly a burden too heavy for a boy, especially one halfway through adolescence.
+But Falanya had apparently caught wind of it. Perhaps this crisis had finally sparked an interest in politics and a desire to help him out.
 
-Not that there was anyone who could replace him.
+“I’m buying weapons—yes. But my mission for Ninym is a separate matter. Well, okay, it’s not </>totally</> separate, but…,” continued Wein as he petted his sister’s head.
 
-“Agh, why’d I have to be born a prince of </>this</> country? If only I’d </>been born in a place with more resources, manpower, and funds… You know what? It’s hopeless! We’re totally gonna get invaded. Maybe we can cut back on our resources… Oh, but if we involve too much manpower, we might incite a coup…”
+An idea zapped into his mind.
 
-“Oh, all right, enough with that doom and gloom. Here, get some work done.” Ninym pressed a fat stack of documents under his nose as he continued to mutter his wild delusions.
+“Say, Falanya, do you know </>why</> I’m buying weapons from the Empire?”
 
-“Agh,” he moaned in a haunting tone, giving the papers a quick glance before passing them back immediately. “Looks good. Next.”
+It wouldn’t hurt to make this a teaching moment. She’d shown interest in the matter, after all.
 
-“…Did you read through them? </>Properly?</>”
+She apparently understood why he was asking her this, as she thought carefully before answering him. “…Because the Empire’s weapons are better in quality than Natra’s?”
 
-“Yeah, yeah, I read ’em. Every last word. It said you gained weight, and— Ow!! You—! I’m pretty sure it’s considered improper to step on the prince’s foot!”
+“That’s one part of the answer. But ours aren’t particularly bad. It’s </>just that military powerhouses are bound to have weapons of higher quality. Anything else?”
 
-“Take your work more seriously if you want me to properly respect you. Also, I haven’t gained weight. Thank. You. Very. Much.”
+“There’s more? Um…” She frowned in concentration but was at a loss for an answer, finally giving Wein a perplexed look.
 
-“Whaaat? Hey now, this won’t do, Ninym! No, not at all. Did you honestly think I wouldn’t notice your footsteps getting heavier? I know your body hardly ever changes, but I know for a </>fact</> you’ve gained more than a pound since last week, and— Hey, quit it, stupid! Cut that out! Don’t twist my ar— GWAAAAAAA?!”
+The sight was so charming, it brought a small smile to his lips.
 
-“Would you like to explore just how far your joints bend? Or will you do your work?”
+“I can’t go around telling everyone this, but the purchases are my way of apology to the Empire. Natra got more than its fair share in our transaction the other day.”
 
-“I—I would very much like to work, please!”
+“Really? But everyone’s always praising you, Wein. They say you took down the Imperial ambassador a peg or two,” she bragged, as if she’d done it herself.
 
-“Very well, then. And for the record, I haven’t gained any weight. Am I clear?”
+He shook his head. “In diplomacy, it’s no good if something’s one-sided. Especially when you’re negotiating with a nation more powerful than you. You want to avoid creating any unnecessary ill will. This is the second reason.”
 
-“Yes’m.” He caved.
+She nodded but then tilted her head questioningly. “And the third reason?”
 
-Ninym was the only one in the kingdom who could kick his butt into shape.
+“Ah, that’s—,” started Wein.
 
-“Agh! I can’t take this anymore. All I want is to be left alone with my mountain of gold coins, tease you, and live the easy life. Is that so much to ask?”
+“Pardon me!”
 
-Just as Wein stretched out across his desk to grumble further, a </>knock came from the office door. He bolted upright in a start as the door opened with a heavy clack.
+A messenger came flying into the pavilion, yelling so loud that anyone present could hear. “The Kingdom of Marden is advancing on us!”
 
-It was a young girl.
+Falanya’s eyes flew open.
 
-“Are you in here, Wein?”
+“They’ve finally made their move,” Raklum whispered to himself.
 
-She certainly looked a bit younger than Ninym and Wein. As she flitted around the room, her summery dress and black hair danced around her. She embodied loveliness.
+And Wein avowed in a voice of indifference, “—because we’ll be needing to use them immediately.”
 
-Certain parts of her face bore a striking resemblance to Wein’s. Well, that much was to be expected. After all, she was Falanya Elk Arbalest, the younger sister of Wein Salema Arbalest…
+The Kingdom of Marden was directly to the west of Natra.
 
-In other words, the princess.
+Though neighboring countries, their official relations were virtually nonexistent, limited to mostly private interactions. This was because Natra’s politics and ideology followed those of the East, even though it </>was in the center of the continent. This meant they didn’t have stellar relations with Western countries.
 
-“—Oh, it’s you, Falanya. What’s up?” Making it seem as if he’d just finished a long bout of work, Wein casually straightened up and lifted his face out of the papers before him.
+The two states were comparable in size, which was quite small. Their military strength was much the same—or rather, used to be. That was no longer the case.
 
-“Um, it’s not anything important really. It’s just… You’ve just been so busy lately, Wein. We’ve hardly had the chance to talk,” confessed Falanya, looking up at him with hope in her glistening eyes. “…Am I bothering you?”
+The scales had tilted in favor of Marden ever since it had discovered a gold mine, leading it to emerge as a major power over the course of a few short years. On top of that, the mine was infuriatingly close to Natra’s borders. Wein couldn’t stand it. Oh, how he’d internally screamed and cursed at it.
 
-“As if.” Wein smiled. “Any big brother who thinks that is a failure of a sibling. Come over here.”
+DAMMIIIIIIT!
 
-Her face lit up as she rushed over to Wein and hopped onto his knee.
+He’d seriously considered invading Marden once before, but in the end, the idea had fizzled away into nothing.
 
-“G-geez… Falanya, I know I said ‘come over here,’ but this is hardly proper.”
+Now, Marden was trying to invade them.
 
-“I don’t see how that could be. This has been my spot since forever.” She giggled, rubbing her cheek against his chest like an affectionate little pet.
+It’d been decades since Natra had last gone to war with another country. In fact, there were quite a few soldiers without any experience outside of drills and keeping order within the nation.
 
-Wein found his mouth relaxing into a goofy grin, but he reined it in whenever Falanya looked up at him. Meanwhile, Ninym scribbled something on a piece of paper for his eyes only: </>Sister complex</>.
+Under the circumstances, it was natural for anyone involved to be ready to pack their bags and run for the hills—but that wasn’t the case. As they gathered in a room at the royal court, Wein and his military commanders showed no signs of backing down.
 
-Drop it</>, he scrawled.
+“Just as you predicted.”
 
-Falanya tilted her head at him curiously. “Is there something wrong, Wein?”
+“We are impressed by your foresight, Your Highness.”
 
-“Oh, no, it’s nothing. I was just thinking you’re so light compared with a certain someone.”
+They kept calm for one reason: Wein had already foreseen that Marden would invade in the near future and took proactive measures with his commanding officers.
 
-“Now, now. It’s not very nice to compare people’s weights.”
+“It wasn’t so difficult.” He wasn’t feigning modesty. It was the truth.
 
-“Ha-ha, you’re right. I’m sorry,” Wein said with a laugh, looking straight at Ninym.
+The current king of Marden had a truly poor reputation. The rumors of his violent reign of terror had even reached ears in Natra. This king had apparently surrounded himself with corrupt officials who turned a blind eye to his failures as a ruler, and then he kept banishing any who dared to speak out against him.
 
-I’m gonna kill you.
+His behavior was setting the stage for a vicious cycle that would </>drive the country to ruin. With everything that had happened, even the gold mine was relegated to paying off major financial losses instead of contributing to the country’s well-being. With fond memories of their previous, more competent ruler in their hearts, the people were full of dissatisfaction and disappointment.
 
-…Aaaaand he was just gonna pretend he didn’t see that last one.
+Considering Marden’s current state, the current conditions in Natra must have seemed like a once-in-a-lifetime opportunity. The Imperial army was no longer a nuisance now that they had gone home after their nation had fallen from power. This was the best chance Marden had to bring home a straightforward win. Everyone understood the appeal of glory and the spoils of war.
 
-“I’m so relieved,” Falanya said with a sigh. “I was afraid you’d be upset with me for getting in the way.”
+Of course, this was all under the assumption they’d win—but Natra had prepared extensively to prevent that from happening.
 
-“……”
+“What about the garrisons at the border?”
 
-“Wein?”
+“They’re avoiding battle and focusing on observing the enemy, as you instructed.”
 
-“Oh, well, yeah, I’ve been at it nonstop. Right, Ninym?”
+“Very good. Well, what are we facing?”
 
-“Why, yes. Of course… In fact, just before Your Highness’s arrival, Wein said he was displeased with the amount of work I’d given him. I think he insisted I give him more.” Without missing a beat, Ninym whipped out a mountain of paperwork from an undisclosed location and dropped it on his desk. “I, Ninym Ralei, am in awe of Your Highness’s tireless dedication to his duties as a regent.”
+“According to reports, they’re coming with a force of seven thousand,” one of Wein’s commanders commented.
 
-“Oh my. Well, that’s Wein for you.”
+“Less than ten thousand, eh? That was my most conservative estimate.”
 
-“…Right?! It’s only natural as a prince!” Wein chuckled with confidence while shooting Ninym the most damning glare.
+“They must be wary of Kavalinu. That country is home to a hot-blooded bunch, after all.”
 
-She feigned ignorance.
+The Kingdom of Kavalinu was another country that directly bordered Marden. Like Natra, it also enviously eyed Marden’s rich ore deposits. Thanks to the constant threat of foreign invasion by its neighbors, Marden had to strike a delicate balance between offensive and defensive forces. This was a perennial issue among warring nations.
 
-“But you won’t have much free time for a while, will you, Wein?”
+“We have six thousand soldiers prepared to engage the enemy. It seems we’ve fallen slightly short,” said another commander.
 
-“Yeah. The vassals have helped keep the royal court under control for the most part, but there are still problems in the kingdom. I’ll be busy until we can find a solution… I’m sorry. The truth is, I’d really love to play with you.”
+“We’ll be fine. Our weaponry and armor are in order, I take it?”
 
-“There’s no reason to apologize,” consoled Falanya, shaking her head. Her voice grew anxious. “But promise you won’t push yourself too hard. If you collapsed like Father… Oh, I don’t know what I’d do…”
+“Yes. As expected, the Empire’s equipment is all finely crafted. Marden stands no chance.”
 
-“Don’t worry. I may look scrawny, but I won’t go down easy. And you’re wrong if you think you can’t help out.”
+Because they’d anticipated this attack, the war council was doing nothing more than hammering out details and making small, last-minute decisions.
 
-“…What can I do?”
+Wein let his mind drift elsewhere as he listened to them chatter among themselves.
 
-“It’s not difficult: Just keep on smiling.” He poked at her full cheeks. “As long as you keep that up, Falanya, Father and I will be just fine. This is your special power.”
+We’re well prepared. Luckily, we’ll be able to wrap this up before the Empire causes us additional headaches.
 
-“Really?”
+Natra’s fast track to subordination had been interrupted. As rumor had it, the Imperial Court was more preoccupied over which of the three Imperial princes would inherit the throne. Apparently, the divisions had worsened to the point that the various Imperial factions were on the brink of a civil war.
 
-“Of course. I never lie to you… Mostly… Usually… Yeah, well, I’m telling the truth now.”
+But Wein still recognized the Empire as a powerful nation. The foundation of the Empire hadn’t been broken, and he was certain they would overcome this hardship, maintaining their position as the leading power in the East.
 
-“So…is this good?” She gave him a small smile, and he nodded sincerely with satisfaction.
+It was only a matter of time until he would have another chance to sell his country to the Empire. Until then, his job was to bolster power within Natra. After all, the more valuable his kingdom, the greater its price. In that sense, his actions would determine how much he’d be able to enjoy his early retirement.
 
-“Wow, yeah, I’m feeling better already. But I think a hug would make it even better.”
+Our soldiers have been trained to the Empire’s standards. This war’s perfect for proving our strength and value. It’ll also keep other countries in check. Though it comes down to whether we can win—
 
-“Hee-hee-hee. Oh, you’re so silly. Whee!” She giggled, jumping into his arms. “How’s this?”
+Wein and the others had drilled the soldiers, studied the geography, refined their strategy, and even collected intelligence on Marden’s army. There wasn’t the slightest chance of failure. At the very least, Wein was confident the soldiers would be able to repel the attack, opening the option of a quick reconciliation.
 
-“Wow, that’s perfect. I think I can power right through my work this afternoon. Today’s a big day, so you’re really helping me out.”
+It was obvious the Kingdom of Marden was looking down on Natra, figuring this would be an easy victory. They wouldn’t come calling like this just to steal a plot of barren land.
 
-“Oh, that makes me so happy… But what’s so important about today?” Falanya tilted her face to look up at him as she continued to hold on to him tightly.
+It’s perfect…!
 
-“I have a meeting with the Imperial ambassador.”
+His former deal with the Empire had resulted in a pileup of unfortunate coincidences that caused his last scheme to fall through, but that had been nothing but a stroke of bad luck. This time, Wein predicted everything would go according to plan. He indulged himself with a jolly little victory dance in his mind.
 
-The Earthworld Empire was a large nation located on the eastern half of the Varno continent.
+If Ninym were around, she’d have advised him to be more aware of his surroundings. If she did, he might’ve noticed something unexpected brewing under the composed faces of his commanders.
 
-Blessed with a temperate climate and fertile lands, it was rich in mineral resources, and it boasted access to fisheries in one of the largest, most prized lakes on the continent. The Empire was abundant with essentially everything.
+To be frank, the Kingdom of Natra’s army was in a pitiful state before Wein’s ascension to the regency. It wasn’t that the king disregarded his army, but for a long time, Natra simply wasn’t involved in any warfare, and chances for the military to prove its worth were few and far between.
 
-For that reason, it also had a long history of suffering foreign invasions, essentially since its founding. To fend them off, the Empire focused its efforts on military development, and before anyone had time to realize, it had become the strongest nation on the continent. When the current emperor rose to power, he consolidated those forces to occupy neighboring nations one by one. The continent was close to being unified under one leader for the first time in history.
+It was only natural that the military’s standing in the royal court suffered during these times, and it only got worse when foreign troops sauntered into the kingdom acting as if they owned the place. The shame the kingdom’s soldiers endured was intense.
 
-At least, that was the case until the day the Emperor collapsed.
+It was from this point that Wein had turned things around for them. Not only had he persuaded the Empire to train them, but once an opportunity came, he also chased the Imperial troops out of Natra lands. He’d even helped the army procure weapons from the Empire.
 
-“—And that concludes my report on Crown Prince Wein Salema Arbalest.”
+Of course, they were well aware that Wein’s goal was to earn their goodwill, especially considering the kingdom’s recent political unrest. Even with this knowledge, the soldiers and officers were grateful for everything he did, more so than he’d ever imagined—and their devotion was well beyond the call of duty.
 
-“Thank you.” In a room of the building provided for her, Fyshe Blundell emitted a small sigh as the aide wrapped up her report.
+It was at this point that Marden launched its invasion.
 
-Fyshe looked to be in her midtwenties, and her winning feature was her flowing blond hair, which framed her stunning face. But woe to anyone who thought beauty was all there was to her. She was presently residing in the Kingdom of Natra as an Imperial ambassador of the Empire.
+“Let us fulfill our duty as the swords of Natra!”
 
-“Hmm, I suppose the rumors are true: He’s wise and benevolent.”
+“If we cannot meet His Highness’s expectations, then what sort of vassals are we, huh?!”
 
-“Yes, he’s been acknowledged domestically and internationally as the rightful heir to the throne. Even his recent appointment to regent went largely unopposed.”
+Their collective energy had boiled over and finally reached its peak.
 
-“I’m jealous, especially seeing how our own nation has been turned completely upside down. That aside, it’s unfortunate we haven’t been able to properly meet until today.”
+Meanwhile, Wein remained as composed as ever—because he believed victory was assured—even though it was his first battle. The </>commanders knew it would be impertinent to keep shouting and cheering in front of him, so they settled down and forced themselves to at least seem calm on the surface.
 
-“Well, you relocated to Natra when you became the ambassador, right as he left to pursue his studies in the Empire.”
+No one showed their true emotion, which meant no one could’ve realized the massive gap in their expectations:
 
-Yes, Fyshe had first been assigned to the Kingdom of Natra several years prior. Through persistent negotiations, she’d built a decent relationship with the king over the years. But now, the situation had completely changed.
+Let us bring glory and victory to His Highness!
 
-“I wonder how the crown prince will come at us today?”
+Hurry up and get this over with! Retreat and reconcile!
 
-“He’ll likely get straight to the point… He can’t afford not to. I’ve no doubt he’ll bring up the Imperial troops stationed here.”
+Their intentions were mismatched.
 
-At the moment, there were about five thousand troops stationed in Natra—a feat accomplished by a series of successful negotiations that secured official permission from their king. But Fyshe and her aide knew this foreign military presence was being met with anxiety and opposition by the people of the kingdom.
+The battle with Marden loomed on the horizon.
 
-“Will he demand we withdraw?”
+The Polta Wasteland was near Natra’s western border.
 
-“I can’t say for sure. It’ll be important to pay attention to his position during the meeting. But let’s also keep an eye out for his character… It should be easy to tell whether he’s fit to be king. Well, all that being said, anyone who hires a Flahm is more than a little peculiar.”
+As the name suggested, it was a barren plot with nothing but sand and rocks, especially in the early spring. There was no snow now, unlike in the dead of winter, when it transformed into a dazzling world of silver.
 
-“You mean Ninym Ralei?”
+At the moment, seven thousand Marden soldiers were marching through the region under the strict command of General Urgio. He was a man in his prime with harsh features and an even sharper gaze. He resembled a bird of prey.
 
-“Who else? I mean, I knew many of them lived here, but I was surprised to see other countries besides the Empire appoint Flahm as vassals.”
+“Hmph. It’s just as they say. There’s absolutely nothing here,” he grumbled from the top of his horse. “Those court pigs are incompetent beyond help. What’s the point of seizing this place?”
 
-“My thoughts exactly. And it would seem this kingdom has a history of accepting them that is far older than ours. Natra must seem odd to nations in the West, since their people only treat the Flahm as slaves.”
+“I bet they’re just desperate to have us distract the masses from their failures,” suggested the adjutant with a dry smile.
 
-“When the Empire finally unifies the continent, we’ll eradicate such senseless values and traditions… Well then, let us head to the meeting.” Fyshe stood from her chair.
+Urgio let out an ugly little snort. “In that case, they should distribute the cost of this campaign to the people instead. That’d be a much simpler way to pull the wool over their eyes. If these fools don’t even understand that much, we’ve screwed ourselves by having them run our kingdom.”
 
-This was the first time they’d be coming together for official business and exchange words beyond a few simple pleasantries.
+“If they did that, those talentless hacks would go too far and end up giving away our very livelihoods.”
 
-“If our information is correct, our lack of progress is nearing its end. </>We </>must</> ensure our troops remain here, no matter what.” With a firm resolve, she set out for the meeting.
+“We’ll roast those pigs whole if that ever happens. I doubt they’d be worth eating, though.”
 
-“Fyshe Blundell was originally an ambassador to Vanhelio,” Ninym commented, feeding Wein some basic information as she trailed after him down the corridor of the royal palace
+As the two laughed bitterly, a soldier rushed up to them on horseback.
 
-“Say, Vanhelio is a large nation in the West. Why would she come here?”
+“I have a message! The Kingdom of Natra’s troops have been spotted twenty-five miles to the east! They’re advancing on us!”
 
-When they were in public, their speech was strictly that of master and servant. Not that speaking this way was particularly difficult. They had a long time to practice and adjust to switching back and forth.
+“Ngh…” The general’s eyes flashed.
 
-“Well, she was caught up in political turmoil occurring in her homeland and ended up in Natra while you were in the Empire. She may not be rising through the ranks anymore, but she’s still very skilled and talented.”
+“It seems they move quicker than we thought.”
 
-“If she’s that good, then I bet she’s bored of living in our rural kingdom.”
+“Hmph. As expected of northern opportunists. They’re quick. I give them that much. That is, if they didn’t leave their spears at home in a hurry.”
 
-“Actually, according to her, she is quite satisfied. Our sources have said she’s openly stated she’s weary of dealing with politics.”
+“But, General, I heard their soldiers have recently been trained by the Empire. If we let our guard down, it may come back to bite us.”
 
-He smiled wryly. “I see. Whatever the case may be, I’m delighted to hear outsiders taking a liking to our nation. But if she’s that brilliant, I don’t anticipate this meeting to be a straightforward one.”
+“Eh, don’t worry. They’re about to find out firsthand that even if you teach a chicken how a hawk flies, it’ll always be nothing but a chicken. Move our men faster. Since their troops are in a hurry to put their necks on the chopping block, we’re going to finish this up right away.”
 
-“The issue at hand is the occupying Imperial soldiers…,” Ninym mentioned. “This will be tricky.”
+“Yes, sir!” The adjutant began barking out orders.
 
-Wein sighed inwardly. </>Yeah, can’t argue with that.
+Giving him a sidelong glance, Urgio turned his attention toward the east, reminding himself that he’d been appointed commander of this war—the reason why didn’t matter. Natra was hardly a worthy enemy, but a victory was still a victory. He’d make sure to serve up their heads on a platter.
 
-To begin with, why were they even in Natra? On paper, they were using the region to practice drills. That wasn’t the whole truth, of course.
+“Those weaklings better entertain me a little.”
 
-There were a number of factors at play, but they all led to the same core issue: The Kingdom of Natra was in a vulnerable geographic location.
+He was eager to soak this desolate land with the blood of his enemies and gave a nasty grin to no one in particular.
 
-Imagine a rough ellipsis. Let’s say that’s the continent of Varno.
+Meanwhile, Natra army leaders were reviewing intel about the Marden troops again.
 
-Next, picture the Giant’s Backbone, a mountain range stretching from north to south, dividing the continent into two equal halves. It acted as a barrier between East and West, resulting in completely different policies, races, ideologies, and cultures between the two.
+“Just what we expected.”
 
-Of course, it wasn’t as if travel between them was impossible. In fact, plenty of roads connecting the two halves had been established in recent years. Unfortunately, most of these paths were only useful for trade and private travel.
+“Yes. Let’s move forward with our plan and advance to the hill,” agreed a mounted, elderly commander, nodding at Wein, who was reading a map on his own horse.
 
-Compare those roads to the blood vessels in the human body. To take this analogy further: An artery would be a major road that could support the comings and goings of hundreds of thousands of soldiers. There are relatively few major arteries in a human body, and they serve an incredibly vital function—similarly, these roads hold immense commercial and militaristic value.
+He was Hagal, the general of the Natra troops in the field.
 
-For a country aiming for complete dominion, one might even say these roads would be indispensable.
+Technically, the supreme commander of the army was Wein, but he had no interest in military exploits. The last thing he wanted was to steal credit for the victory from his officers, so ideally, he would’ve preferred sitting this entire thing out.
 
-And it was directly through the Kingdom of Natra that the continent’s northernmost artery ran. In its bid to control the Western lands, this was not a place the Empire could ignore.
+That said, this was their nation’s first war in a long time. There was no saying what might happen. He prudently suggested accompanying the troops—in case they needed him to massage out a diplomatic solution instead. That way, if the opportunity presented itself, he could pacify their opponents and bring the whole incident to an end as quickly as possible.
 
-Why did this happen?
+Nonetheless, his soldiers were uneasy that he was nominally in charge. After all, he’d never set foot on a battlefield, and now he was leading an entire army.
 
-When the Empire stationed its soldiers here, it paid a considerable sum of money for the privilege. It wasn’t a one-sided agreement.
+This was why Hagal was the one truly in command. He was originally a high-ranking officer of a foreign military—renowned for his long military career and involvement in countless historic battles. It was quite curious how someone of his caliber was stuck in the backwater of Natra. But he had his reasons.
 
-That said, having foreign soldiers on the kingdom’s land was like having a knife pressed to the throat. It made the citizens nervous, and the domestic troops didn’t approve, either.
+Threatened by Hagal’s brilliance and popularity, a lord of his previous land attempted to have him killed a few decades ago. Fleeing as far as he could, Hagal eventually wound up in Wein’s country.
 
-Well, to be exact, the military was expecting Wein to force the Imperial soldiers to withdraw.
+Though the aging commander had recently stopped leading from the front, Wein know no one in their right mind would complain with Hagal in charge.
 
-It wasn’t as if he didn’t share their sentiments. After all, it wasn’t </>just</> a concern for national security: It was a matter of honor. But there was a reason Wein was unable to grant their wish.
+But, man, the military is a serious money-eating enterprise. Bye-bye, cash. Good-bye, funds.
 
-And that reason was… Drumroll, please.
+With Hagal giving out orders to the army, Wein was relegated to a spectator role. Not that he had any complaints. He was treating this as a good chance to inspect the variety and quantity of goods consumed by the soldiers. This was the moment he’d realized exactly how much money it cost to mobilize his troops.
 
-Frankly, I wanna butter ’em up!
+First and foremost, he had to pay them a salary. Then he needed to provide water and other provisions as well. On top of that, there were </>still the costs of the horses, their fodder, weapons, armor, and a mountain of day-to-day necessities.
 
-And there it was.
+After he added in sundry expenses and calculated the total amount it’d cost by the time they returned home, he nearly let out a harrowing moan. </>Ugaaaaah.
 
-Honestly, going up against a huge country would be a huge pain in the ass, and we could really use the money. I’m totally fine with the whole deal, really…
+“Is everything all right, Your Highness?”
 
-First and foremost, Wein had studied in the Empire, meaning he had a solid understanding of their military prowess.
+“Ah, yeah, yep… I was just wondering how fast we can put an end to this war.”
 
-But ignoring the wishes of his troops would also present a problem.
+That was the only way to stop them from losing any more money. He’d heard of kings who relished war, but he figured they must be pretty terrible at math.
 
-I mean, the only reason my rise to regent was so smooth in the first place was because the vassals have high hopes for me. If I disappoint them by immediately wagging my tail at the Empire, it’ll make things tough from here on out. And if I tick off the military, there’s the possibility of a coup.
+“What do you think, Hagal?”
 
-He was damned if he did and damned if he didn’t. As Wein internally lamented and moaned over his crisis, he realized his aide was gone.
+“It’ll be difficult. War is a hard thing to predict before it actually begins… I take it you’re hoping to make this a quick battle.”
 
-“Ninym?”
+“I believe that’d be for the best—but there’d be no point in aiming for that if it’ll cost us victory. What I mean is… Yes, what I want is to be convinced. Even if it takes some time, I want a result that convinces me this battle was a good use of our time. What do you think, Hagal?”
 
-“—Pardon me.” Ninym appeared from the shadows. “We’ve just received word from our spies in the Empire.”
+“Please leave it to me.” The old man bowed reverently to the boy, who was young enough to be his grandson. “I vow this battle will be to your satisfaction.”
 
-“Word…?”
+“Let’s hope for the best. Well, looks like we’re almost there.” Wein gazed ahead at the low hill as it came into view.
 
-She handed him a letter. Wein read its contents.
+Six thousand soldiers fighting for Natra.
 
-“…Hmm, is that so?” He cocked an eyebrow. “There’s no doubt that the ambassador caught wind of this, too… In that case…” He closed his eyes for a moment, then started forward. “Let’s go, Ninym. I’ve got a plan.”
+Seven thousand for Marden.
 
-“R-right… But what’s your plan, again?”
+Across a barren wasteland strewn with rock and sand, the two armies faced each other. Though there was still quite a distance between the two hosts, the atmosphere of battle had already settled onto the scene.
 
-“I’ve decided,” Wein hinted with a grin. “We’re takin’ it all.”
+From here on out, many men would be trying their best to kill one another.
 
-“It’s been quite some time, Your Highness,” greeted Fyshe Blundell upon Wein’s arrival, Ninym in tow. With her aide by her side, she’d been waiting for them in the reception room. “I have made your acquaintance on a previous occasion, but allow me to formally introduce myself again: I am the ambassador of the Earthworld Empire, Fyshe Blundell.”
+“Your Highness, the troops are ready.”
 
-“And I am the prince of the Kingdom of Natra, Wein Salema Arbalest.”
+From a tent on top of a hill, Wein nodded at Hagal. “And what about the Marden army?”
 
-With that, they sat down.
+“It appears they’re prepared as well.”
 
-Fyshe was the one to start off the talks.
+“I guess all that’s left is to wait for the battle to start.”
 
-“Thank you for meeting with me. Please accept my sincerest congratulations on Your Highness’s ascension to prince regent. I do hope I am not too bold in saying we keenly feel the kingdom’s grief over His Royal Majesty the King’s condition and see your promotion as the only silver lining among these darkest of times.”
+“Yes, indeed. Would Your Highness say a few words to everyone before they set out?”
 
-“Thank you, Ambassador Blundell. I know I’m carrying the hopes and dreams of many on my shoulders. I intend to do my best not to betray my people. I look forward to working together to foster a cordial relationship between Natra and Earthworld.”
+“I don’t mind, but is this really the time for a speech? I mean, will it </>do</> anything, Hagal?”
 
-“Of course, Your Highness.”
+“Of course. A battlefield is the domain of death itself. In such a place, our hearts wear out faster than our bodies. A few words of encouragement will help keep them from breaking.”
 
-The meeting began on a harmonious note.
+Wein couldn’t argue with a seasoned commander. Besides, if he showed concern for the well-being of his men, it’d also lower the chance of a coup later on. But what should he say? As he continued to think, he walked over to stand in front of the entire army at the foot of the hill.
 
-The two exchanged pleasantries and discussed topics with no real meaning or consequence. Or it might appear that way. In reality, they were sizing each other up and taking note of their opponent’s character. On one hand, you had an acting head of state. On the other, the ambassador of a powerful nation. They sat face-to-face, eyeing each other. You might even call it a joint effort.
+As he gazed over them, he made his decision: “Torace of Heinoy.”
 
-The tension in the room bubbled, palpable in the air. The audience observing them understood: This initial conversation was a calculated, critical dance to find out who had more of an edge.
+It was someone’s name. In the center of their formation, one of the soldiers’ heads snapped up. He was surprised and confused to hear the crown prince call him by his name.
 
-So it’s true… He’s the real deal…</> Fyshe reminded herself not to underestimate him. </>Usually, the young and inexperienced want to see immediate results… But he acts like he has all the time in the world. He doesn’t let his title get to his head but also speaks easily with someone of my station. He just became regent, but he has a regal air.
+“Your spear. It’s upside down,” Wein remarked.
 
-But she knew her questioning would be thorough, and her talking points were solid. Having said that, she would not resort to underhanded tactics or aggressive interrogations. She needed to remain calm. This opponent was very hard to read.
+“Wha…? Oh.” The soldier looked down at his own hand.
 
-When she was his age, she certainly didn’t have this much wisdom and tact. She knew this much for sure.
+Sure enough, the tip was sticking into the ground, and the wrong end faced up toward the sky. He fumbled, flipping his spear around, and quickly stood at attention again. By then, his face was beet red.
 
-If I’m not careful, I’m done for…</> She set her senses to high alert and braced herself.
+Someone burst into laughter, and it quickly spread across the army.
 
-As Fyshe was busy with her own thoughts, something else distracted Wein from the task at hand.
+“Karlmann, Patess, Livi, Logli, it’s not that funny,” said Wein, piercing right through the din with his sharp warning.
 
-Holy. Her boobs are</> huge</>…
+The four names belonged to soldiers who were guffawing especially hard, and they shut their mouths with a start. This turned out to be just as comical, but the soldiers kept silent and limited the mirth to their quivering shoulders, knowing they might be called out if they laughed again.
 
-He was the worst of the worst.
+Seems like they’ve managed to relax a little.
 
-I didn’t notice when she introduced herself, but wow. They’re really somethin’ else… I know they’re two bundles of fat, but it’s like they’ve taken on a life of their own. Is it because the Empire’s overabundant in pretty much everything? I mean, when you compare ’em…</> Wein turned around to look at Ninym, who was jotting down notes behind him. Well, more specifically, at her breasts.
+When he had observed them earlier, Wein had noticed they were tense. It was understandable. After all, it was the first time most of them would participate in a battle. Drills could help to a certain extent, but there were some things that had to be learned through real-life experience.
 
-…Yep. The gap in destructive power is pretty obvious.
+In any case, Wein had cleared the first hurdle. All that was left was to boost their morale.
 
-Whir!</> Her quill pen stabbed the back of his head.
+“To this very day, people have called the army of Natra weak. To be fair, that was once true. And right now, those soldiers from Marden are looking down on us in the exact same way.” His voice boomed, echoing through the crowd. “But I know how you’ve endured soul-crushing training. I know each and every one of you has courage beyond compare. And I know that as you stand here to face those invaders, there is nothing but fire in your hearts. You have no reason to believe you’re weak anymore.”
 
-“Ow…!”
+The relaxed atmosphere from earlier was gone. Now, the soldiers were impetuous, seized by a fiery spirit.
 
-“Your Highness?”
+Fanning the flames he had set, he shouted out to them, “This battle is where we show them that we are the dragons of the north! Let it ring throughout the continent: </>We</> are the greatest army to stalk the land! Let us conquer all! We will rewrite history—today!”
 
-“Ah, no, just a bit of a headache. I guess losing sleep over work isn’t the best idea,” he suggested, in a hurry to smooth things over.
+“YEAAAAAAAAAAH!”</> Their collective cries shook heaven and earth.
 
-Ninym passed a document to him from behind. </>Be serious</>, it said.
+It seemed he somehow managed to succeed.
 
-How the hell did she know what I was thinking?</> He shivered at the thought of women’s intuition.
+As he let out an internal sigh of relief, Hagal rode up to him. “You were magnificent, Your Highness. I couldn’t have sparked such fire in them.”
 
-He was still considering this frightening idea when Fyshe smiled gently at him.
+“At the very least, they won’t drop their weapons in fear,” Wein replied with a slight smile.
 
-“—At any rate, I feel as though a weight’s been lifted. To tell the truth, I had some concerns prior to our meeting about forming good relations with Your Highness. But this has assured me those fears were unfounded.”
+“Did you plant some soldiers you knew in the crowd?”
 
-“I’m glad hear you say so, Ambassador. This partnership will certainly help me out and solve some of my worries.”
+“Don’t be stupid. I was totally improvising.”
 
-“Well, I assume you have a never-ending list of worries, now that you’re taking over the duties of your office?”
+“And you happened to know their names?”
 
-“Like trying to drink the sea. Pleasing your citizens, meeting with foreign nations, forming relations with the nobility, strengthening the </>military, increasing funds, supporting our industries… I take many things into consideration.”
+“Well, I memorized most of them. It’s not like we have hundreds of thousands of soldiers. If you add up the entire army, it comes to only ten thousand men.”
 
-“Which would also include,” she said, her eyes glinting shrewdly, “our soldiers stationed here.”
+“……” A perplexed look spread across Hagal’s face.
 
-The air froze.
+As the feverish cries of their enemy reached his ears, Urgio clicked his tongue in annoyance.
 
-The prelude had come to an end. The true battle was about to begin.
+“Ranting and raving like the opportunist scum they are,” he spat.
 
-Well, how are you going to respond?</> Fyshe eyed him carefully.
+“General, our preparations are complete.”
 
-Wein opened his mouth. “Maintaining relations with the Empire is my top priority.”
+“Good.”
 
-“In that case—,” she started.
+He squashed his irritation back down before facing his men, knowing he couldn’t put his short temper on full display with thousands of eyes on him.
 
-“However,” he interrupted, “the truth is, the presence of a foreign military makes my own troops uneasy.”
+“Listen up, warriors of Marden!” he blared, voice rumbling in the pit of his soldiers’ stomachs. “That over there is our pathetic little enemy! They’ve mistaken recklessness as courage and wish to oppose our advance! But no matter how many peasants they gather to make their ragtag army, there’s no way they will ever win against us!”
 
-But his confession had no effect on Fyshe. She’d expected he might say that: He wanted to save face with the Empire and still win over his people. Now it was time for her to negotiate—with funds or commodities—until they conceded. She had predicted those concessions were his aim, of course, and had come fully prepared.
+Urgio sharply drew out his sword, and the soldiers raised their weapons to the sky.
 
-This was exactly why Wein’s next statement bewildered her.
+“Crush them underfoot! We will soak this wasteland with their blood! Troops! Forward march—!”
 
-“So I plan on removing the source of their worries.”
+Howling up at the sky, seven thousand men stomped on the ground as one united front.
 
-“Wha…? ‘Removing,’ you say?”
+“So they’re here.”
 
-“Yes. As I mentioned before, I’m very interested in maintaining a cordial relationship with the Empire. To do that, we should attempt to bridge the gap between the two, don’t you think?”
+Their enemy advanced—a human tsunami. Wein could feel their presence overpower him from his position at the headquarters.
 
-“…You’re right.”
+“Troops, stand ready!” barked Hagal.
+
+At his command, the army raised their shields and spears. With the Marden on the offense, the soldiers fighting for Natra were forced to take on the defense: ready to stand in place and beat them back.
+
+If Marden was a tsunami, then Natra was a levee.
+
+The rival army steadily approached them. The tension was palpable, setting their skin alight and seemingly whipping the very air around them.
+
+Natra would win this battle. Victory was certain. But fear was a part of human nature.
+
+Wein watched the encroaching army with feigned composure, desperately praying inside all the while.
+
+Please—let this go well.
+
+The two armies drew closer. The distance between them shrank. His heart raced faster and faster.
+
+Until finally, the tsunami hit the levee—
+
+““</>Huh?””
+
+Wein and Urgio couldn’t believe their eyes.
+
+Whoa… Whoa, whoa, whoa…!
+
+W-wait…?!
+
+From their respective places, they gazed at the scene unfolding in front of them, united in a single thought: </>What in the world is going on…?!
+
+On the battlefield, the soldiers of Natra were in a rather standard formation: From a bird’s-eye view, you’d see them in a rectangular shape spread out before the Marden army.
+
+Their opponents had their own battle arrangement. Their men were concentrated in the middle of its formation, unlike their opponent’s uniform structure. The Marden were banking on breaking through the opposing center line, then turning around and destroying them in one go.
+
+Humans are particularly vulnerable to attacks from the side and from behind. This principle can be applied to an entire army, too, meaning assaults from the rear are extremely advantageous.
+
+To counter these attacks, the troops of Natra needed to focus on destroying the enemy soldiers in the center. That said, they were going against seven thousand men with an army of six thousand. If strength was in numbers, it was obvious which one had the advantage.
+
+But war isn’t determined by that alone.
+
+After all, victory depended on many unquantifiable factors, like skill.
+
+“General Urgio! We have a request for backup from the left flank—Loshina Unit!”
+
+“A message has come in! The Sanse Unit has been annihilated! The Tljii Unit is heading there as backup!”
+
+“General, the right flank’s struggling as well!”
+
+News from the battlefield hit them as one report after another came in: All reported the dire condition of the Marden army.
+
+“No way…” Surprise spilled from Urgio’s lips in spite of himself.
+
+But his words reflected the collective bewilderment of the Marden officers.
+
+How the hell are their soldiers this strong…?!
+
+Wait, Marden is weak as shhhiiiiiiiit?!
+
+While Urgio and his staff were stiff with shock, Wein sat on the opposite side of the battlefield in disbelief.
+
+What</> is </>this?! Huh?! Why are we beating the crap out of them?!
+
+His words were no lie. The battle was completely one-sided.
+
+The Natra and Marden men met in a zealous clash, but it was immediately evident which one was stronger—even before the impact of their initial collision died down.
+
+The Marden troops brandished their weapons, single-mindedly focused on taking down the enemy in front of them. But their attacks weren’t coordinated or collaborative: It was every man for himself.
+
+But Wein’s soldiers were different.
+
+When Marden troops rushed in, some defenders raised their shields to stop the enemy assault, freeing up nearby allies to beat the attack back. On the other hand, when the enemy closed up their formation in self-defense, the Natra soldiers coordinated to break through it—all the while maintaining formation. Instead of fighting individually, the Natra army moved as one, with each soldier supporting the men beside him.
+
+Though fewer in numbers, it was painfully clear that Natra had the overwhelming superior force.
+
+“What’s the matter, Your Highness?” Hagal questioned, noticing his confusion.
+
+“…I was surprised. We’re better than I thought.”
+
+Not that he doubted they’d win, but this was well beyond his expectations.
+
+“Did you know it’d turn out like this, Hagal?”
+
+“Why, yes. After all, we all invent and refine things to fulfill a need. To illustrate my point, the Empire has a long history of battles. This is one of the reasons they’re able to train their soldiers so effectively. To be honest, even I was impressed when I observed their methods. Once we learned their ways, I knew we’d easily defeat a small country with nothing but minor skirmishes under its belt.” He broke into a wry smile. “But I’m a little surprised by how weak they are. It’s possible this is a setup, but I really don’t believe that to be the case by this point. But, Your Highness…”
+
+“Yeah, I haven’t forgotten. We’ll just have to whittle ’em down while we still can…”
+
+Just then, a huge shout erupted from the right flank. After halting the Marden advance, Natra soldiers had gone on the attack.
+
+“Looks like Raklum has made his move.”
+
+Roars and screams blared out of the crowd at the edge of the right flank.
+
+Through strewn bodies and followed by the metallic scent of fresh </>blood, Raklum rode on his horse. Under his command, the officers spat out orders:
+
+“Don’t break formation! Move together as a unit!”
+
+“Shore up the defense! Dispatch reinforcements!”
+
+“The Marden are gettin’ cold feet! Force ’em back!”
+
+The soldiers at the front lines followed their instructions with a keen awareness that this battle was going in their favor, just as Wein had observed.
+
+They were fighting well, and it was already affecting the enemy. In fact, the Natra soldiers were quickly overwhelming the enemy. Months of harsh training under the Empire’s tutelage were coming to fruition, and as the battle wore on, the men’s morale continued to rise. Thanks to Raklum’s commanding officers giving out precise orders and the soldiers speedily carrying them out, they were pushing back Marden more and more.
+
+Right now, their army was in the zone. They no longer felt any doubt.
+
+This was why the commanding officers made a proposal to their leader, Raklum.
+
+“Commander Raklum, sir! This is our chance! Let’s launch a full-on attack!”
+
+“At this point, we can smash through their defenses and take ’em from the rear!”
+
+“Commander Raklum!”
+
+Suggestion after suggestion whizzed past the captain’s ears, but his eyes were cast downward. He was unresponsive.
+
+The commanders looked at one another. This was different from the Raklum they knew, the one who matter-of-factly issued orders during their drills. They’d never seen this side of him.
+
+One of them nervously reached out, wondering what was wrong. “Captain…?”
+
+As he gingerly touched his shoulder, Raklum’s head snapped up. The commander stiffened in an instant.
+
+Raklum had been crying.
+
+Grown men shouldn’t cry—but tears poured from his eyes, heedless of his subordinates’ gaze.
+
+“C-Commander Raklum, what in the world…?”
+
+“UWAAAAAAAAAAAAAAAAGHHH!” blared Raklum in an agonizing, throaty voice.
+
+This inhuman cry startled the Natra and Marden troops in the right flank, causing them to shake involuntarily and stop their movements.
+
+They all turned toward the direction of the noise—Raklum.
+
+“I… I’m sad,” he admitted. With all eyes on him, he moved his horse forward. “This is the very first battle of the glorious Prince Regent Wein Salema Arbalest… His first step of many on a brilliant journey…and yet…and yet…”
+
+The tears transformed into unbridled fury, blazing out of his shy eyes.
+
+The Marden soldiers shivered at the sight of his rage.
+
+“What worthless trash… All we’re doing is clearing out weeds. It shouldn’t be like this… We should be offering up the blood of strong, cunning, renowned prey, worthy of His Highness’s splendor…”
+
+Raklum suddenly dropped down from his horse and stomped across to the enemy, sauntering as though walking through an empty field. He finally came to a halt in front of the Marden soldiers, who were all frozen in place.
+
+This was an unusual sight: an enemy leader standing before them alone, crying. It left them so dumbfounded, they didn’t dare move.
+
+“Your Highness… Oh, please forgive your retainer for his unworthiness.”
+
+Both of Raklum’s long arms lashed out, flashing through the air like whips.
+
+With a loud </>pop</>, a soldier’s face split into two, and his body was callously tossed in the air.
+
+“—At the very least, I vow to create a mountain of their dirty corpses.”
+
+With that, everyone came to their senses.
+
+“K-kill him—!”
+
+“Follow Commander Raklum!”
+
+Raklum swung his gauntleted fist as the Marden soldiers swarmed him.
+
+“He’s pushing back the enemy! Their defeat is close at hand!”
+
+Wein nodded in satisfaction at the messenger’s report.
+
+He goes a little wild sometimes, but it looks like it’ll be okay this time. Good, good.
+
+By handpicking Raklum as one of his officers, Wein had made the man unimaginably loyal to him. In truth, Wein had been a little concerned as to whether that might make things worse in a real battle. But considering how things were going, he figured everything would work out.
+
+What the hell was he thinking, getting off his horse and bashing people himself?</> he’d come to think in hindsight over the coming days as detailed reports filtered in. Not that he had any way of knowing that at the moment.
+
+But this is bad.
+
+One after another, the messengers reported that they were at a major advantage. However, clouds of doubt continued to swirl inside his conscience.
+
+Marden should just hurry up and cut their losses. If they don’t…
+
+As Wein fretted, Hagal’s eyes glinted shrewdly. “Your Highness, our threads have begun to fray,” he reported.
+
+Gah.</> Wein narrowly escaped saying that out loud, hurriedly swallowing it down. “You’re sure?”
+
+“Yes… The battle conditions are changing again. Please prepare yourself, Your Highness.”
+
+Wein gave a short nod as he looked on at the battlefield and remembered what Hagal had said before they had set off for battle.
+
+“Wait, our soldiers won’t last long?”
+
+“That’s correct,” Hagal had said frankly at the war council meeting. </>“By training hard, our soldiers are almost unrecognizable in strength and likely to dominate at the start of battle. But they’ll wear out after ninety minutes.”
+
+“Why?”
+
+“Because most of them are unfamiliar with war,” Hagal had explained. “The cold air, spilled blood and sinew, uncontrollable bloodlust… In battle, the heart gets worn down faster than the body. When that happens, your vision narrows and your ears start to close. This makes soldiers slow to come to the aid of their comrades or obey new orders. You could say it reduces the strength of our army by half.”
+
+“Even after all their training?”
+
+“No amount of training can change this,” he had said, nodding. “There are just too many things on the battlefield you cannot know unless you experience them yourself.”
+
+“…So Marden has the upper hand in this regard. Their experience might consist mostly of smaller skirmishes, but they’ve experienced war before.”
+
+“Yes. Unless their leader’s exceedingly foolish, he won’t overlook this opportunity. That means the deciding factor is how much you can whittle down their army until then.”
+
+“Let’s hope he’s the dumbest, most unaware leader possible,” Wein had wished with a sigh.
+
+But of course, his wish didn’t come true.
+
+—The enemy is moving with less force!</> Almost immediately, Urgio sensed this sudden change.
+
+“General!”
+
+“I know! Give me ten seconds!”
+
+At the start of battle, they had seven thousand of their men fighting against six thousand enemy soldiers. But despite their early advantage, </>they currently stood five thousand to five thousand—an even playing field.
+
+With the Natra army’s movements slowing down, there was a chance to make a comeback.
+
+But it was useless. That alone wouldn’t be enough. If the Marden army couldn’t beat them before sunset, their opponents would start to prepare for their next move, rest, and recuperate, meaning Urgio’s men would have to fight them all over again.
+
+This is our chance. Now or never. We’ll have to—
 
 This is bad.
 
-It was clear he had some sort of ulterior motive, but she couldn’t figure it out in time. He was setting the pace of their conversation instead of following her lead. But she couldn’t regain the initiative at this very moment, not now. It wasn’t the time to set things straight.
+On the other side, Wein’s patience was wearing thin. The reason wasn’t just the deteriorating condition of his army. It was because he’d pretty much hand-fed the Marden a way to turn things around.
 
-“I’d like to take this opportunity to restructure the kingdom’s military.”
+It’d take time to prepare a counterattack. If the enemy started to move in before then—
 
-“Restructure your military…?”
+I’m begging you not to notice…!
 
-“It pains me to admit our armed forces are weak. After all, we </>haven’t spent much time on a real battlefield. This inexperience and naïveté has caused friction with the Empire and prevented us from forming a real partnership.”
+Wein sent a prayer to the heavens above.
 
-“And you want to smooth things over by overhauling your military organization?”
+But his prayers were in vain, for Urgio surveyed the battlefield and quickly spotted the epicenter of this change.
 
-“Exactly. The problem is we won’t see any progress or growth if we continue to rely only on our limited knowledge, and we don’t have the necessary funds to carry it out to boot.” Wein smirked. “So, Ambassador Blundell. Could the Empire give us their funds and military expertise?”
+Are the front lines wearing thin…?
 
-Fyshe stood dumbfounded.
+Though the Natra army was holding out and trying to keep formation, their center was weakening.
 
-But it wasn’t just her. Her aide and Ninym were also seized by shock and agitation.
+Why? The answer quickly sprang to mind.
 
-How stupid! There’s no way we’d accept those terms!</> her aide screamed internally.
+To destroy the left flank of Urgio’s army, Natra had shifted soldiers from the middle of their formation to their right. Unfortunately, their manpower slowly petered out before they could follow through on the attack, and they’d entered a stalemate and a thin formation.
 
-A crease formed between Ninym’s brow. </>Requesting the Empire to not only train our kingdom’s military but also pay for it… That’s way too unreasonable! Maybe he’s starting big so his next request seems more fair?
+An image of victory flashed in front of him. They could do it.
 
-The two instinctively shot Wein a skeptical look.
+This is the moment of truth</>, he screamed in his mind.
 
-But it was no use.
+“Tell the leaders on both flanks to keep whatever enemy troops </>they’re fighting occupied—get the main forces back in formation!” he blared. “We attack as soon as everything’s ready!”
 
-He was convinced his plan was perfectly sane. And in truth, Fyshe’s reaction was vastly different from the two aides as she sat across from him.
+“Yes, sir! What’s the target?!”
 
-“…Will this resolve our strife?”
+“Isn’t it obvious?” Urgio looked into the distance as his eyes gleamed. “The head of their dear leader!”
 
-“This small gesture will be enough to reach the hearts of my men. And I plan on doing my part to solve the problem as well.”
+Ugh, crap—hold on! We’re not freakin’ ready yet—
 
-“……”
+The center of the Marden formation had unleashed an attack on his men.
 
-She sank into silence, though her mind was a maelstrom. With all eyes on her, she finally caught up with her thoughts enough to speak again. “Understood. We can discuss the conditions at a later date, but…we will accept this proposal.”
+The single blow targeted their cavalry, taking a huge bite out of their weakened army.
 
-“Thank you, Ambassador. I thought you might understand.”
+But the Marden forces couldn’t be stopped. They pressed through the gap, worming their way through. There were no soldiers left to defend this opening on Natra’s side. And with men fervently fighting on both flanks, Wein couldn’t ask his troops to return to their original positions and block the new enemy advance.
 
-They shook hands firmly as their aides stared and stared in disbelief.
+Their opponents would burst through their main defense. There were about a thousand soldiers pushing through. When that happened, the only ones available for defense would be Wein, Hagal, and a hundred other guards on top of the hill.
 
-“WHEW. I. AM. BEAT!”
+“Your Highness, we must pull back. Quickly.”
 
-With the burning sun dipping below the horizon, the moon started to shine in the night sky. His duties done for the day, Wein made a beeline for his room and dived onto his bed.
+“I know.”
 
-“Aghhh, enough already. I can’t take this anymore. Why is being regent so exhausting? We went hard today, so let’s take tomorrow off. And the day after that and the day after that.”
+There was only one path. Under Hagal’s order, Wein and the others hastily made their retreat.
 
-“You know we can’t.” Ninym sighed, watching him roll around on the bed. “That aside, Wein, there’s something I’d like to ask.”
+“General! He’s escaping from their main headquarters!”
 
-“My sincerest apologies, but we’re closed for the day. I’m going to sleep now, so I ask all Ninyms to please return to their quarters for the evening.”
+“How pathetic! He should just take the loss like a man. But there aren’t that many of them up with him! Go after him on horseback! Have the infantry hold their main forces in place!”
 
-“It’ll only take a second.”
+“Yes, sir!”
 
-“…You’re not gonna let this go, huh?”
+Urgio divided his infantry. He set out after Wein with a cavalry detachment four hundred strong. They launched upward toward the </>top of the hill and skidded to a halt near their main headquarters, seizing a few craggy mountains behind the hill. Hiding in one of the shadows was the prince’s personal guard.
 
-“No.”
+“So you planned to run and hide again… Pity. Your heavy armor backfired on you!” he barked.
 
-He huffed. “Fine. As long as you add </>meow</> to the end of every sentence from now until bedtime.”
+The guards in their enemy’s headquarters were nearly all foot soldiers equipped with spears and shields. They couldn’t outrun horses.
 
-“……”
+“Get them before they hide in the cliffs! Let’s go—!”
 
-“Hey, hey, c’mon! What’s wrong, Niny</>meow</>?! Does your embarrassment outweigh your curiosity?!”
+He issued the order and descended the hill with his cavalry. As they closed the distance between them, the guards stopped moving and turned around in what seemed like resignation, forming a line of defense to face the coming attack.
 
-“…Fine, </>meow</>.”
+But it was much too thin. They could be broken in a single charge. Urgio raised a war cry, certain of victory—
 
-“Hmm?! I can’t hear you, </>meow</>! It’ll be a problem if you don’t speak up, MWROOOOW, MY ARM DOESN’T BEND THAT WAY!”
+“I told you not to come,” cursed Wein in a low voice no one could hear. Then he issued a command. “All right, let’s wrap this up…!”
 
-“Don’t get cocky, </>meow</>.”
+Ninym Ralei ordered the soldiers, “—Archers, loose.”
 
-“I-I’m sorry, </>meow</>…,” he whimpered. “Well, lemme guess: You’re going to ask me why Boobies went along with my plan, right?”
+From the top of the cliffs, a sea of arrows rained down on the Marden army.
 
-“‘Boobies,’ huh…? Anyway! You’re not wrong.”
+“—Ambassador! Terrible news!” Fyshe’s door to her home flung open as her aide dashed in.
 
-“Meow.”
+Fyshe glanced up from the reports on the battle between Natra and Marden. “Why are you so flustered?!”
 
-“…Anyway, you’re not wrong, </>meow</>.”
+“It’s about the crown prince! I’ve obtained some documents! You won’t believe what I’ve found! Feast your eyes on this!”
 
-Ignoring Ninym’s look of protest, he continued on in high spirits. </>“Do you remember the news about the Empire, the message we got right before the meeting?”
+Fyshe caught the pages the aide thrust at her.
 
-“Hmm? Yes, of course… The Emperor of Earthworld seems to be recovering, right?”
+“Ambassador, didn’t you mention something was missing when you looked into the crown prince? I think this could be the answer!”
 
-“That’s the reason.”
+As Fyshe scanned the papers in front of her and listened to the excited, blubbering cries of her aide, her eyes widened in surprise. “He attended the military academy…?!”
 
-“What do you mean? </>…Meow.</>”
+“Yes! He studied at the Empire’s military academy for two years!”
 
-He rose from his bed.
+Disbelief raged in her mind. But it was the truth. This evidence was undeniable.
 
-“Listen. Our kingdom holds the key to one of the roads that link East and West, but compared to the other paths, it’s totally run-down and basically unusable. That’s exactly why the Empire dispatched their soldiers here—to prevent other countries from conquering us as they try to gain access to better roads. When the time comes, we’re going to become a vassal state to the Empire through either military force or diplomacy… Or at least that’s what was supposed to happen.”
+“Our academy is full of national secrets. Why was the royalty of a nonvassal nation…?”
 
-“But their plan fell through when the Emperor become ill.”
+“I don’t know the details, but it seems he hid his title and passed himself off as a commoner. Though his teachers may have been aware…”
 
-“Right. The Imperial Court’s a mess: They’re losing control over their conquered territories and putting out the embers of an inevitable internal rebellion on their own. To buy themselves time, they have to play nice with small, weak countries like us.”
+“How did he get admitted?”
 
-“But he’s recovered now… I don’t understand. They have no obligation to help restructure our army, especially now. I mean, they’d be intentionally strengthening a potential enemy. Or maybe they’re planning to crush us the moment after we manage to grow only slightly stronger…</>meow</>.”
+“It seems a high Flahm official in the Empire recommended him. It could be because the Kingdom of Natra is famous for accepting his kind long before other lands. Even though he held a position of power within the Empire, he must have been predisposed to helping the royal family in Natra for their role in protecting his people.”
 
-Wein nodded. “They know that even if we attack them, they’ll be able to handle us with force. But that’s not really what they’re after. To the Empire, we’re nothing but a foothold: Their real endgame is conquering the West. Think about it. What does a country need to gain control of a continent?”
+It seemed likely. The Flahm had an unbreakable bond. But there was something else Fyshe wasn’t satisfied with.
 
-“‘What,’ you ask? Well, funds, food, equipment, and…” She trailed off and gasped. Her eyes flew wide-open, and she looked at him incredulously.
+“But why was this information omitted? I mean, I suppose it might cause some problems, but it’s nothing too major.”
 
-He flashed a quick grin. “You got it. Fyshe Blundell’s aim is…”
+“That’s not all. Please read on.”
 
-“Train Natra soldiers to serve in our Imperial troops…?!”
+Pressed by her aide, Fyshe turned to the next page of the document. It was two years’ worth of test scores.
 
-“That’s right.”
+“This is…” She couldn’t believe her eyes.
 
-Meanwhile, Fyshe was nodding and exchanging words with her aide in another room.
+Literature, history, math, fencing, military history… Every exam had excellent marks, taken by someone at the top of their class. The name was blacked out.
 
-“You’ve heard the good news of His Imperial Majesty the Emperor’s recovery, right? I’m sure we’ll advance into the West again. When the time comes, we’ll be glad to have more soldiers.”
+“It was already censored when I received it. It seems the name was intentionally redacted.”
 
-“……”
+Why would someone do such a thing?
 
-“At first glance, this exchange seems to place the burden solely on the Empire. But since the kingdom is practically destined to become part of the Empire, think of the military instruction and financial contribution as an early investment. We have nothing to lose and everything to gain.”
+The answer came to her in a flash.
 
-“Please wait,” the aide objected. “I must ask something before we move forward. What assurance do we have that they won’t bare their fangs at us?”
+“We have the reason right here,” Fyshe explained. “It was to hide the </>disgraceful fact that a foreigner—let alone a royal—was at the top of the class instead of a person from the Empire…!”
 
-It was a perfectly reasonable question, but Fyshe’d already prepared an answer. “He won’t strike at the Empire. His proposal is proof of that. Say their soldiers grew to rival the Empire’s. Do you really believe we’d lose?”
+This was just unthinkable. How could something so foolish happen?
 
-“Of course not. It would be…impossible. We’re much too strong.”
+The Empire had created and nurtured an enemy—and now the claw it had created was pointed at its throat. And that claw’s name was…
 
-“Precisely. He seems to understand this. You might ask: What’s the meaning behind his proposal? To ingratiate himself to his army? No, nothing that superficial. It was a calculated move to protect his people.”
+“Wein Salema Arbalest…!”
 
-“What do you mean?”
+Below them, the Marden troops were on the brink of destruction.
 
-“He was probably aware of the Emperor’s recovery, meaning he foresaw our strategy to continue our march into the West. What would happen to Natra then? They have only two options: fight or surrender diplomatically. Either choice would be their final act as a sovereign nation. In that case, which one would be better?”
+They might have been lauded as a strong army, but many of their men were ready to flee in the face of a surprise attack. How could anyone remain calm when assailed by a shower of arrows?
 
-The aide’s eyes widened. “He proposed this to avoid falling under our complete control…?!”
+Well, if there was anyone, it would be well-trained commanding officers and soldiers, experienced in battle and ready to rush in to defend their leader. There were a few men swarming their general at that very moment.
 
-“Yes. I mean, Natra’s a pitifully small country that the Empire could </>easily polish off. If some high official in the Empire was after military exploits, an invasion of the kingdom is entirely possible. But this is a totally different story if their soldiers are positioned to join our army.”
+Because of this, Ninym easily spotted him from her high vantage point.
 
-“So he’s moving toward a diplomatic solution to form an allegiance… This will avoid needlessly spilling the blood of his citizens. And things will go smoothly for the both of us if we don’t resort to military force—fewer lingering grudges and less aggression.”
+“Archers, continue to hit the remaining enemy soldiers. Cavalry, we’re off.”
 
-“In other words, he’s appealing to his people and the provisional government by positioning this arrangement as an advantage. At the same time, he’s laying the groundwork for a smooth transition, knowing they’re destined to join the Empire… I must say, I’m impressed.”
+“Understood!”
 
-In spite of herself, Fyshe admired his strategy, his quiet stoicism during the meeting, and the ingenuity of his grand plan. The fact that this was coming from a sixteen-year-old kid made it all the more frightening.
+At Ninym’s command, the cavalry charged down the hill all at once. The Marden troops were confused and helpless without their leader, and the Natra picked them off one after the other.
 
-She didn’t know how he’d respond when Natra was annexed—but if he stepped down from power, she’d welcome him to the Empire with open arms.
+“It’s going well, Captain!”
 
-Well, she did have one concern.
+“Of course. That was the plan,” Ninym responded coolly as she recalled how she’d arrived here in the first place.
 
-…Is this his only goal?
+“—Hide the troops?”
 
-She accepted this plan when she saw an advantage. But he must have seen this coming, seeing that everything was going according to his plan.
+“Yep.”
 
-Was it some sort of setup?
+It was a few weeks before Marden would begin their invasion, and </>Wein had just requested Ninym carry out a very specific plan in the meeting room.
 
-I left nothing to chance. I crushed every gap and loophole. It’d be impossible to fall into a trap… I’m sure of it.
+“They’ll be attacking us soon. According to my estimations, we’ll be meeting each other right here in the Polta Wasteland.” He pointed at a map spread out on the desk. “It’s dotted with mountains and hills, an ideal place to hide soldiers. Keep them there and launch a surprise attack when the time comes. I want you to command them for me, Ninym. I’m already discussing it with my men.”
 
-But there was still a lingering sense of what-if.
+“…I have a number of questions.” She raised her hand. “First, are you absolutely certain when they’ll attack?”
 
-Wein Salema Arbalest might possess more knowledge than she’d imagined.
+“The reports from my spies confirm it. There’s no question they’ll attack within the month.”
 
-I hate to admit it… But I can’t deny he’s very competent.
+“How many soldiers will we hide?”
 
-She couldn’t rule out any possibilities, so she knew she needed to keep a sharp eye out for him and kept the image of Wein lingering in the back of her mind.
+“Pick those you trust the most—maybe seven hundred to a thousand. It’ll be hard to hide a force any bigger than that. And it’ll tip off the enemy if they see we have noticeably less manpower.”
 
-“—Well, it’s not a trap!”
+“Okay, so just enough to carry out an attack.”
 
-“What are you going on about all of a sudden?”
+“Yeah. Lure out the enemy and attack from the side… That’s our best method, though it depends on how the battle plays out.”
 
-“I just figured they’re probably jumping at shadows right now.”
+“What about departing together? My soldiers can travel a bit faster to hide ourselves.”
 
-Ninym flashed a dubious look at Wein, and he placated her, signaling </>Don’t worry about it</> with his eyes.
+“That won’t work. There are probably a few enemy spies in our troops, so if we divide the army in two later on, they’ll rat us out. Then the attack will come to nothing,” he reasoned.
 
-“Anyway, you know why they went along with my conditions, right?”
+She nodded and saw no issues so far. But she was most concerned about something else.
 
-“…Yeah.”
+“Last question: Why me?”
 
-“But your expression’s telling me otherwise.”
+“Huh?! Can our Miss Ninym not handle this?! You’re always going around acting so high-and-mighty, looking like you can do just about anything, but I see! So you can’t do it! …Ah, Stop, stop, ow, ow—”
 
-“I don’t agree with your reasoning,” Ninym emphasized in dissatisfaction. “Even if you’re successful in receiving aid from the Empire, you’ve just sealed our fate! We’re heading toward our demise.” She hesitated. “…Do you really plan on surrendering?”
+“Be serious.”
 
-“Sure, that’s the plan… Hey, hold it—don’t twist my arm.”
+“Okay, okay, I get it. Stop twisting my fingers already!” Wein </>shouted, yanking his hand out of her grasp. “It’s simple. To pull this off, I need the right leader. After all, we need to keep a thousand soldiers hidden for a month. But if I assign one of my more competent leaders, it’ll hinder management of the main forces. And there’s always the possibly the Marden would get suspicious if a big shot military leader wasn’t around for the big battle. That’s why you’re commanding them: No one will see you as a military threat, right?”
 
-Ninym had wordlessly clawed into him.
+“True.”
 
-“You should know! You were with me during my time in the Empire. They’re ridiculously strong: Defying them would only result in bloodshed. Besides, I watched how they operate. They weren’t so bad, y’know? Sure, it’ll raise some concerns when we become their territory. But we’ll adapt soon enough.”
+To the public, she was Wein’s aide and a civil official. No one knew she’d trained to lead an army. But the troops would treat her with a degree of respect, knowing her family had served the royals for generations.
 
-“…And how do you truly feel?”
+“Well, basically, I don’t really trust anyone except you and Raklum. Those other guys made a vow of loyalty to my father and the country—not me. This is still a very delicate issue. I can’t assign these tasks to just any old officer.”
 
-“With this, I can say good-bye to this annoying-ass job and YEOOOOOW MY ARM, MY ARM, MY ARM?!”
+“The other vassals think highly of you, you know.”
 
-“I’m sure you can do it, Wein. You can stand against the Empire.”
+“Nope, no way! If I’m careless for even a </>second</>, there’s gonna be a </>coup</>! History has all but proved that!”
 
-“Nah, sounds like a pain… UWAAAAAH, MY ARM SHOULDN’T BEND THAT WAY!”
+His paranoia of enemies in plain sight made her shake her head internally. At this rate, it’ll be a long way off until they could build a bridge of trust between Wein and the other officials.
 
-She made him writhe and scream for a little while longer before dropping his arm and accepting defeat, turning her back toward him.
+“Well, if it really looks like you can’t do it, I still have other ways of going myself… I’m sure you can handle government affairs while I’m gone.”
 
-“If you hate it so much, betray me,” he whispered soothingly. “Kill me, and this will go up in smoke. Hey, Ninym, my heart, you listening to this?”
+“I won’t…let that happen. If you’re not here, Wein, who will take command of the main army?”
 
-“…You know your heart wouldn’t do that to you.”
+“Ah, well, I intended to put Hagal in command from the very start. I don’t want to throw water on the soldiers’ long-awaited chance at glory.”
 
-No matter how much she cried out or protested or disagreed with his decisions, she would never defy them in the end. Her ancestors had </>taken a vow of absolute loyalty when they first came to this country and began to serve the royal family.
+“…Is this really all right?”
 
-“Oh, don’t sulk now. I get that you’re feeling reluctant, but all countries disappear sooner or later. We just happen to be next in line.”
+“Don’t worry, old man Hagal is, like, ridiculously strong. Yerp. No </>need to worry. He’s especially insane on the battlefield. If I went head-to-head with him, I’d hightail it out of there—but that’s a separate conversation.”
 
-“…Will our troops really accept this?”
+Ninym nodded, returning to the issue at hand. “If that’s what you want, I guess I have to accept. Very well. I’ll take the soldiers and lie in wait.”
 
-“I’m sure they’ll be upset at first. But we’ll convince them we’re biding our time to plan a counterattack or something. Once they see the Empire’s strength for themselves, I’m sure their urge to revolt will subside. And when the time finally comes, they’ll be ready to pledge allegiance to the Empire, and all our government positions will be reassigned, allowing me to take my money and live the good life! It’s the perfect plan, if I do say so myself!”
+“I’m counting on you. Er, well, there’s about a fifty-fifty shot we’ll actually need you. As for me, I’d like to win, but not by </>too</> much.”
 
-“…I hope it fails.”
+“You don’t want total surrender?”
 
-He chuckled in high spirits. “Don’t you know schemes are my forte? Just you wait. Also, you’re forgetting something, Ninym.”
+“That kind of victory comes with its own problems… Well, there’s no way that’ll happen, so it doesn’t matter too much. Let’s hurry up and get started.”
 
-“…Meow.”
+Ninym nodded, calculating in the back of her head. She needed to choose and prepare an appropriate hideout, soldiers, and foodstuffs. There was plenty to do, all under a veil of secrecy, but she indulged herself in vocalizing one last fear.
 
-“Good girl.”
+“By the way…will you get any work done without me?”
 
-She sighed even deeper in the face of her master’s hubris.
+Wein grinned. “Oh, it’ll be hell when you get back.”
 
-Despite Ninym’s wishes, Wein’s predictions were coming true one after the other. Yes, there was some opposition among the soldiers to receiving instruction from the Imperial troops, but the military began carrying out his plans after he insisted they follow his lead.
+…Just how much work did he put off?
 
-The results were dramatic. Utilizing the doctrine and wealth of the most powerful nation on the continent, the Kingdom of Natra’s armed forces rapidly grew in strength.
+She smiled bitterly, charging on horseback with her subordinates. They were aiming for a group of ten Marden soldiers attempting a retreat. In the center of the small unit was their leader—Urgio.
 
-At the three-month mark, their troops were more powerful than they’d ever been.
+“Th-the enemy is coming!”
 
-“Yep, things are goin’ my way! Wow, it’s hard being right all the freakin’ time!”
+“Protect the general! Hold the line!”
 
-The new and improved Wein was in a fine mood. His office had </>once been a hub for angry grumbling, complaining, and wallowing in self-pity, but it’d since transformed into a place where he could be heard humming a peppy tune on any given day.
+They quickly gathered into a defensive position.
 
-“Your efforts to bolster our strength appear to be going well,” admitted Ninym, who was next to him. She still didn’t look entirely convinced, but she acknowledged the results nonetheless. “But someone will get the better of you if you’re arrogant and careless.”
+“—Your line is too thin,” Ninym noted.
 
-“Oh, come on, Ninym. Who could possibly pull the rug out from under me </>now</>? Barring some major natural disaster crippling the </>entire</> continent, the rest’s all procedural stuff. I’m ready to think about what I’ll do with my retirement.”
+With her at the forefront, the cavalry shot through their defenses and dashed in, routing any retreating Marden soldiers. Without breaking stride, they swung toward the center of the formation, facing Urgio with his brandished sword.
 
-“Seriously…” She gazed at him in weary discontent as he prattled on and on about traveling around the continent.
+She cut off his arm as they raced past each other.
 
-But he was interrupted by a sharp knock from the office window. Perched on the ledge, a bird with a cylindrical object attached to its leg was repeatedly bashing the pane with its beak.
+Spraying blood, he fell from his horse.
 
-It was one of Ninym’s messenger birds.
+“G-GWAAAAAAAAH…!” he howled in anguish.
 
-She opened the window to untie the missive from its leg. “We have urgent news from our spies in the Empire.”
+Turning her horse around, she gazed down at him as a ring of her men defended her. “You’re the leader, aren’t you?”
 
-“Urgent news? What, has the emperor suddenly decided to deploy his troops or something?”
+Soaked in his own sweat and blood, Urgio looked up as he writhed in agony, sweating. “Th-that voice…and that white hair…”
 
-“Let me see…” As she consulted the contents of the letter, the blood was sapped out of her face. “……The Emperor has died.”
+“Surrender. You can still be saved if you get immediate medical treatment,” she advised.
 
-“Wha?” Wein blinked.
+But that sent Urgio into a blinding rage. “Surrender… Surrender, you say…?! Don’t screw with me!” he howled.
 
-The office was strangely silent.
+Warm blood poured from the gaping wound in Urgio’s arm, and he breathed heavily, on the verge of death.
 
-They locked eyes, but every other part of their body was frozen in place. They must have looked like a pair of lambs tossed onto a deserted field.
+“I’m the general of the Marden army! Do you think I’ll submit to a woman, much less some ashy slave?!”
 
-“…S-s-s-somehow I feel like I heard something heinous, but no, it’s probably—</>no</>, most likely…</>no</>, most DEFINITELY a mistake, so read it again, Ninym, just to be safe… What did it say?” he sputtered.
+“I see.” She swung her blade and, with one smooth motion, sliced through his neck.
 
-“The Emperor of Earthworld has died.”
+His head thudded onto the ground.
 
-“……” Wein buried his face in his hands and looked up at the </>ceiling. “I see… So the Emperor died—,” he finally vocalized, testing it out on his tongue.
+“Raise his head and spread the news. The enemy has been defeated… And do not let his dying words leave your mouths.”
 
-“WHAAAAAAAAAAAA?! He died?! Died?! The guy freakin’ up and </>DIED</>?! But wait, I thought they said he recovered or whatever! Hey, what the </>hell</> is goin’ on here?!”
+“Understood: The enemy leader was silent up to his final moments.”
 
-“His condition had taken a turn for the worse, so he was resting as much as he could. But this appears to be rather…sudden.”
+“Very well, then.”
 
-“C-could it be some kind of mistake?!”
+The adjutant raised the bloodied head and gave a hoot of victory.
 
-“They’ve already made an official announcement within the Empire… They could have kept it under wraps, but I imagine there were some political dealings going on within the Imperial Court.”
+Their soldiers answered with a long war cry as the Marden troops fell silent, finally defeated.
 
-“NOOOOOOOO!” he yelped, frantically tearing at his hair. “Th-this is bad. This is very bad. Wait, hold on. What about our deal? Let’s see, uh, if the Emperor dies, that means Natra is…is…”
+Ninym’s eyes slipped past them, shifting her attention to the shadows of the mountain. There stood the soldiers from headquarters, those who’d lured out Urgio and his troops. Ninym turned toward the boy in the center of it all and gave a big wave.
 
-He was interrupted once again by a violent knock on the door, which flew open as a panicked messenger stumbled in.
+“It seems to have gone well, Your Highness.”
 
-“Pardon me, Prince Wein! It seems the Empire’s troops have begun to move out!”
+“Sure looks like it.”
 
-Whaaaaaaaaat?!</> By some strange miracle or perverse luck, he managed to stop his screams from blasting out of his mouth.
+The Marden army fell out of formation, like clumps of baby spiders. The loss of their general robbed them of the will to resist any longer.
 
-Not that the messenger took any notice of Wein’s inner turmoil. He hurriedly continued with his report. “We believe they’re heading toward the eastern border! Their destination is unknown! Commander Raklum wishes to know if he should pursue!”
+Though he’d suggested the surprise attack, it was beyond Wein’s </>expectations that they’d be able to successfully draw out and defeat the enemy leader.
 
-Wein’s thoughts raced around and around as he listened: The Emperor’s untimely death. Imperial troops approaching the border. The two were clearly connected.
+“So I guess this battle’s pretty much decided?”
 
-Then the next person up is—
+Hagal nodded. “Because their general was defeated behind the hill, their main troops on the other side aren’t aware the war is over. We must quickly spread the news of our safety and their leader’s death. Once we do so, they’ll retreat.”
 
-His premonition soon came true.
+“Got it. Let’s get going, then.”
 
-“Please wait! I will mediate this!”
+“Yes, Your Highness.”
 
-“Imperial Ambassador, please stay back!”
+The men began to move under Hagal’s command.
 
-“I beg of you! There’s no time!”
+Afterward, Wein joined Ninym and her troops and returned to the top of the hill, where they witnessed the news spreading: The prince had returned, and the Marden leader was dead. This gave heart to the Natra soldiers and soured their enemy’s morale.
 
-There was a scuffle on the other side of the open door. He could hear </>a group of people arguing back and forth as one voice grew more and more shrill and insistent. Ninym subtly attempted to stand between Wein and the door, blocking the way with her hands.
+With many of Urgio’s commanding officers killed and no one left to unite them, the Marden scrambled to their feet and scampered away.
 
-He could already guess who was about to appear in front of them.
+In a little less than a day, the troops of Natra were the victors in this battle in the Polta Wasteland. Each and every soldier swelled with triumph, drunk on the strongest liquor of all—glory.
 
-“Your Highness!”
+Well, all except one.
 
-Of course, Fyshe Blundell was the one stomping around and pushing past the guards.
+Sooooo what the hell do I do now…?
 
-She immediately knelt before Wein. “I understand it is impudent of me to cause such a commotion in your palace! However, I must speak with you immediately!”
-
-“…I hear your soldiers are moving toward the border,” muttered Wein, shooting an icy glance in her direction. “The Empire has every right to do so. But why wasn’t this discussed earlier? Was I wrong to assume we were committed to forging good relations?”
-
-…But it’s not like I can say aaaaaaaanything else!
-
-You would never guess from his composure that Wein was writhing in agony inside.
-
-I get it! I’m panicking, too! But she can’t just come bursting in here! Oh, come on! It’ll be impossible to talk in secret with everyone else in the room! If we were alone, I could have gone along with her plan or something!
-
-The messenger, the guards, Ninym—their eyes bored into Wein and Fyshe as everyone waited with bated breath.
-
-“Please accept my sincerest apologies…! I promise we have no ill intentions!”
-
-“Well, why else would they be on the move?”
-
-“…We received an order from the homeland. Our troops are to report back as quickly as possible.”
-
-“And what might be the reason for this order?”
-
-“……” Fyshe hesitated, worried about discussing sensitive information here.
-
-But she needed to reveal this information to convince others around her.
-
-She admitted: “It’s because His Imperial Majesty the Emperor…has crossed the great divide…”
-
-This confession rippled through the room, echoing and ricocheting again and again.
-
-…How could this happen?</> With her head bowed low, her heart was heavy with great torment and affliction.
-
-The reason for this reaction was…</>not</> the Emperor’s death. It wasn’t even the reckless actions of their troops. No, it was her regret for failing to see through Wein’s plan.
-
-The Emperor had many loyal followers and servants, and while Fyshe had her own agenda, she counted herself among them. This devotion was why this entire situation was so unexpected. In fact, to be completely honest, she’d actively avoided thinking about the possibility: What would become of them if the Emperor passed away right while they were helping make Natra’s troops stronger?
-
-But</> he </>didn’t revere our emperor the same way. He’d planned for this to happen the entire time…!
-
-With the exception of forcible military occupation, it was normal for stationed troops to withdraw and report back to their homeland in the face of domestic strife. This was doubly true if they were on friendly terms with the nation in question.
-
-As part of the Department of Foreign Affairs, Fyshe couldn’t stop it from happening. It wouldn’t do much good. Aside from appealing to the troops directly, she was in no position to give orders and lacked the authority to stop them from returning home.
-
-But this left behind a whole army of soldiers in Natra, fully trained and funded by the Empire. They couldn’t possibly be integrated into the Imperial army until things settled down.
-
-I was so preoccupied by our advance to the West, but he was considering each and every scenario.
-
-She couldn’t deny Wein’s intuition and skill. She had lost. As frustration and admiration mixed and swirled together in her heart, Fyshe began to ponder. </>What was he thinking? What kind of brilliance flickered behind those cold eyes?
-
-She’d never guess the answer: </>Oh, hell no! They toooooootally think I pulled a fast one over the Empire!!
-
-But she was better off not knowing what was flailing inside of him.
-
-“We have no intention of invading the Kingdom of Natra. Our goal is to swiftly return to our homeland. Please allow our troops to withdraw. It is out of respect for the Emperor,” she begged, bowing her head.
-
-If this prince was foolish, he’d use this as an opportunity to shoot their troops from behind.
-
-“…Understood. Please accept my deepest condolences for your loss and relay this message to your loyal officers and soldiers. If they must immediately report home to the Empire, we will not interfere.”
-
-“You have my gratitude.”
-
-“It’s a shame we’ll have to end this training halfway through, but I assume there are important matters that must be dealt with. I hope peace will settle onto your lands as soon as possible.”
-
-“…Thank you.”
-
-As news of the Emperor’s passing traversed the continent, it left behind a great sense of unease among the various nations—alongside ambition and a desire to use this to their advantage.
-
-It has been said that on this day, a mournful wailing echoed through the royal palace, but no detailed records of this incident remain. “WHY MEEEEEEE?!”
+Wein was the only one thinking about the future—and the only one filled with dread.

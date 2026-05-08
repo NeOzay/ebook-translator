@@ -6,7 +6,7 @@ de taille limitée (en tokens) pour la traduction par LLM. Il préserve le
 contexte entre les chunks via un système de chevauchement (overlap).
 """
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterable, Iterator
 from typing import TYPE_CHECKING, Literal
 
 from ebooklib import epub
@@ -58,6 +58,7 @@ class Segmentator:
         epub_source: epub.EpubBook | list[epub.EpubHtml],
         max_tokens: int,
         overlap_ratio: float = DEFAULT_OVERLAP_RATIO,
+        head_tail_balance: float = 0.75,
         encoding: str = Config.DEFAULT_ENCODING,
     ) -> None:
         """
@@ -85,6 +86,7 @@ class Segmentator:
 
         self.max_tokens = max_tokens
         self.overlap_ratio = overlap_ratio
+        self.head_tail_balance = head_tail_balance
         self.encoding = encoding
 
         # Warning si overlap_ratio >= 1.0 (contexte très étendu)
@@ -98,10 +100,8 @@ class Segmentator:
 
     def get_all_segments(
         self,
-        segmentation_logic: Literal[
-            "stop_chunk_end_of_chapter", "continue"
-        ] = "continue",
-    ) -> Iterator[Chunk]:
+        segmentation_logic: Literal["stop_at_end_of_chapter", "continue"] = "continue",
+    ) -> Generator[Chunk]:
         """
         Génère tous les chunks en segmentant le contenu de l'EPUB.
 
@@ -123,7 +123,7 @@ class Segmentator:
             segmentation_logic: Stratégie de segmentation.
                 - `"continue"` (défaut) : segmente l'EPUB en flux continu, les
                   chunks peuvent chevaucher les frontières de chapitres.
-                - `"stop_chunk_end_of_chapter"` : redémarre la segmentation à
+                - `"stop_at_end_of_chapter"` : redémarre la segmentation à
                   chaque chapitre (détecté via la spine EPUB), garantissant
                   qu'aucun chunk ne chevauche deux chapitres. Utile pour la
                   Phase 0 (analyse littéraire par chapitre).
@@ -147,22 +147,24 @@ class Segmentator:
             ...     # Le head contient ~4000 tokens de contexte des chunks précédents
             ...     print(f"Chunk {chunk.index}: head={len(chunk.head)}, body={len(chunk.body)}, tail={len(chunk.tail)}")
         """
-        if segmentation_logic == "stop_chunk_end_of_chapter":
+
+        def process(resource_iterable: Iterable[epub.EpubHtml]) -> Generator[Chunk]:
+            return turn_resource_to_chunks(
+                get_texts(resource_iterable),
+                self.max_tokens,
+                self.overlap_ratio,
+                self.encoding,
+                head_tail_balance=self.head_tail_balance,
+            )
+
+        if segmentation_logic == "stop_at_end_of_chapter":
             for chapter in self.get_all_chapters_by_spine():
-                yield from turn_resource_to_chunks(
-                    get_texts(chapter.files),
-                    self.max_tokens,
-                    self.overlap_ratio,
-                    self.encoding,
+                yield from chapter.split_chunk(
+                    self.max_tokens, self.overlap_ratio, self.head_tail_balance
                 )
             return
 
-        yield from turn_resource_to_chunks(
-            get_texts(self.epub_htmls),
-            self.max_tokens,
-            self.overlap_ratio,
-            self.encoding,
-        )
+        yield from process(self.epub_htmls)
 
     def __repr__(self) -> str:
         """Représentation pour le debug."""

@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 from ..htmlpage import BilingualFormat
 from ..llm import LLM
-from ..llm.llm_config import LLMConfig
+from ..llm.llm_config import FullKwargs, LLMConfig, UserKwargs
 from ..pipeline.phases import (
     GlossaryPhase,
     InitialTranslationPhase,
@@ -219,7 +219,7 @@ class PhasesBuilder:
     def add_literary_analysis(
         self,
         max_tokens: int | None = None,
-        llm_config: LLMConfig | None = None,
+        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
     ) -> PhasesBuilder:
         """Ajoute la Phase 0 : analyse littéraire du livre avant traduction.
 
@@ -245,13 +245,17 @@ class PhasesBuilder:
         return self
 
     def add_glossary_generation(
-        self, max_tokens: int | None = None, llm_config: LLMConfig | None = None
+        self,
+        max_tokens: int | None = None,
+        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
+        overlap_ratio: float | None = None,
     ) -> Self:
         self._phases.append(
             GlossaryPhase(
                 **_skip_none(
                     llm_config=llm_config,
                     max_tokens=max_tokens,
+                    overrides=overlap_ratio,
                 )
             )
         )
@@ -262,7 +266,7 @@ class PhasesBuilder:
         max_tokens: int | None = None,
         overlap_ratio: float | None = None,
         max_workers: int | None = None,
-        llm_config: LLMConfig | None = None,
+        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
     ) -> Self:
         """Ajoute la Phase 1 : traduction initiale en parallèle.
 
@@ -293,7 +297,7 @@ class PhasesBuilder:
         self,
         max_tokens: int | None = None,
         overlap_ratio: float | None = None,
-        llm_config: LLMConfig | None = None,
+        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
     ) -> Self:
         """Ajoute la Phase 2 : affinage séquentiel avec glossaire.
 

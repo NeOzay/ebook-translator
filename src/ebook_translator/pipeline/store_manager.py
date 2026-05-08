@@ -3,9 +3,12 @@ Gestionnaire de stores pour les phases.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ebook_translator.pipeline.base import PhaseProtocol
 from ebook_translator.stores.store import Store
+
+if TYPE_CHECKING:
+    from ebook_translator.pipeline.base import PhaseName, PhaseProtocol
 
 
 class StoreManager:
@@ -43,7 +46,7 @@ class StoreManager:
             store_path.mkdir(parents=True, exist_ok=True)
             self._stores[phase_name] = Store(store_path)
 
-    def get_store(self, phase_name: str | PhaseProtocol) -> Store:
+    def get_store(self, phase_name: str | PhaseName) -> Store:
         """
         Récupère le store d'une phase.
 
@@ -54,9 +57,6 @@ class StoreManager:
         - Raises:
             * `KeyError`: Si la phase n'existe pas
         """
-        if not isinstance(phase_name, str):
-            phase_name = phase_name.store_key()
-
         if phase_name not in self._stores:
             raise KeyError(
                 f"Store for phase '{phase_name}' not found. "

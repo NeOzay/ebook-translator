@@ -3,10 +3,8 @@ Phase 1: Traduction initiale avec gros blocs.
 """
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from ebook_translator.checks import (
-    Check,
     FragmentCountCheck,
     LineCountCheck,
     PunctuationCheck,
@@ -21,7 +19,7 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class InitialTranslationPhase(PhaseBase):
+class InitialTranslationPhase(PhaseBase[Chunk]):
     """
     Phase 1: Traduction initiale (gros blocs, parallèle).
 
@@ -48,14 +46,11 @@ class InitialTranslationPhase(PhaseBase):
 
     depends_on = ()  # Première phase, aucune dépendance
 
-    checks: tuple[Check[Any], ...] = field(
-        default=(
-            LineCountCheck(),
-            FragmentCountCheck(),
-            PunctuationCheck(),
-            SentenceCheck(),
-        ),
-        init=False,
+    checks = (
+        LineCountCheck(),
+        FragmentCountCheck(),
+        PunctuationCheck(),
+        SentenceCheck(),
     )
 
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:

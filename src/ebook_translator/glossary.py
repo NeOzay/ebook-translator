@@ -17,19 +17,19 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self, TypedDict
+from typing import TYPE_CHECKING, Literal, Self, TypedDict, cast
 
 if TYPE_CHECKING:
-    from template.types import (
+    from template.phase.glossary_models import (
         GlossaryEntry,
         GlossaryEntrySexe,
         GlossaryEntryType,
         GlossaryMultipleValueEntry,
-        LLMTermeGlossaire,
+        LLMTermeGlossary,
     )
 
 
-def _get_most_frequent(d: dict[str, int]) -> str | None:
+def _get_most_frequent[S: str](d: dict[S, int]) -> S | None:
     if not d:
         return None
     return max(d, key=lambda k: d[k])
@@ -58,9 +58,9 @@ def _compute_dominance(d: list[int]) -> float:
     return round(math.pow(max_val / total, 0.5), 2)
 
 
-def _get_possible_translations(
-    d: dict[str, int], threshold: float = 0.7
-) -> list[tuple[str, int]]:
+def _get_possible_translations[S: str](
+    d: dict[S, int], threshold: float = 0.7
+) -> list[tuple[S, int]]:
     """
     Retourne les traductions possibles en ajoutant des propositions
     jusqu'à ce que la confiance cumulée atteigne le seuil.
@@ -72,7 +72,7 @@ def _get_possible_translations(
 
     total = sum(d.values())
     d_sorted = sorted(d.items(), key=lambda t: t[1], reverse=True)
-    collected: list[tuple[str, int]] = []
+    collected: list[tuple[S, int]] = []
     covered = 0
 
     for name, occurrence in d_sorted:
@@ -109,8 +109,8 @@ class GlossaryStatistics(TypedDict):
 class Glossary:
     class _Entry(TypedDict):
         translations: dict[str, int]
-        term_types: dict[str, int]
-        sexes: dict[str, int]
+        term_types: dict[GlossaryEntryType, int]
+        sexes: dict[GlossaryEntrySexe, int]
 
     @staticmethod
     def _new_entry() -> Glossary._Entry:
@@ -170,7 +170,7 @@ class Glossary:
     # API basique : Apprentissage et récupération
     # =========================================================================
 
-    def learn(self, term: LLMTermeGlossaire) -> None:
+    def learn(self, term: LLMTermeGlossary) -> None:
         """
         Enregistre une traduction observée.
 
@@ -182,8 +182,8 @@ class Glossary:
 
         source_term = term["terme"].lower()
         translated_term = term["proposition_traduction"].lower()
-        term_type = term["type"].lower()
-        sexe = term["sexe"].lower()
+        term_type = cast(GlossaryEntryType, term["type"].lower())
+        sexe = cast(GlossaryEntrySexe, term["sexe"].lower())
 
         entry = self._glossary[source_term]
         # Incrémenter le compteur
@@ -236,8 +236,10 @@ class Glossary:
         confidance = _get_confidence_level(_compute_confidence(translation_weigths))
         if confidance == "low" and _compute_dominance(translation_weigths) < 0.95:
             return None
-        term_type = _get_most_frequent(term["term_types"]) or ""
-        sexe = _get_most_frequent(term["sexes"]) or ""
+        term_type = _get_most_frequent(term["term_types"])
+        if not term_type:
+            return None
+        sexe = _get_most_frequent(term["sexes"]) or "nc"
         weight = sum(term["translations"].values())
 
         entry: GlossaryEntry = {
@@ -432,7 +434,7 @@ class Glossary:
             print("Aucun conflit détecté.")
             return
 
-        def _fmt(counts: list[tuple[str, int]]) -> str:
+        def _fmt[Str: str](counts: list[tuple[Str, int]]) -> str:
             return ", ".join(f"{v} ({n})" for (v, n) in counts)
 
         for term in sorted(conflicts.values(), key=lambda d: d["weight"], reverse=True):

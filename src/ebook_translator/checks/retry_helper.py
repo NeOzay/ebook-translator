@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 from ebook_translator.checks.check_tests.base import ValidationContext
+from ebook_translator.llm.llm_config import GenericLLMConfig
 from ebook_translator.logger import get_logger
 
 logger = get_logger(__name__)
@@ -72,7 +73,7 @@ def retry_with_reasoning(
                 system_prompt=system,
                 content=user,
                 log_name=llm_context,
-                config={"use_reasoning": use_reasoning},
+                config=GenericLLMConfig(use_thinking=use_reasoning),
             )
         except Exception as e:
             logger.error(f"❌ Erreur LLM lors de la tentative {attempt} : {e}")
