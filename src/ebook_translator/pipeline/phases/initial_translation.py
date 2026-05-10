@@ -23,6 +23,7 @@ from ebook_translator.checks.content import (
     SentenceCheck as ContentSentenceCheck,
 )
 from ebook_translator.logger import get_logger
+from ebook_translator.persistence.line_indexed_persister import LineIndexedPersister
 from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.segmentation.segmentator import Chunk
@@ -32,7 +33,7 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class InitialTranslationPhase(PhaseBase[Chunk, LineIndexedTranslation]):
+class InitialTranslationPhase(PhaseBase[Chunk, dict[int, str]]):
     """
     Phase 1: Traduction initiale (gros blocs, parallèle).
 
@@ -76,6 +77,12 @@ class InitialTranslationPhase(PhaseBase[Chunk, LineIndexedTranslation]):
         ContentSentenceCheck(),
     )
 
+    # Persistance via ChunkPersister (étape 7a-bis.7).
+    # Lecture (`get_translation_cache`) et écriture (`save_item_builder`)
+    # routent désormais vers `LineIndexedPersister` + `FileByteStore`.
+    # Le legacy `Store.save_all` est court-circuité via `persist_fn`.
+    persister = LineIndexedPersister(LineIndexedTranslation)
+
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
         """
         Génère le prompt de traduction initiale.
@@ -90,7 +97,7 @@ class InitialTranslationPhase(PhaseBase[Chunk, LineIndexedTranslation]):
         Returns:
             Prompt formaté pour le LLM
         """
-        literary_context = self.get_literary_context(chunk, context)
+        literary_context = self.context.chapters.get_literary_analysis(chunk)
         source_text = str(chunk)
         return context.llm.renderer.render_translate(
             context.target_language,

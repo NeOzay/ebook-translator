@@ -6,7 +6,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast, override
+from warnings import deprecated
 
 from pydantic import BaseModel, ValidationError
 
@@ -14,8 +16,11 @@ from ebook_translator.checks import Check, ValidationPipeline
 from ebook_translator.checks.content_check import ChunkSource, ContentCheck
 from ebook_translator.llm.clients.client import ClientProviderProtocol
 from ebook_translator.llm.llm_config import JsonRequestConfig, LLMConfig
+from ebook_translator.persistence.chunk_persister import ChunkPersister
+from ebook_translator.pipeline.phase_storage import PhaseStorage
 from ebook_translator.segmentation.chunk import Chunk, ChunkProtocol
 from ebook_translator.segmentation.segmentator import Segmentator
+from ebook_translator.stores.byte_store import ByteStore, FileByteStore
 from ebook_translator.stores.store import Store
 from ebook_translator.translation.parser import parse_llm_translation_output
 from ebook_translator.validation.failure import ValidationFailure, from_pydantic_error
@@ -28,7 +33,60 @@ if TYPE_CHECKING:
         PhaseStats,
     )
     from ebook_translator.validation import SaveItem
-    from ebook_translator.validator.translation_context import ContexteTraduction
+
+
+def validate_data[DT](
+    content_checks: Sequence[ContentCheck[DT, Any]],
+    data: DT,
+    source: ChunkSource,
+) -> list[ValidationFailure[Any]]:
+    """Lance les `content_checks` sur un `data` (TypedDict) déjà bien formé."""
+
+    failures: list[ValidationFailure[Any]] = []
+    for check in content_checks:
+        failures.extend(check.run(data, source))
+    return failures
+
+
+def validate_payload[M: ConvertibleModel[Any]](
+    payload_type: type[M],
+    content_checks: Sequence[ContentCheck[Any, Any]],
+    raw: str | M,
+    source: ChunkSource,
+) -> M | list[ValidationFailure[Any]]:
+    """Pipeline schéma puis contenu (post-LLM).
+
+    Court-circuite sur erreur schéma : les `content_checks` ne tournent
+    jamais sur un payload structurellement KO.
+    """
+
+    if isinstance(raw, ConvertibleModel):
+        payload: M = cast(M, raw)
+    else:
+        try:
+            payload = payload_type.model_validate(raw)
+        except ValidationError as e:
+            return list(from_pydantic_error(e))
+
+    failures = validate_data(content_checks, payload.build(), source)
+    if failures:
+        return failures
+    return payload
+
+
+@dataclass(frozen=True)
+class _ChunkSourceAdapter:
+    """Implémentation `ChunkSource` minimale autour d'un mapping idx → texte."""
+
+    indices: tuple[int, ...]
+    texts: dict[int, str]
+
+    @property
+    def line_indices(self) -> tuple[int, ...]:
+        return self.indices
+
+    def text_at(self, index: int) -> str:
+        return self.texts[index]
 
 
 class ExecutionMode(StrEnum):
@@ -48,7 +106,9 @@ class PhaseName(StrEnum):
     REFINEMENT = "refinement"
 
 
-class PhaseProtocol[ChunkType: ChunkProtocol = Any](Protocol):
+class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any](
+    Protocol
+):
     """Interface structurelle des phases du pipeline.
 
     Utilisée par Pipeline, PhaseExecutor, StoreManager et ValidationWorkerPool
@@ -81,9 +141,7 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any](Protocol):
     def get_checks(cls) -> tuple[Check[Any], ...]: ...
     @classmethod
     def get_dependencies(cls) -> tuple[type[PhaseProtocol], ...]: ...
-    def get_translation_cache(
-        self, chunk: ChunkType
-    ) -> tuple[dict[int, str], bool]: ...
+    def get_translation_cache(self, chunk: ChunkType) -> tuple[DT, set[int]] | None: ...
     def before_chunk(self, chunk: ChunkType, context: ChunkContext) -> None: ...
     def render_prompt(
         self, chunk: ChunkType, context: ChunkContext
@@ -96,65 +154,28 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any](Protocol):
         | JsonRequestConfig[ConvertibleModel[Any]]
         | None
     ): ...
+    @deprecated(
+        "Use is_chunk_cached + load_chunk_view instead for new phases with ChunkPersister"
+    )
     def process_llm_response(
         self, chunk: ChunkType, response: str, context: ChunkContext
     ) -> dict[int, str]: ...
     def after_chunk(
-        self, chunk: ChunkType, result: dict[int, str], context: ChunkContext
+        self, chunk: ChunkType, data: DT, context: ChunkContext
     ) -> None: ...
-    def save_item_builder(
-        self, chunk: ChunkType, final_result: dict[int, str]
-    ) -> SaveItem: ...
-
-
-def validate_payload[M: ConvertibleModel[Any]](
-    payload_type: type[M],
-    content_checks: tuple[ContentCheck[M, Any], ...],
-    raw: str | M,
-    source: ChunkSource,
-) -> M | list[ValidationFailure[Any]]:
-    """Pipeline de validation unifié : schéma puis contenu.
-
-    Étapes :
-        1. Si `raw` est déjà une instance de `ConvertibleModel`, considère
-           le schéma comme validé (cas Phase 0 / glossaire via Instructor).
-        2. Sinon, `payload_type.model_validate(raw)`. Toute `ValidationError`
-           remonte sous forme de `ValidationFailure` typés via
-           `from_pydantic_error` et la fonction sort immédiatement (le
-           contenu n'est pas vérifié sur un schéma KO).
-        3. Si schéma OK, exécute chaque `ContentCheck` ; collecte toutes les
-           failures non-nulles. Si au moins une, retourne la liste ; sinon
-           retourne le payload typé.
-
-    Returns:
-        - `M` validé schéma + contenu, ou
-        - `list[ValidationFailure]` (1+ erreurs schéma OU 1+ erreurs contenu,
-          jamais un mix : la fonction court-circuite après échec schéma).
-    """
-
-    if isinstance(raw, ConvertibleModel):
-        payload: M = cast(M, raw)
-    else:
-        try:
-            payload = payload_type.model_validate(raw)
-        except ValidationError as e:
-            return list(from_pydantic_error(e))
-
-    content_failures: list[ValidationFailure[Any]] = []
-    for check in content_checks:
-        content_failures.extend(check.run(payload, source))
-    if content_failures:
-        return content_failures
-    return payload
+    def save_item_builder(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType]: ...
 
 
 @dataclass
 class PhaseBase[
     ChunkType: ChunkProtocol = Chunk,
-    M: ConvertibleModel[Any] = ConvertibleModel[Any],
-](
-    ABC, PhaseProtocol[ChunkType]
-):  # type: ignore
+    DT: Any = Any,
+    M: ConvertibleModel[  # Ne pas redéfinir dans les sous-classes, Type du payload LLM déduit avec DT
+        Any
+    ] = ConvertibleModel[
+        DT
+    ],
+](ABC, PhaseProtocol[ChunkType, DT, M]):
     """
     Classe de base abstraite pour toutes les phases.
 
@@ -208,9 +229,7 @@ class PhaseBase[
 
     # === Configuration nouvelle API (étape 5+) ===
 
-    payload_type: ClassVar[type[ConvertibleModel[Any]]] = cast(
-        "type[ConvertibleModel[Any]]", ConvertibleModel
-    )
+    payload_type: type[M] = field(init=False)
     """Modèle Pydantic du payload LLM. Sous-classes migrées (étape 6+) le
     surchargent (`LineIndexedTranslation`, `AnalyseChapter`, `LLMGlossaryModel`).
 
@@ -219,11 +238,23 @@ class PhaseBase[
     la sous-classe à l'instanciation).
     """
 
-    content_checks: ClassVar[tuple[ContentCheck[Any, Any], ...]] = ()
+    content_checks: tuple[ContentCheck[DT, Any], ...] = field(default=(), init=False)
     """Checks contenu post-parsing (nouveau Protocol). Chaque check porte
     son propre `retry_strategy` et `max_attempts` ; il n'y a pas d'override
     au niveau phase. Pour le chemin schéma KO (Pydantic), voir
     `llm.retry_registry.SCHEMA_RETRY_STRATEGY` / `SCHEMA_MAX_ATTEMPTS`."""
+
+    persister: ChunkPersister[ChunkType, DT] | None = field(default=None, init=False)
+    """Stratégie de cache (`LineIndexedPersister`, `MemoizedChunkPersister`).
+
+    `None` sur la base = phase pas encore migrée vers la nouvelle voie ;
+    les méthodes `is_chunk_cached` / `load_chunk_view` / `persist_chunk`
+    lèvent alors `NotImplementedError`. Les sous-classes migrées (étape
+    7a-bis.7) la définissent explicitement.
+
+    Cohabite avec `get_translation_cache` legacy le temps de la migration.
+    Sera retiré l'étape 9 avec le legacy `Store`.
+    """
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
@@ -282,18 +313,22 @@ class PhaseBase[
         raise TypeError("get_chunks must be overridden for non-Chunk types")
 
     @override
-    def get_translation_cache(self, chunk: ChunkType) -> tuple[dict[int, str], bool]:
-        """
-        Helper : lit la traduction d'un chunk depuis le store d'une phase.
+    def get_translation_cache(self, chunk: ChunkType) -> tuple[DT, set[int]] | None:
+        """Délègue à `PhaseStorage.load` puis re-valide via `content_checks`.
 
-        - Args:
-            - `chunk` : Chunk dont on veut la traduction
-        - Returns:
-            - `Tuple` contenant :
-            1. Dictionnaire `{line_index: texte_traduit ou chaine vide}`
-            2. Boolean indiquant si au moins une traduction est manquante
+        Toute failure invalide la cache entière (`None`) — le chunk est
+        re-traduit. Stratégie all-or-nothing : un cache partiellement
+        valide n'est pas exploité (à raffiner si gaspillage observé).
         """
-        return self.get_store().get_from_chunk(chunk, use_fallback=False)
+
+        if self.persister is None:
+            return None
+        data, missing = self.storage.load(chunk)
+        if data is None:
+            return None
+        if self.content_checks and self.validate_data(data, self.chunk_source(chunk)):
+            return None
+        return data, missing
 
     def before_phase(self) -> None:  # noqa: B027
         """
@@ -322,30 +357,6 @@ class PhaseBase[
             context: Contexte du chunk
         """
         pass
-
-    def get_literary_context(
-        self, chunk: Chunk, context: ChunkContext
-    ) -> ContexteTraduction | None:
-        """
-        Récupère l'analyse littéraire du chapitre depuis Phase 0 si disponible.
-
-        Délègue à Chapters.get_literary_analysis() qui gère automatiquement :
-        - Le mapping Chunk → Chapitre
-        - La récupération depuis le store
-        - Le filtrage par portée
-
-        Args:
-            chunk: Chunk à traduire
-            context: Contexte du chunk (non utilisé, requis par signature)
-
-        Returns:
-            Analyse littéraire (AnalyseLitteraire) ou None si non disponible
-        """
-        if not self.context.get_previous_stats(PhaseName.LITERARY_ANALYSIS):
-            return None
-
-        # Déléguer à Chapters singleton
-        return self.context.chapters.get_literary_analysis(chunk)
 
     @abstractmethod
     def render_prompt(self, chunk: ChunkType, context: ChunkContext) -> tuple[str, str]:
@@ -382,25 +393,73 @@ class PhaseBase[
         """
         return self.llm
 
-    def validate(
+    def validate_data(
+        self, data: DT, source: ChunkSource
+    ) -> list[ValidationFailure[Any]]:
+        """Chemin **cache** : `content_checks` sur TypedDict déjà bien formé."""
+
+        return validate_data(self.content_checks, data, source)
+
+    def validate_payload(
         self, raw: str | M, source: ChunkSource
     ) -> M | list[ValidationFailure[Any]]:
-        """Pipeline de validation unifié pour cette phase.
+        """Chemin **post-LLM** : schéma puis contenu."""
 
-        Délègue à la fonction libre `validate_payload`. Voir sa docstring
-        pour la sémantique (court-circuit schéma KO, séparation
-        schéma/contenu, sortie typée).
+        return validate_payload(self.payload_type, self.content_checks, raw, source)
 
-        Aucune phase existante ne l'appelle en étape 5 ; les phases sont
-        migrées une par une à partir de l'étape 6.
+    def chunk_source(self, chunk: ChunkType) -> ChunkSource:
+        """Adapte un chunk en `ChunkSource` consommable par `ContentCheck`.
+
+        Indices chunk-local (`0..N`) issus de l'ordre de `fetch_body()`,
+        textes source associés. Override pour les phases dont le `Chunk`
+        n'expose pas `fetch_body` (ex. Phase 0 / glossaire).
         """
 
-        # `payload_type` est une `ClassVar[type[ConvertibleModel[Any]]]` au
-        # niveau de PhaseBase ; les sous-classes la rétrécissent à leur `M`
-        # concret. Le cast ré-aligne le type de retour avec le `M` du
-        # paramètre générique de la classe pour les consommateurs.
-        result = validate_payload(self.payload_type, self.content_checks, raw, source)
-        return cast("M | list[ValidationFailure[Any]]", result)
+        body = list(chunk.fetch_body())
+        return _ChunkSourceAdapter(
+            indices=tuple(range(len(body))),
+            texts={i: text for i, (_, _, text) in enumerate(body)},
+        )
+
+    # === Persistance via ChunkPersister (étape 7a-bis) ===
+
+    BYTE_STORE_SUBDIR: ClassVar[str] = "_v2"
+    """Sous-dossier dédié au `FileByteStore` v2 — évite la collision de
+    noms avec le `Store` legacy. Fusionné racine à l'étape 9.
+    """
+
+    def get_byte_store(self) -> ByteStore:
+        """`ByteStore` principal de la phase. Override possible."""
+
+        return FileByteStore(self.get_store().cache_dir / self.BYTE_STORE_SUBDIR)
+
+    def get_byte_fallback_store(self) -> ByteStore | None:
+        """`ByteStore` amont (chaîne inter-phases). Override possible (Phase 2 → Phase 1)."""
+
+        return None
+
+    @cached_property
+    def storage(self) -> PhaseStorage[ChunkType, DT]:
+        """Composeur `persister` + `ByteStore`(s). Cache l'instance.
+
+        Lève `NotImplementedError` si `persister` n'est pas défini sur la
+        sous-classe (phase non migrée vers la nouvelle voie).
+        """
+
+        if self.persister is None:
+            raise NotImplementedError(f"Phase {self.name!r} sans persister configuré.")
+        return PhaseStorage(
+            self.persister, self.get_byte_store(), self.get_byte_fallback_store()
+        )
+
+    def is_chunk_cached(self, chunk: ChunkType) -> bool:
+        return self.storage.is_cached(chunk)
+
+    def load_chunk_view(self, chunk: ChunkType) -> tuple[DT | None, set[int]]:
+        return self.storage.load(chunk)
+
+    def persist_chunk(self, chunk: ChunkType, data: DT) -> None:
+        self.storage.persist(chunk, data)
 
     def process_llm_response(
         self, chunk: ChunkType, response: str, context: ChunkContext
@@ -420,31 +479,13 @@ class PhaseBase[
         """
         return parse_llm_translation_output(response)
 
-    def save_item_builder(
-        self,
-        chunk: ChunkType,
-        final_result: dict[int, str],
-    ) -> SaveItem:
-        """
-        Construit un SaveItem à partir du chunk et des résultats finaux.
-
-        Args:
-            chunk: Chunk traité
-            final_result: Dictionnaire des traductions (mapping line_index -> translated_text)
-
-        Returns:
-            Instance SaveItem prête à être envoyée au SaveQueue
-        """
-        from ebook_translator.validation.validation_worker import (
-            default_save_item_builder,
-        )
-
-        return default_save_item_builder(chunk, final_result)
+    def save_item_builder(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType]:
+        return self.storage.save_item(chunk, data)
 
     def after_chunk(  # noqa: B027
         self,
         chunk: ChunkType,
-        result: dict[int, str],
+        data: DT,
         context: ChunkContext,
     ) -> None:
         """

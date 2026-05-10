@@ -24,17 +24,19 @@ from ebook_translator.checks.content import (
     SentenceCheck as ContentSentenceCheck,
 )
 from ebook_translator.logger import get_logger
+from ebook_translator.persistence.line_indexed_persister import LineIndexedPersister
 from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.segmentation.segmentator import Chunk
+from ebook_translator.stores.byte_store import ByteStore, FileByteStore
 from template.phase.translation_models import LineIndexedTranslation
 
 logger = get_logger(__name__)
 
 
 @dataclass
-class RefinementPhase(PhaseBase[Chunk, LineIndexedTranslation]):
+class RefinementPhase(PhaseBase[Chunk, dict[int, str]]):
     """
     Phase 2: Raffinage avec glossaire (petits blocs, séquentiel).
 
@@ -79,6 +81,24 @@ class RefinementPhase(PhaseBase[Chunk, LineIndexedTranslation]):
         ContentSentenceCheck(),
     )
 
+    persister = LineIndexedPersister(LineIndexedTranslation)
+
+    @override
+    def get_byte_fallback_store(self) -> ByteStore | None:
+        """`FileByteStore` de Phase 1 — fallback du `LineIndexedPersister`.
+
+        Le persister consulte ce store pour les indices absents du store
+        principal de Phase 2 (chaîne de cache inter-phases).
+        """
+
+        cached = getattr(self, "_byte_fallback_store", None)
+        if cached is not None:
+            return cached
+        initial_store = self.context.store_manager.get_store(PhaseName.INITIAL)
+        store = FileByteStore(initial_store.cache_dir / self.BYTE_STORE_SUBDIR)
+        self._byte_fallback_store = store
+        return store
+
     @override
     def before_phase(self) -> None:  # noqa: B027
         store = self.get_store()
@@ -106,7 +126,7 @@ class RefinementPhase(PhaseBase[Chunk, LineIndexedTranslation]):
         initial_translation = context.store_manager.get_store("initial")
 
         # Récupérer analyse littéraire si disponible
-        literary_context = self.get_literary_context(chunk, context)
+        literary_context = self.context.chapters.get_literary_analysis(chunk)
 
         # Rendre le prompt avec glossaire + traduction initiale + analyse littéraire
         return context.llm.renderer.render_refine(

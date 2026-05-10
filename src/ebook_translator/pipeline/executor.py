@@ -110,10 +110,7 @@ class PhaseExecutor:
     def _configure_validation_pool(self) -> None:
         """Configure le ValidationWorkerPool pour cette phase."""
 
-        # Switch vers le store de cette phase
-        store = self.phase.get_store()
-        # Update phase name dans le pool
-        self.context.validation_pool.switch_phase(self.phase, store)
+        self.context.validation_pool.switch_phase(self.phase)
 
     previous_chunk: ChunkProtocol | None = None
 
@@ -128,8 +125,9 @@ class PhaseExecutor:
             True si traitement réussi, False sinon
         """
         try:
-            # 1. Check cache
-            cached_result, has_missing = self.phase.get_translation_cache(chunk)
+            # 1. Check cache — `get_translation_cache` retourne `(DT, missing) | None`.
+            cached = self.phase.get_translation_cache(chunk)
+            cached_result, missing = cached if cached is not None else (None, {0})
 
             # 2. Hook before_chunk
             chunk_context = ChunkContext(
@@ -140,9 +138,9 @@ class PhaseExecutor:
 
             self.previous_chunk = chunk
 
-            if not has_missing:
-                # Chunk déjà en cache, on le soumet quand même pour validation
-                # (peut avoir été invalidé ou nécessiter re-validation)
+            if cached_result is not None and not missing:
+                # Chunk intégralement en cache → re-soumis pour validation
+                # (peut nécessiter re-validation après changement de contraintes).
                 self.stats.chunks_from_cache += 1
                 self.context.validation_pool.submit(
                     ValidationItem(chunk, chunk_context, cached_result)

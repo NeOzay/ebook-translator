@@ -25,11 +25,12 @@ dans un dict JSON externe.
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, override, runtime_checkable
 
 from pydantic import BaseModel, ValidationError
 
 from ..logger import get_logger
+from ..segmentation.chunk import ChunkProtocol
 from ..stores.byte_store import ByteStore
 from .chunk_persister import ChunkPersister
 
@@ -37,12 +38,14 @@ logger = get_logger(__name__)
 
 
 @runtime_checkable
-class MemoChunk(Protocol):
+class MemoChunk(ChunkProtocol, Protocol):
     """Surface attendue d'un chunk mémoïsé par fingerprint.
 
-    Les chunks concrets (`ChapterPartChunk`, chunk de glossaire) doivent
-    exposer ces deux propriétés. La logique de calcul du fingerprint
-    (typiquement un hash du body) reste à la charge du chunk.
+    Étend `ChunkProtocol` (pour satisfaire la borne du `ChunkPersister`)
+    et ajoute deux propriétés : `outer_key` (regroupement) et `inner_key`
+    (fingerprint). Les chunks concrets (`ChapterPartChunk`, chunk de
+    glossaire) implémentent déjà `ChunkProtocol` et exposent ces deux
+    accesseurs.
     """
 
     @property
@@ -56,7 +59,7 @@ class MemoChunk(Protocol):
         ...
 
 
-class MemoizedChunkPersister[M: BaseModel](ChunkPersister[M, MemoChunk]):
+class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
     """Cache mémoïsé : un fichier par `outer_key`, dict `{inner_key: M-json}`.
 
     Paramétré sur `M` : la même classe sert pour `ContexteTraduction`
@@ -67,6 +70,7 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[M, MemoChunk]):
     def __init__(self, payload_type: type[M]) -> None:
         self.payload_type = payload_type
 
+    @override
     def is_chunk_cached(
         self,
         chunk: MemoChunk,
@@ -79,15 +83,17 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[M, MemoChunk]):
         wrapper = self._read_wrapper(store, chunk.outer_key)
         return chunk.inner_key in wrapper
 
-    def persist(self, chunk: MemoChunk, payload: M, store: ByteStore) -> None:
+    @override
+    def persist(self, chunk: MemoChunk, data: M, store: ByteStore) -> None:
         with store.lock(chunk.outer_key):
             wrapper = self._read_wrapper(store, chunk.outer_key)
-            wrapper[chunk.inner_key] = payload.model_dump_json()
+            wrapper[chunk.inner_key] = data.model_dump_json()
             store.write(
                 chunk.outer_key,
                 json.dumps(wrapper, ensure_ascii=False, indent=2).encode("utf-8"),
             )
 
+    @override
     def load_for_chunk(
         self,
         chunk: MemoChunk,
@@ -137,9 +143,7 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[M, MemoChunk]):
         try:
             parsed: Any = json.loads(raw)
         except json.JSONDecodeError as e:
-            logger.warning(
-                f"MemoizedChunkPersister: cache corrompu {outer_key}: {e}"
-            )
+            logger.warning(f"MemoizedChunkPersister: cache corrompu {outer_key}: {e}")
             return {}
         if not isinstance(parsed, dict):
             return {}

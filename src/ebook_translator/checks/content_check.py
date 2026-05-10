@@ -18,8 +18,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, Protocol
 
-from template.types import ConvertibleModel
-
 from ..validation.diagnostics import ErreursType
 from ..validation.failure import ValidationFailure
 from ..validation.retry_strategy import RetryStrategy
@@ -43,7 +41,7 @@ class ChunkSource(Protocol):
     def text_at(self, index: int) -> str: ...
 
 
-class ContentCheck[M: ConvertibleModel[Any], CtxT: Mapping[str, Any]](Protocol):
+class ContentCheck[DT: Any, CtxT: Mapping[str, Any] = Mapping[str, Any]](Protocol):
     """Validation contenu d'un payload typé contre la source du chunk.
 
     Trois `ClassVar` portent les métadonnées du check :
@@ -63,7 +61,7 @@ class ContentCheck[M: ConvertibleModel[Any], CtxT: Mapping[str, Any]](Protocol):
     retry_strategy: ClassVar[RetryStrategy]
     max_attempts: ClassVar[int]
 
-    def run(self, payload: M, source: ChunkSource) -> list[ValidationFailure[CtxT]]:
+    def run(self, data: DT, source: ChunkSource) -> list[ValidationFailure[CtxT]]:
         """Retourne la liste des failures détectées. Vide si payload conforme.
 
         Sémantique :

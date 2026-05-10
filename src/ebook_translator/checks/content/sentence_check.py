@@ -12,14 +12,12 @@ d'abréviations avec point.
 from __future__ import annotations
 
 import re
-from typing import ClassVar
-
-from template.phase.translation_models import LineIndexedTranslation
+from typing import ClassVar, override
 
 from ...validation.diagnostics import ErreursType, SentenceDiagnostic
 from ...validation.failure import ValidationFailure
 from ...validation.retry_strategy import RetryStrategy
-from ..content_check import ChunkSource
+from ..content_check import ChunkSource, ContentCheck
 
 _SENTENCE_END = re.compile(r"[.!?]+")
 
@@ -29,25 +27,22 @@ def _count_sentences(text: str) -> int:
     return len(parts)
 
 
-class SentenceCheck:
+class SentenceCheck(ContentCheck[dict[int, str], SentenceDiagnostic]):
     """Le nombre de phrases par ligne est préservé entre source et traduction."""
 
     error_type: ClassVar[ErreursType] = ErreursType.SENTENCE_INVALID
     retry_strategy: ClassVar[RetryStrategy] = RetryStrategy.PROGRESSIVE_REASONING
     max_attempts: ClassVar[int] = 2
 
+    @override
     def run(
-        self,
-        payload: LineIndexedTranslation,
-        source: ChunkSource,
+        self, data: dict[int, str], source: ChunkSource
     ) -> list[ValidationFailure[SentenceDiagnostic]]:
         invalid: list[int] = []
         for index in source.line_indices:
-            if index not in payload.lines:
+            if index not in data:
                 continue
-            if _count_sentences(source.text_at(index)) != _count_sentences(
-                payload.lines[index]
-            ):
+            if _count_sentences(source.text_at(index)) != _count_sentences(data[index]):
                 invalid.append(index)
         if not invalid:
             return []

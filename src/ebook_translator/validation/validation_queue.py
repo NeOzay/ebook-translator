@@ -9,7 +9,10 @@ import queue
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from ebook_translator.persistence.chunk_persister import ChunkPersister
+from ebook_translator.stores.byte_store import ByteStore
 
 if TYPE_CHECKING:
     from ebook_translator.segmentation.chunk import ChunkProtocol
@@ -48,41 +51,24 @@ class ValidationItem:
 
 
 @dataclass
-class SaveItem:
-    """
-    Représente un résultat de validation à sauvegarder dans le Store.
+class SaveItem[ChunkType: ChunkProtocol = "ChunkProtocol", DT: Any = Any]:
+    """Unité de travail self-contained pour le `SaveWorker`.
 
-    Cette classe encapsule toutes les données nécessaires pour que le SaveWorker
-    puisse sauvegarder une traduction validée sans bloquer les ValidationWorkers.
-
-    Attributes:
-        chunk: Le chunk validé (pour callback et logging)
-        final_translations: Traductions finales après validation {line_index: translated_text}
-        source_files: Mapping par fichier source {source_file: {line_index_str: translated_text}}
-                     Résultat de build_translation_map(chunk, final_translations)
-                     Note: Les clés de ligne sont des strings (format JSON)
-
-    Example:
-        >>> from ebook_translator.translation.engine import build_translation_map
-        >>> translation_map = build_translation_map(chunk, {0: "Bonjour", 1: "Monde"})
-        >>> item = SaveItem(
-        ...     chunk=chunk,
-        ...     final_translations={0: "Bonjour", 1: "Monde"},
-        ...     source_files=translation_map
-        ... )
+    Le worker se contente d'appeler `persister.persist(chunk, data, byte_store)` ;
+    aucune connaissance de la phase d'origine n'est requise.
     """
 
-    chunk: ChunkProtocol
-    final_result: dict[int, str]
-    source_files: dict[str, dict[str, str]]  # Clés de ligne sont des strings (JSON)
-    on_save: Callable[[SaveItem], None] | None = None
+    chunk: ChunkType
+    data: DT
+    persister: ChunkPersister[ChunkType, DT]
+    byte_store: ByteStore
+    on_save: Callable[[SaveItem[ChunkType, DT]], None] | None = None
 
     def __repr__(self) -> str:
-        """Représentation pour le debug."""
         return (
             f"SaveItem(chunk={self.chunk.index}, "
-            f"files={len(self.source_files)}, "
-            f"lines={len(self.final_result)})"
+            f"payload={type(self.data).__name__}, "
+            f"persister={type(self.persister).__name__})"
         )
 
 

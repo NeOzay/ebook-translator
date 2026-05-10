@@ -24,8 +24,8 @@ class _FakeSource:
         return ""
 
 
-def _payload(raw: str) -> LineIndexedTranslation:
-    return LineIndexedTranslation.model_validate(raw)
+def _payload(raw: str) -> dict[int, str]:
+    return LineIndexedTranslation.model_validate(raw).build()
 
 
 class TestLineCountCheck:

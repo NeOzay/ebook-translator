@@ -11,14 +11,12 @@ apostrophes, élision).
 
 from __future__ import annotations
 
-from typing import ClassVar
-
-from template.phase.translation_models import LineIndexedTranslation
+from typing import ClassVar, override
 
 from ...validation.diagnostics import ErreursType, PunctuationDiagnostic
 from ...validation.failure import ValidationFailure
 from ...validation.retry_strategy import RetryStrategy
-from ..content_check import ChunkSource
+from ..content_check import ChunkSource, ContentCheck
 
 _QUOTE_CHARS = ("“", "”", "«", "»")
 
@@ -28,24 +26,23 @@ def _count_quote_pairs(text: str) -> int:
     return total // 2
 
 
-class PunctuationCheck:
+class PunctuationCheck(ContentCheck[dict[int, str], PunctuationDiagnostic]):
     """Le nombre de paires de guillemets par ligne est préservé."""
 
     error_type: ClassVar[ErreursType] = ErreursType.PUNCTUATION_MISMATCH
     retry_strategy: ClassVar[RetryStrategy] = RetryStrategy.NORMAL_ONLY
     max_attempts: ClassVar[int] = 2
 
+    @override
     def run(
-        self,
-        payload: LineIndexedTranslation,
-        source: ChunkSource,
+        self, data: dict[int, str], source: ChunkSource
     ) -> list[ValidationFailure[PunctuationDiagnostic]]:
         failures: list[ValidationFailure[PunctuationDiagnostic]] = []
         for index in source.line_indices:
-            if index not in payload.lines:
+            if index not in data:
                 continue
             expected = _count_quote_pairs(source.text_at(index))
-            actual = _count_quote_pairs(payload.lines[index])
+            actual = _count_quote_pairs(data[index])
             if expected == actual:
                 continue
             failures.append(

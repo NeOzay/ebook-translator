@@ -132,10 +132,9 @@ class ValidationWorkerPool:
         # Event partagé pour signal d'arrêt (tous workers)
         self._stop_event = threading.Event()
 
-        # Créer SaveWorker unique (SEUL à écrire dans Store)
+        # Créer SaveWorker unique (SEUL à persister) — SaveItem self-contained.
         self.save_worker = SaveWorker(
             save_queue=self.save_queue,
-            store=store,
             stop_event=self._stop_event,  # Signal d'arrêt partagé
         )
 
@@ -258,15 +257,11 @@ class ValidationWorkerPool:
 
         logger.info("ValidationWorkerPool terminé (validation + sauvegarde)")
 
-    def switch_phase(self, phase: PhaseProtocol, store: Store) -> None:
-        """
-        Change la phase de tous les workers (Validation + Save).
+    def switch_phase(self, phase: PhaseProtocol) -> None:
+        """Change la phase de tous les workers de validation.
 
-        Args:
-            phase: Nouvelle classe de phase
-            store: Nouveau store associé à cette phase
-        Note:
-            Ne peut être appelé que si la validation_queue est idle
+        SaveWorker n'est pas concerné — chaque `SaveItem` porte son
+        `persister` + `byte_store`.
         """
         if not self.validation_queue.is_idle():
             logger.error(
@@ -281,7 +276,6 @@ class ValidationWorkerPool:
         for worker in self.workers:
             worker.phase = phase
             worker.pipeline = pipeline
-        self.save_worker.store = store
         logger.debug("Changement de phase effectué dans ValidationWorkerPool")
 
     def get_statistics(self) -> ValidationPoolStats:

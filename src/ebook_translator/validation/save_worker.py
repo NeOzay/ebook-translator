@@ -27,13 +27,9 @@ Note: Store.py a ses propres verrous par fichier pour gérer la concurrence,
 
 import queue
 import threading
-from typing import TYPE_CHECKING
 
 from ..logger import get_logger
 from .validation_queue import SaveItem, SaveQueue
-
-if TYPE_CHECKING:
-    from ..stores.store import Store
 
 logger = get_logger(__name__)
 
@@ -76,23 +72,18 @@ class SaveWorker:
     def __init__(
         self,
         save_queue: SaveQueue,
-        store: Store,
         stop_event: threading.Event | None = None,
     ):
         """
         Initialise le SaveWorker.
 
         Args:
-            save_queue: Queue des items à sauvegarder
-            store: Store où écrire les traductions
-            on_validated: Callback optionnel appelé après sauvegarde réussie
-                         avec (chunk, final_translations). Utile pour apprentissage
-                         glossaire depuis traductions validées.
+            save_queue: Queue des items à sauvegarder. Chaque `SaveItem` est
+                self-contained — il porte son `persister` + `byte_store`.
             stop_event: Event partagé pour signal d'arrêt (set() → arrêt immédiat).
-                       Si None, crée un Event local (pour compatibilité tests).
+                Si None, crée un Event local (pour compatibilité tests).
         """
         self.save_queue = save_queue
-        self.store = store
         self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.saved_count = 0
         self.error_count = 0
@@ -151,46 +142,26 @@ class SaveWorker:
         )
 
     def _save_item(self, item: SaveItem) -> None:
+        """Persiste un item via son `persister` + `byte_store` propres.
+
+        Le SaveWorker est agnostique du persister concret : `SaveItem` est
+        une unité de travail self-contained. Erreurs propagées au caller
+        `run()` qui logue + incrémente `error_count`.
         """
-        Sauvegarde un item dans le Store.
 
-        Cette méthode:
-        1. Écrit toutes les traductions dans le Store (via store.save_all)
-        2. Marque l'item comme sauvegardé dans la SaveQueue
-        3. Appelle le callback on_validated si fourni
-        4. Incrémente le compteur de sauvegardes
+        item.persister.persist(item.chunk, item.data, item.byte_store)
 
-        Args:
-            item: L'item à sauvegarder (contient chunk, translations, source_files)
-
-        Raises:
-            Exception: Toute erreur de sauvegarde est propagée (loggée par run())
-
-        Note:
-            Store.save_all() est thread-safe (verrous par fichier), mais SaveWorker
-            fournit un pipeline I/O dédié pour découpler validation et persistance.
-        """
-        # 1. Écrire dans Store (thread-safe via verrous par fichier)
-        for source_file, translations in item.source_files.items():
-            self.store.save_all(source_file, translations)
-
-        # 2. Marquer comme sauvegardé
         self.save_queue.mark_saved()
         self.saved_count += 1
+        logger.debug(f"💾 Chunk {item.chunk.index} sauvegardé")
 
-        logger.debug(
-            f"💾 Chunk {item.chunk.index} sauvegardé "
-            f"({len(item.source_files)} fichier(s), {len(item.final_result)} ligne(s))"
-        )
-
-        # 3. Callback optionnel (ex: apprentissage glossaire)
         if item.on_save:
             try:
                 item.on_save(item)
             except Exception as e:
-                # Ne pas crasher si le callback échoue
+                # Callback non bloquant — sa défaillance ne casse pas le pipeline.
                 logger.warning(
-                    f"⚠️ Erreur dans callback on_validated pour chunk {item.chunk.index}: {e}"
+                    f"⚠️ Erreur dans on_save pour chunk {item.chunk.index}: {e}"
                 )
 
     def __repr__(self) -> str:
