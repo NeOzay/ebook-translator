@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from ebook_translator.checks.content.line_count_check import LineCountCheck
 from ebook_translator.validation.diagnostics import ErreursType
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class _FakeSource:
 
 
 def _payload(raw: str) -> dict[int, str]:
-    return LineIndexedTranslation.model_validate(raw).build()
+    return LineIndexedLLMResponse.model_validate(raw).build()
 
 
 class TestLineCountCheck:

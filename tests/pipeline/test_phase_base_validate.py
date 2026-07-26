@@ -25,7 +25,7 @@ from ebook_translator.validation.diagnostics import (
 )
 from ebook_translator.validation.failure import ValidationFailure
 from ebook_translator.validation.retry_strategy import RetryStrategy
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class _AlwaysFailLineCount:
 
     def run(
         self,
-        payload: LineIndexedTranslation,
+        payload: LineIndexedLLMResponse,
         source: ChunkSource,
     ) -> list[ValidationFailure[LinesMissingDiagnostic]]:
         self.calls += 1
@@ -71,28 +71,28 @@ class _AlwaysFailLineCount:
 class TestValidatePayload:
     def test_schema_ok_no_checks_returns_payload(self):
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(),
             raw="<0/>a\n<1/>b\n[=[END]=]",
             source=_FakeSource(indices=(0, 1)),
         )
-        assert isinstance(result, LineIndexedTranslation)
+        assert isinstance(result, LineIndexedLLMResponse)
         assert result.lines == {0: "a", 1: "b"}
 
     def test_schema_ok_content_ok_returns_payload(self):
         from ebook_translator.checks.content.line_count_check import LineCountCheck
 
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(LineCountCheck(),),
             raw="<0/>a\n<1/>b\n[=[END]=]",
             source=_FakeSource(indices=(0, 1)),
         )
-        assert isinstance(result, LineIndexedTranslation)
+        assert isinstance(result, LineIndexedLLMResponse)
 
     def test_schema_ko_missing_end_marker_returns_pydantic_failures(self):
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(),
             raw="<0/>a\n<1/>b",
             source=_FakeSource(indices=(0, 1)),
@@ -104,7 +104,7 @@ class TestValidatePayload:
     def test_schema_ko_short_circuits_content_checks(self):
         sentinel = _AlwaysFailLineCount()
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(sentinel,),
             raw="<0/>a",  # marqueur absent
             source=_FakeSource(indices=(0, 1)),
@@ -118,7 +118,7 @@ class TestValidatePayload:
         from ebook_translator.checks.content.line_count_check import LineCountCheck
 
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(LineCountCheck(),),
             raw="<0/>a\n[=[END]=]",
             source=_FakeSource(indices=(0, 1, 2)),
@@ -129,9 +129,9 @@ class TestValidatePayload:
         assert result[0].ctx["missing_indices"] == [1, 2]
 
     def test_already_validated_payload_passthrough(self):
-        already = LineIndexedTranslation.model_validate("<0/>a\n[=[END]=]")
+        already = LineIndexedLLMResponse.model_validate("<0/>a\n[=[END]=]")
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(),
             raw=already,
             source=_FakeSource(indices=(0,)),
@@ -142,9 +142,9 @@ class TestValidatePayload:
     def test_already_validated_payload_runs_content_checks(self):
         from ebook_translator.checks.content.line_count_check import LineCountCheck
 
-        already = LineIndexedTranslation.model_validate("<0/>a\n[=[END]=]")
+        already = LineIndexedLLMResponse.model_validate("<0/>a\n[=[END]=]")
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(LineCountCheck(),),
             raw=already,
             source=_FakeSource(indices=(0, 1)),
@@ -157,7 +157,7 @@ class TestValidatePayload:
 
         sentinel = _AlwaysFailLineCount()
         result = validate_payload(
-            payload_type=LineIndexedTranslation,
+            payload_type=LineIndexedLLMResponse,
             content_checks=(LineCountCheck(), sentinel),
             raw="<0/>a\n[=[END]=]",
             source=_FakeSource(indices=(0, 1)),

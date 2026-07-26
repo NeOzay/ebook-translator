@@ -13,9 +13,9 @@ from ebooklib import epub
 
 from ebook_translator.segmentation.chapter_chunk import ChapterChunk
 from ebook_translator.segmentation.chapter_detector import (
-    FileType,
     SequentialChapterDetector,
     SequentialDetectorConfig,
+    _FileType,
 )
 
 
@@ -97,35 +97,35 @@ class TestAnalyzeWithContext:
         for filename in ["cover", "toc", "copyright", "colophon"]:
             analysis = detector._analyze_with_context(filename, 0)  # type: ignore[reportPrivateUsage]
             assert (
-                analysis.file_type == FileType.SKIP
+                analysis.file_type == _FileType.SKIP
             ), f"{filename!r} devrait être SKIP"
 
     def test_front_matter_ignored_by_default(self):
         """Front matter ignoré par défaut (include_front_matter=False)."""
         detector = SequentialChapterDetector([])
         analysis = detector._analyze_with_context("preface", 0)  # type: ignore[reportPrivateUsage]
-        assert analysis.file_type == FileType.SKIP
+        assert analysis.file_type == _FileType.SKIP
 
     def test_front_matter_included_when_configured(self):
         """Front matter devient chapitre si include_front_matter=True."""
         config = SequentialDetectorConfig(include_front_matter=True)
         detector = SequentialChapterDetector([], config=config)
         analysis = detector._analyze_with_context("preface", 0)  # type: ignore[reportPrivateUsage]
-        assert analysis.file_type == FileType.FRONT_MATTER
+        assert analysis.file_type == _FileType.FRONT_MATTER
         assert analysis.is_new_chapter is True
 
     def test_back_matter_ignored_by_default(self):
         """Back matter ignoré par défaut."""
         detector = SequentialChapterDetector([])
         analysis = detector._analyze_with_context("afterword", 0)  # type: ignore[reportPrivateUsage]
-        assert analysis.file_type == FileType.SKIP
+        assert analysis.file_type == _FileType.SKIP
 
     def test_insert_is_not_new_chapter(self):
         """Fichier 'insert' est ajouté au chapitre courant (pas nouveau chapitre)."""
         detector = SequentialChapterDetector([])
         # Le nom normalisé doit commencer par "insert" pour déclencher INSERT
         analysis = detector._analyze_with_context("insert1", 0)  # type: ignore[reportPrivateUsage]
-        assert analysis.file_type == FileType.INSERT
+        assert analysis.file_type == _FileType.INSERT
         assert analysis.is_new_chapter is False
 
 

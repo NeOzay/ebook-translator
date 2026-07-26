@@ -221,7 +221,7 @@ class TemplateRenderer:
             Prompt système rendu prêt pour envoi au LLM
 
         Raises:
-           Error: Si la traduction initiale est manquante (Phase 1 incomplète)
+            Error: Si la traduction initiale est manquante (Phase 1 incomplète)
 
         Example:
             >>> prompt = renderer.render_refine(

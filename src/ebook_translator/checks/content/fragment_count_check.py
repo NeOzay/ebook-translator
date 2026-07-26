@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import ClassVar, override
 
+from template.phase.translation_models import LineIndexed
+
 from ...constants import FRAGMENT_SEPARATOR
 from ...validation.diagnostics import ErreursType, FragmentDiagnostic
 from ...validation.failure import ValidationFailure
@@ -16,7 +18,7 @@ from ...validation.retry_strategy import RetryStrategy
 from ..content_check import ChunkSource, ContentCheck
 
 
-class FragmentCountCheck(ContentCheck[dict[int, str], FragmentDiagnostic]):
+class FragmentCountCheck(ContentCheck[LineIndexed, FragmentDiagnostic]):
     """Le nombre de `</>` par ligne traduite égale celui de la source."""
 
     error_type: ClassVar[ErreursType] = ErreursType.FRAGMENT_COUNT_MISMATCH
@@ -25,7 +27,7 @@ class FragmentCountCheck(ContentCheck[dict[int, str], FragmentDiagnostic]):
 
     @override
     def run(
-        self, data: dict[int, str], source: ChunkSource
+        self, data: LineIndexed, source: ChunkSource
     ) -> list[ValidationFailure[FragmentDiagnostic]]:
         failures: list[ValidationFailure[FragmentDiagnostic]] = []
         for index in source.line_indices:
@@ -47,6 +49,8 @@ class FragmentCountCheck(ContentCheck[dict[int, str], FragmentDiagnostic]):
                         "expected_pairs": expected,
                         "actual_pairs": actual,
                     },
+                    relevant_indices=frozenset({index}),
+                    check_source=type(self),
                 )
             )
         return failures

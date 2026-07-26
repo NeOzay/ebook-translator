@@ -17,9 +17,9 @@ from typing import Any
 
 from ebook_translator.persistence.line_indexed_persister import LineIndexedPersister
 from ebook_translator.stores.byte_store import MemoryByteStore
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
-_ADAPTER = LineIndexedTranslation.target_adapter()
+_ADAPTER = LineIndexedLLMResponse.target_adapter()
 
 
 # ---------- Fakes ----------
@@ -82,26 +82,26 @@ def _load(raw: bytes | None) -> dict[int, str]:
 
 class TestIsChunkCached:
     def test_returns_false_when_store_empty(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
         assert p.is_chunk_cached(chunk, MemoryByteStore()) is False  # type: ignore[arg-type]
 
     def test_returns_true_when_all_indices_present_single_file(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", _serialize({0: "t0", 1: "t1"}))
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
         assert p.is_chunk_cached(chunk, store) is True  # type: ignore[arg-type]
 
     def test_returns_false_when_one_index_missing(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", _serialize({0: "t0"}))
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
         assert p.is_chunk_cached(chunk, store) is False  # type: ignore[arg-type]
 
     def test_returns_true_when_chunk_spans_multiple_files(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", _serialize({0: "a0"}))
         store.write("b.html", _serialize({3: "b3"}))
@@ -109,7 +109,7 @@ class TestIsChunkCached:
         assert p.is_chunk_cached(chunk, store) is True  # type: ignore[arg-type]
 
     def test_fallback_covers_missing_when_main_empty(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         main = MemoryByteStore()
         fallback = MemoryByteStore()
         fallback.write("a.html", _serialize({0: "fb0", 1: "fb1"}))
@@ -117,7 +117,7 @@ class TestIsChunkCached:
         assert p.is_chunk_cached(chunk, main, fallback) is True  # type: ignore[arg-type]
 
     def test_fallback_partial_still_returns_false(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         main = MemoryByteStore()
         fallback = MemoryByteStore()
         fallback.write("a.html", _serialize({0: "fb0"}))
@@ -130,7 +130,7 @@ class TestIsChunkCached:
 
 class TestPersist:
     def test_writes_single_file(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
         # payload chunk-local : lignes 0..1
@@ -140,7 +140,7 @@ class TestPersist:
         assert _load(store.read("a.html")) == {0: "T0", 1: "T1"}
 
     def test_writes_remap_chunk_idx_to_file_idx(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         # tag_key.index = 5 et 7 (file-local) ; chunk_idx = 0 et 1
         chunk = _make_chunk(("a.html", 5), ("a.html", 7))
@@ -149,7 +149,7 @@ class TestPersist:
         assert _load(store.read("a.html")) == {5: "T0", 7: "T1"}
 
     def test_writes_split_across_files(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         chunk = _make_chunk(("a.html", 0), ("b.html", 3), ("a.html", 1))
         p.persist(chunk, {0: "Ta0", 1: "Tb3", 2: "Ta1"}, store)  # type: ignore[arg-type]
@@ -158,7 +158,7 @@ class TestPersist:
         assert _load(store.read("b.html")) == {3: "Tb3"}
 
     def test_merges_with_existing_payload(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         # Pré-existant : un autre chunk a déjà déposé ses lignes
         store.write("a.html", _serialize({4: "old4"}))
@@ -170,7 +170,7 @@ class TestPersist:
         assert _load(store.read("a.html")) == {0: "T0", 1: "T1", 4: "old4"}
 
     def test_merge_overwrites_on_collision(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", _serialize({0: "old0"}))
 
@@ -181,7 +181,7 @@ class TestPersist:
         assert _load(store.read("a.html")) == {0: "NEW0"}
 
     def test_partial_payload_skips_missing_chunk_idx(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         chunk = _make_chunk(("a.html", 0), ("a.html", 1), ("a.html", 2))
         # Payload chunk-local incomplet : pas de chunk_idx=1
@@ -196,14 +196,14 @@ class TestPersist:
 
 class TestLoadForChunk:
     def test_returns_none_and_all_missing_when_store_empty(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
         payload, missing = p.load_for_chunk(chunk, MemoryByteStore())  # type: ignore[arg-type]
         assert payload is None
         assert missing == {0, 1}
 
     def test_reconstructs_chunk_local_view(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         # File-local : indices 5, 7
         store.write("a.html", _serialize({5: "Ta5", 7: "Ta7"}))
@@ -215,7 +215,7 @@ class TestLoadForChunk:
         assert missing == set()
 
     def test_partial_load_marks_missing_chunk_idx(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", _serialize({0: "Ta0"}))
         chunk = _make_chunk(("a.html", 0), ("a.html", 1))
@@ -225,7 +225,7 @@ class TestLoadForChunk:
         assert missing == {1}
 
     def test_fallback_fills_gaps(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         main = MemoryByteStore()
         fallback = MemoryByteStore()
         main.write("a.html", _serialize({0: "M0"}))
@@ -237,7 +237,7 @@ class TestLoadForChunk:
         assert missing == set()
 
     def test_main_takes_precedence_over_fallback(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         main = MemoryByteStore()
         fallback = MemoryByteStore()
         main.write("a.html", _serialize({0: "M0"}))
@@ -254,7 +254,7 @@ class TestLoadForChunk:
 
 class TestCorruption:
     def test_corrupt_file_treated_as_absent(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", b"not a valid json")
         chunk = _make_chunk(("a.html", 0))
@@ -265,7 +265,7 @@ class TestCorruption:
         assert missing == {0}
 
     def test_persist_overwrites_corrupt_file(self) -> None:
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", b"corruption")
         chunk = _make_chunk(("a.html", 0))
@@ -279,7 +279,7 @@ class TestCorruption:
 
         Doit être traité comme corrompu (pas de migration silencieuse).
         """
-        p = LineIndexedPersister(LineIndexedTranslation)
+        p = LineIndexedPersister(LineIndexedLLMResponse)
         store = MemoryByteStore()
         store.write("a.html", json.dumps({"lines": {"0": "old"}}).encode())
         chunk = _make_chunk(("a.html", 0))

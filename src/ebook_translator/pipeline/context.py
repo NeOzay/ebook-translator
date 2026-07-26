@@ -2,6 +2,8 @@
 Contextes de données pour le système de phases.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
@@ -14,10 +16,11 @@ from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.segmentation.chapter import Chapters
 from ebook_translator.segmentation.chunk import ChunkProtocol
-from ebook_translator.validation import ValidationWorkerPool
 
 if TYPE_CHECKING:
-    pass
+    # Cycle : le pool dépend de `CommunContext` (défini ici) au runtime.
+    # Cette annotation ne sert qu'au typage.
+    from ebook_translator.validation import ValidationWorkerPool
 
 
 @dataclass
@@ -111,6 +114,8 @@ class PhaseContext(CommunContext):
     Contient toutes les informations et ressources nécessaires pour l'exécution.
     """
 
+    name: PhaseName
+
     validation_pool: ValidationWorkerPool
     """Pool de validation pour traiter les traductions"""
 
@@ -141,7 +146,7 @@ class ChunkContext(CommunContext):
     Contient les informations nécessaires pour traiter un chunk spécifique.
     """
 
-    phase_name: str
+    phase: PhaseContext
     """Nom de la phase en cours"""
 
     chunk_index: int

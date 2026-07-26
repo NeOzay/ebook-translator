@@ -139,11 +139,14 @@ class PhaseExecutor:
             self.previous_chunk = chunk
 
             if cached_result is not None and not missing:
-                # Chunk intégralement en cache → re-soumis pour validation
-                # (peut nécessiter re-validation après changement de contraintes).
+                # Chunk intégralement en cache → re-soumis pour validation.
                 self.stats.chunks_from_cache += 1
                 self.context.validation_pool.submit(
-                    ValidationItem(chunk, chunk_context, cached_result)
+                    ValidationItem(
+                        chunk=chunk,
+                        chunk_info=chunk_context,
+                        data=cached_result,
+                    )
                 )
                 logger.debug(
                     f"✓ Chunk {chunk.index} loaded from cache ({self.phase.name})"
@@ -171,17 +174,19 @@ class PhaseExecutor:
                     sys_prompt, user_prompt, log_name=context_str, config=llm_config
                 )
 
-            # 5. Parse
-            translated_texts = self.phase.process_llm_response(
-                chunk, llm_output, chunk_context
-            )
+            # 5. Parse via payload_type Pydantic (schéma + format) puis
+            # collapse vers la vue TypedDict. Le Pydantic est jeté ici
+            # car `M → DT` n'est typiquement pas réversible — la queue
+            # transporte uniquement DT.
+            payload = self.phase.payload_type.model_validate(llm_output)
+            data = payload.build()
 
             # 6. Hook after_chunk
-            self.phase.after_chunk(chunk, translated_texts, chunk_context)
+            self.phase.after_chunk(chunk, data, chunk_context)
 
-            # 7. Submit to validation
+            # 7. Submit to validation (DT seul, pas de Pydantic en queue).
             self.context.validation_pool.submit(
-                ValidationItem(chunk, chunk_context, translated_texts)
+                ValidationItem(chunk=chunk, chunk_info=chunk_context, data=data)
             )
             self.stats.chunks_translated += 1
 

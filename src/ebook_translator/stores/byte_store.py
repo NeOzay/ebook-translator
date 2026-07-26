@@ -71,7 +71,7 @@ class ByteStore(Protocol):
 
 
 @contextmanager
-def _wrap_lock(lock: threading.RLock) -> Generator[None, None, None]:
+def _wrap_lock(lock: threading.RLock) -> Generator[None]:
     """Adapte `threading.RLock` au type `AbstractContextManager[None]`.
 
     `threading.RLock.__enter__` retourne `bool`, ce qui ne satisfait pas
@@ -141,7 +141,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
-class FileByteStore:
+class FileByteStore(ByteStore):
     """`ByteStore` adossé au filesystem.
 
     Un fichier par clé (`<safe_name>_<hash>.json`) dans `cache_dir`.
@@ -197,7 +197,7 @@ class FileByteStore:
         return _wrap_lock(_file_lock(self._path(key)))
 
 
-class MemoryByteStore:
+class MemoryByteStore(ByteStore):
     """`ByteStore` en mémoire, thread-safe. Pour tests uniquement."""
 
     def __init__(self) -> None:

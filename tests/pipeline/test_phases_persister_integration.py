@@ -22,9 +22,9 @@ import pytest
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.pipeline.phases.refinement import RefinementPhase
 from ebook_translator.stores.byte_store import FileByteStore
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
-_ADAPTER = LineIndexedTranslation.target_adapter()
+_ADAPTER = LineIndexedLLMResponse.target_adapter()
 
 
 # ---------- Fakes pour les chunks ----------

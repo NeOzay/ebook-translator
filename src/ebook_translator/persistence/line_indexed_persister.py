@@ -8,7 +8,7 @@ par le chunk), où chaque fichier stocke un TypedDict file-local
 les chunks ayant traversé ce fichier source.
 
 Le format disque est la forme « donnée pure » produite par
-`LineIndexedTranslation.serialized_build()` (un objet JSON plat
+`LineIndexedLLMResponse.serialized_build()` (un objet JSON plat
 `{"0": "T0", "1": "T1"}`), pas la forme Pydantic enveloppée
 (`{"lines": {...}}`). Pydantic n'intervient qu'au parsing de la sortie
 LLM côté caller ; le persister n'en dépend pas.
@@ -29,6 +29,7 @@ from typing import override
 
 from pydantic import ValidationError
 
+from template.phase.translation_models import LineIndexed
 from template.types import ConvertibleModel
 
 from ..logger import get_logger
@@ -39,7 +40,7 @@ from .chunk_persister import ChunkPersister
 logger = get_logger(__name__)
 
 
-class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
+class LineIndexedPersister(ChunkPersister[ChunkProtocol, LineIndexed]):
     """Cache line-indexé : un fichier ByteStore par fichier source HTML.
 
     Disque et API en TypedDict pur (`dict[int, str]`). La (dé)sérialisation
@@ -48,7 +49,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
     touché.
     """
 
-    def __init__(self, model: type[ConvertibleModel[dict[int, str]]]) -> None:
+    def __init__(self, model: type[ConvertibleModel[LineIndexed]]) -> None:
         self._model = model
         self._adapter = model.target_adapter()
 
@@ -73,7 +74,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
     def persist(
         self,
         chunk: ChunkProtocol,
-        data: dict[int, str],
+        data: LineIndexed,
         store: ByteStore,
     ) -> None:
         # Regroupe les lignes du payload chunk-local par file_name de
@@ -85,7 +86,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
                 # Payload partiel sur cet index : on ne caste pas une ligne
                 # absente (un retry ciblé la fournira plus tard).
                 continue
-            file_name = str(page.epub_html.file_name)
+            file_name = page.epub_html.file_name
             file_idx = int(tag_key.index)
             if file_name not in by_file:
                 by_file[file_name] = {}
@@ -95,7 +96,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
         for file_name, new_lines in by_file.items():
             with store.lock(file_name):
                 existing = self._load_file(store, file_name) or {}
-                merged = {**existing, **new_lines}
+                merged = LineIndexed({**existing, **new_lines})
                 store.write(file_name, self._adapter.dump_json(merged, indent=2))
 
     @override
@@ -104,7 +105,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
         chunk: ChunkProtocol,
         store: ByteStore,
         fallback: ByteStore | None = None,
-    ) -> tuple[dict[int, str] | None, set[int]]:
+    ) -> tuple[LineIndexed | None, set[int]]:
         # Reconstruit la vue chunk-local (clés 0..N) depuis les fichiers
         # file-local du store (clés tag_key.index).
         chunk_lines: dict[int, str] = {}
@@ -124,7 +125,7 @@ class LineIndexedPersister(ChunkPersister[ChunkProtocol, dict[int, str]]):
 
         if not chunk_lines:
             return None, missing
-        return chunk_lines, missing
+        return LineIndexed(chunk_lines), missing
 
     def _load_file(
         self, store: ByteStore | None, file_name: str

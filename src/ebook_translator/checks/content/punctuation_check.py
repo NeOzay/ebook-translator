@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import ClassVar, override
 
+from template.phase.translation_models import LineIndexed
+
 from ...validation.diagnostics import ErreursType, PunctuationDiagnostic
 from ...validation.failure import ValidationFailure
 from ...validation.retry_strategy import RetryStrategy
@@ -26,7 +28,7 @@ def _count_quote_pairs(text: str) -> int:
     return total // 2
 
 
-class PunctuationCheck(ContentCheck[dict[int, str], PunctuationDiagnostic]):
+class PunctuationCheck(ContentCheck[LineIndexed, PunctuationDiagnostic]):
     """Le nombre de paires de guillemets par ligne est préservé."""
 
     error_type: ClassVar[ErreursType] = ErreursType.PUNCTUATION_MISMATCH
@@ -35,7 +37,7 @@ class PunctuationCheck(ContentCheck[dict[int, str], PunctuationDiagnostic]):
 
     @override
     def run(
-        self, data: dict[int, str], source: ChunkSource
+        self, data: LineIndexed, source: ChunkSource
     ) -> list[ValidationFailure[PunctuationDiagnostic]]:
         failures: list[ValidationFailure[PunctuationDiagnostic]] = []
         for index in source.line_indices:
@@ -57,6 +59,8 @@ class PunctuationCheck(ContentCheck[dict[int, str], PunctuationDiagnostic]):
                         "expected_pairs": expected,
                         "actual_pairs": actual,
                     },
+                    relevant_indices=frozenset({index}),
+                    check_source=type(self),
                 )
             )
         return failures

@@ -62,3 +62,13 @@ test_progressive_prompts.py
 prompt_*.txt
 
 poubelle
+
+# Cache de traduction du pipeline (cache/{phase_name}/*.json)
+cache/
+
+# Couverture de tests
+.coverage
+htmlcov/
+
+# EPUB de test décompressé (volumineux, non redistribuable)
+tests/Saint-Exupery-Le_Petit_Prince/

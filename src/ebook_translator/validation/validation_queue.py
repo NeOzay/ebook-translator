@@ -1,57 +1,68 @@
-"""
-Queue thread-safe pour gérer les validations à effectuer.
+"""Queues thread-safe pour le pipeline validation/save.
 
-Ce module fournit une infrastructure pour collecter et distribuer
-les chunks à valider aux ValidationWorkers.
+`ValidationItem[DT]` porte la **vue TypedDict** consommée par le worker.
+Pas de Pydantic dans la queue — `M → DT` n'est typiquement pas
+réversible (champs dérivés / ClassVars / metadata absents du `build()`).
+La conversion schéma se fait à deux endroits stables :
+
+- côté **executor** (post-LLM) : `payload_type.model_validate(raw)` puis
+  `payload.build()` → DT injecté dans la queue.
+- côté **worker** (post-LLM retry) : `payload_type.model_validate_json(raw)`
+  puis `build()` → DT mergé.
+
+`SaveItem[ChunkType, DT]` reste self-contained (cf. Bloc A) : embarque
+son propre persister + byte_store.
 """
+
+from __future__ import annotations
 
 import queue
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ebook_translator.persistence.chunk_persister import ChunkPersister
+from ebook_translator.segmentation.chunk import ChunkProtocol
 from ebook_translator.stores.byte_store import ByteStore
 
-if TYPE_CHECKING:
-    from ebook_translator.segmentation.chunk import ChunkProtocol
+from .failure import ValidationFailure
 
+if TYPE_CHECKING:
     from ..pipeline.context import ChunkContext
-    from ..segmentation import TranslatedChunk
 
 
 @dataclass
-class ValidationItem:
-    """
-    Représente un chunk et ses traductions à valider.
+class ValidationItem[DT: Any = Any]:
+    """Unité de travail soumise au worker de validation.
 
     Attributes:
-        chunk: Le chunk avec textes originaux
-        translated_texts: Traductions à valider {line_index: translated_text}
-
-    Example:
-        >>> item = ValidationItem(
-        ...     chunk=chunk,
-        ...     translated_texts={0: "Bonjour", 1: "Monde"}
-        ... )
+        chunk: Chunk source (textes d'origine + métadonnées).
+        chunk_info: Contexte d'exécution (phase, index, chunk précédent).
+        data: Vue TypedDict de la sortie LLM (déjà schéma-validée par
+            l'executor). Pour les phases de traduction : `dict[int, str]`.
+        attempt: Numéro de la tentative courante (1 = T1, 2 = T2, …).
+        failures: Diagnostics cumulés des tentatives précédentes. Le
+            worker consulte la dernière `failure` pour router via
+            `RETRY_REGISTRY` ; la liste sert au log et au tracing.
     """
 
     chunk: ChunkProtocol
     chunk_info: ChunkContext
-    translated_texts: dict[int, str]
-    previous_translated_texts: TranslatedChunk | None = None
+    data: DT
+    attempt: int = 0
+    failures: list[ValidationFailure[Any]] = field(default_factory=list)
 
     def __repr__(self) -> str:
-        """Représentation pour le debug."""
         return (
             f"ValidationItem(chunk={self.chunk.index}, "
-            f"lines={len(self.translated_texts)})"
+            f"data={type(self.data).__name__}, "
+            f"attempt={self.attempt}, failures={len(self.failures)})"
         )
 
 
 @dataclass
-class SaveItem[ChunkType: ChunkProtocol = "ChunkProtocol", DT: Any = Any]:
+class SaveItem[ChunkType: ChunkProtocol = ChunkProtocol, DT: Any = Any]:
     """Unité de travail self-contained pour le `SaveWorker`.
 
     Le worker se contente d'appeler `persister.persist(chunk, data, byte_store)` ;
@@ -90,23 +101,8 @@ class ValidationQueueStats:
     pending: int = 0
 
 
-class ValidationQueue:
-    """
-    Queue thread-safe pour gérer les validations de chunks.
-
-    Cette classe fournit une interface thread-safe pour soumettre des chunks
-    à valider, les récupérer pour validation, et suivre leur statut.
-
-    Example:
-        >>> validation_queue = ValidationQueue(maxsize=100)
-        >>> validation_queue.put(ValidationItem(chunk, translations))
-        >>> item = validation_queue.get(timeout=5.0)
-        >>> # ... valider ...
-        >>> if success:
-        ...     validation_queue.mark_validated()
-        ... else:
-        ...     validation_queue.mark_rejected()
-    """
+class ValidationQueue[DT: Any = Any]:
+    """Queue thread-safe paramétrée sur la vue TypedDict `DT`."""
 
     def __init__(self, maxsize: int = 100):
         """
@@ -115,7 +111,9 @@ class ValidationQueue:
         Args:
             maxsize: Taille maximale de la queue (défaut: 100)
         """
-        self._queue: queue.Queue[ValidationItem | None] = queue.Queue(maxsize=maxsize)
+        self._queue: queue.Queue[ValidationItem[DT] | None] = queue.Queue(
+            maxsize=maxsize
+        )
         self._lock = threading.Lock()
         self._stats = ValidationQueueStats()
         self._in_progress = (
@@ -124,7 +122,7 @@ class ValidationQueue:
 
     def put(
         self,
-        item: ValidationItem | None,
+        item: ValidationItem[DT] | None,
         block: bool = True,
         timeout: float | None = None,
     ) -> None:
@@ -148,7 +146,7 @@ class ValidationQueue:
 
     def get(
         self, block: bool = True, timeout: float | None = None
-    ) -> ValidationItem | None:
+    ) -> ValidationItem[DT] | None:
         """
         Récupère un item depuis la queue.
 
@@ -250,22 +248,10 @@ class ValidationQueue:
         )
 
 
-class SaveQueue:
-    """
-    Queue thread-safe pour gérer les sauvegardes à effectuer.
+class SaveQueue[ChunkType: ChunkProtocol = ChunkProtocol, DT: Any = Any]:
+    """Queue thread-safe paramétrée sur le couple `(ChunkType, DT)`.
 
-    Cette queue permet de séparer la validation (multi-thread) de la sauvegarde
-    (single-thread), éliminant ainsi les conflits d'écriture (WinError 32 sur Windows).
-
-    Architecture:
-        ValidationWorkers → SaveQueue → SaveWorker (unique) → Store
-
-    Example:
-        >>> save_queue = SaveQueue(maxsize=100)
-        >>> save_queue.put(SaveItem(chunk, translations, translation_map))
-        >>> item = save_queue.get(timeout=5.0)
-        >>> # ... sauvegarder dans Store ...
-        >>> save_queue.mark_saved()
+    `ValidationWorkers → SaveQueue → SaveWorker (unique) → ByteStore`.
     """
 
     def __init__(self, maxsize: int = 100):
@@ -275,14 +261,16 @@ class SaveQueue:
         Args:
             maxsize: Taille maximale de la queue (défaut: 100)
         """
-        self._queue: queue.Queue[SaveItem | None] = queue.Queue(maxsize=maxsize)
+        self._queue: queue.Queue[SaveItem[ChunkType, DT] | None] = queue.Queue(
+            maxsize=maxsize
+        )
         self._lock = threading.Lock()
         self._stats = {"saved": 0, "pending": 0, "errors": 0}
         self._in_progress = 0  # Items sortis de la queue mais pas encore sauvegardés
 
     def put(
         self,
-        item: SaveItem | None,
+        item: SaveItem[ChunkType, DT] | None,
         block: bool = True,
         timeout: float | None = None,
     ) -> None:
@@ -303,7 +291,9 @@ class SaveQueue:
 
         self._queue.put(item, block=block, timeout=timeout)
 
-    def get(self, block: bool = True, timeout: float | None = None) -> SaveItem | None:
+    def get(
+        self, block: bool = True, timeout: float | None = None
+    ) -> SaveItem[ChunkType, DT] | None:
         """
         Récupère un item depuis la queue.
 

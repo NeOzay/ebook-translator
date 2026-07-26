@@ -18,7 +18,7 @@ import pytest
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.pipeline.phases.refinement import RefinementPhase
 from ebook_translator.validation.diagnostics import ErreursType
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ def refinement_phase() -> RefinementPhase:
 
 class TestInitialPhaseConfiguration:
     def test_payload_type(self, initial_phase: InitialTranslationPhase) -> None:
-        assert initial_phase.payload_type is LineIndexedTranslation
+        assert initial_phase.payload_type is LineIndexedLLMResponse
 
     def test_content_checks_count(self, initial_phase: InitialTranslationPhase) -> None:
         assert len(initial_phase.content_checks) == 4
@@ -64,7 +64,7 @@ class TestInitialPhaseConfiguration:
 
 class TestRefinementPhaseConfiguration:
     def test_payload_type(self, refinement_phase: RefinementPhase) -> None:
-        assert refinement_phase.payload_type is LineIndexedTranslation
+        assert refinement_phase.payload_type is LineIndexedLLMResponse
 
     def test_content_checks_count(self, refinement_phase: RefinementPhase) -> None:
         assert len(refinement_phase.content_checks) == 4
@@ -82,7 +82,7 @@ class TestInitialPhaseValidate:
         )
         raw = "<0/>Bonjour </> monde.\n<1/>« Salut. »\n[=[END]=]"
         result = initial_phase.validate(raw, source)
-        assert isinstance(result, LineIndexedTranslation)
+        assert isinstance(result, LineIndexedLLMResponse)
         assert result.lines[0] == "Bonjour </> monde."
         assert result.lines[1] == "« Salut. »"
 
@@ -115,4 +115,4 @@ class TestRefinementPhaseValidate:
         source = _FakeSource(texts={0: "Hello.", 1: "World."})
         raw = "<0/>Bonjour.\n<1/>Monde.\n[=[END]=]"
         result = refinement_phase.validate(raw, source)
-        assert isinstance(result, LineIndexedTranslation)
+        assert isinstance(result, LineIndexedLLMResponse)

@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from typing import ClassVar, override
 
+from template.phase.translation_models import LineIndexed
+
 from ...validation.diagnostics import ErreursType, SentenceDiagnostic
 from ...validation.failure import ValidationFailure
 from ...validation.retry_strategy import RetryStrategy
@@ -27,7 +29,7 @@ def _count_sentences(text: str) -> int:
     return len(parts)
 
 
-class SentenceCheck(ContentCheck[dict[int, str], SentenceDiagnostic]):
+class SentenceCheck(ContentCheck[LineIndexed, SentenceDiagnostic]):
     """Le nombre de phrases par ligne est préservé entre source et traduction."""
 
     error_type: ClassVar[ErreursType] = ErreursType.SENTENCE_INVALID
@@ -36,7 +38,7 @@ class SentenceCheck(ContentCheck[dict[int, str], SentenceDiagnostic]):
 
     @override
     def run(
-        self, data: dict[int, str], source: ChunkSource
+        self, data: LineIndexed, source: ChunkSource
     ) -> list[ValidationFailure[SentenceDiagnostic]]:
         invalid: list[int] = []
         for index in source.line_indices:
@@ -51,5 +53,7 @@ class SentenceCheck(ContentCheck[dict[int, str], SentenceDiagnostic]):
                 error_type=ErreursType.SENTENCE_INVALID,
                 msg=f"{len(invalid)} ligne(s) avec un nombre de phrases incorrect",
                 ctx={"invalid_indices": sorted(invalid)},
+                relevant_indices=frozenset(invalid),
+                check_source=type(self),
             )
         ]

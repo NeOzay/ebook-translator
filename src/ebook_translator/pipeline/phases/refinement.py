@@ -30,7 +30,7 @@ from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.stores.byte_store import ByteStore, FileByteStore
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
 logger = get_logger(__name__)
 
@@ -73,7 +73,7 @@ class RefinementPhase(PhaseBase[Chunk, dict[int, str]]):
 
     # Nouvelle API (étape 5+). Cohabite avec `checks` legacy ; le worker
     # unifié de l'étape 7 lira `payload_type` + `content_checks`.
-    payload_type = LineIndexedTranslation
+    payload_type = LineIndexedLLMResponse
     content_checks = (
         ContentLineCountCheck(),
         ContentFragmentCountCheck(),
@@ -81,7 +81,7 @@ class RefinementPhase(PhaseBase[Chunk, dict[int, str]]):
         ContentSentenceCheck(),
     )
 
-    persister = LineIndexedPersister(LineIndexedTranslation)
+    persister = LineIndexedPersister(LineIndexedLLMResponse)
 
     @override
     def get_byte_fallback_store(self) -> ByteStore | None:

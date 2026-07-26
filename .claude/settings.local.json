@@ -1,19 +1,19 @@
 {
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": false
+  },
   "permissions": {
     "allow": [
       "Bash(poetry run pytest:*)",
       "Bash(git log:*)",
       "Bash(poetry run python:*)",
       "Bash(iconv:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
       "Bash(rtk ls:*)",
       "Bash(rtk pytest:*)",
       "Bash(rtk find:*)",
       "Bash(rtk read:*)",
       "Bash(rtk grep:*)",
-      "Bash(uv run:*)",
-      "Bash(rtk git *)"
+      "Bash(uv run:*)"
     ],
     "deny": [],
     "ask": []

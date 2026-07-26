@@ -210,21 +210,12 @@ class Pipeline:
                 chapters=Chapters(source_book),
             )
 
-            # ValidationWorkerPool (sera reconfiguré par chaque phase)
-            # Créer un pipeline/store dummy pour initialisation (sera remplacé par PhaseExecutor)
-            from ebook_translator.checks import ValidationPipeline
-
-            dummy_pipeline = ValidationPipeline([])
-            dummy_store = self.store_manager.get_store(self.phases[0].name)
-
+            # ValidationWorkerPool (reconfiguré par chaque phase via switch_phase).
             self.validation_pool = ValidationWorkerPool(
                 num_workers=self.num_validation_workers,
-                pipeline=dummy_pipeline,  # Sera switch par PhaseExecutor
-                store=dummy_store,  # Sera switch par PhaseExecutor
                 llm=self.llm,
                 target_language=target_language,
                 phase=DummyPhase(),  # Sera switch par PhaseExecutor
-                max_retries=max_retries,
             )
             self.validation_pool.start()
             logger.info(

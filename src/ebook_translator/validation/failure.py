@@ -9,9 +9,20 @@ constructeur de paramètres associés via `RETRY_REGISTRY`.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
+
+if TYPE_CHECKING:
+    from ebook_translator.checks.content_check import ContentCheck
+
+    # Typage statique fort côté basedpyright.
+    type CheckSource = type[ContentCheck[Any, Any]]
+else:
+    # `ContentCheck` est un Protocol non runtime_checkable : Pydantic ne peut
+    # pas faire `issubclass` dessus. On lui donne `type` nu au runtime. Cet
+    # import est aussi celui qui fermerait le cycle checks ↔ validation.
+    CheckSource = type
 
 from .diagnostics import (
     DuplicateIndicesDiagnostic,
@@ -42,9 +53,14 @@ class ValidationFailure[CtxT: Mapping[str, Any]](BaseModel):
     model_config = ConfigDict(frozen=True)
 
     error_type: ErreursType
+    # `None` pour les erreurs de schéma Pydantic : elles ne proviennent
+    # d'aucun `ContentCheck` (cf. `from_pydantic_error`).
+    check_source: CheckSource | None = None
     msg: str
     ctx: CtxT
     loc: tuple[str | int, ...] = ()
+    relevant_indices: frozenset[int]
+    attempt: int = 0
 
 
 def from_pydantic_error(
@@ -79,6 +95,7 @@ def from_pydantic_error(
                 msg=err["msg"],
                 ctx=ctx,
                 loc=tuple(err["loc"]),
+                relevant_indices=frozenset(),
             )
         )
     return failures

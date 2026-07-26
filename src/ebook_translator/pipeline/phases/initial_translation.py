@@ -27,7 +27,7 @@ from ebook_translator.persistence.line_indexed_persister import LineIndexedPersi
 from ebook_translator.pipeline.base import ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.segmentation.segmentator import Chunk
-from template.phase.translation_models import LineIndexedTranslation
+from template.phase.translation_models import LineIndexedLLMResponse
 
 logger = get_logger(__name__)
 
@@ -69,7 +69,7 @@ class InitialTranslationPhase(PhaseBase[Chunk, dict[int, str]]):
 
     # Nouvelle API (étape 5+). Cohabite avec `checks` legacy ; le worker
     # unifié de l'étape 7 lira `payload_type` + `content_checks`.
-    payload_type = LineIndexedTranslation
+    payload_type = LineIndexedLLMResponse
     content_checks = (
         ContentLineCountCheck(),
         ContentFragmentCountCheck(),
@@ -81,7 +81,7 @@ class InitialTranslationPhase(PhaseBase[Chunk, dict[int, str]]):
     # Lecture (`get_translation_cache`) et écriture (`save_item_builder`)
     # routent désormais vers `LineIndexedPersister` + `FileByteStore`.
     # Le legacy `Store.save_all` est court-circuité via `persist_fn`.
-    persister = LineIndexedPersister(LineIndexedTranslation)
+    persister = LineIndexedPersister(LineIndexedLLMResponse)
 
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
         """

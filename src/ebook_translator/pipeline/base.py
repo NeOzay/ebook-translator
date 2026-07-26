@@ -126,9 +126,19 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
     max_tokens: int
     overlap_ratio: float
     chunk_type: type[ChunkType]
+    payload_type: type[M]
+    data_type: type[DT]
+    content_checks: tuple[ContentCheck[DT, Any], ...]
 
     @classmethod
     def store_key(cls) -> str: ...
+    def chunk_source(self, chunk: ChunkType) -> ChunkSource: ...
+    def validate_data(
+        self, data: DT, source: ChunkSource
+    ) -> list[ValidationFailure[Any]]: ...
+    def validate_payload(
+        self, raw: str | M, source: ChunkSource
+    ) -> M | list[ValidationFailure[Any]]: ...
     def put_context(self, context: PhaseContext) -> None: ...
     @classmethod
     def validation_pipeline(cls) -> ValidationPipeline: ...
@@ -203,10 +213,19 @@ class PhaseBase[
     name: PhaseName = field(init=False)
     """Identifiant unique de la phase (ex: 'initial', 'refined', 'quality')"""
 
-    output_type: Literal["Text"] | type[BaseModel] = field(init=False, default="Text")
-
     chunk_type: type[ChunkType] = field(init=False)
     """Type de chunk traité par cette phase"""
+
+    payload_type: type[M] = field(init=False)
+    """Modèle Pydantic du payload LLM. Sous-classes migrées (étape 6+) le
+    surchargent (`LineIndexedLLMResponse`, `AnalyseChapter`, `LLMGlossaryModel`).
+
+    `ClassVar` plutôt que dataclass field : doit être une donnée de classe
+    pas d'instance (sinon le `default_factory` écrase la valeur posée par
+    la sous-classe à l'instanciation).
+    """
+
+    data_type: type[DT] = field(init=False)
 
     max_tokens: int = field()
     """Nombre maximum de tokens par segment"""
@@ -228,15 +247,6 @@ class PhaseBase[
     """Liste des checks de validation pour cette phase (legacy, étape 9 dépose)"""
 
     # === Configuration nouvelle API (étape 5+) ===
-
-    payload_type: type[M] = field(init=False)
-    """Modèle Pydantic du payload LLM. Sous-classes migrées (étape 6+) le
-    surchargent (`LineIndexedTranslation`, `AnalyseChapter`, `LLMGlossaryModel`).
-
-    `ClassVar` plutôt que dataclass field : doit être une donnée de classe
-    pas d'instance (sinon le `default_factory` écrase la valeur posée par
-    la sous-classe à l'instanciation).
-    """
 
     content_checks: tuple[ContentCheck[DT, Any], ...] = field(default=(), init=False)
     """Checks contenu post-parsing (nouveau Protocol). Chaque check porte
@@ -290,6 +300,7 @@ class PhaseBase[
 
     # === Hooks (méthodes de classe avec implémentation par défaut) ===
 
+    @override
     def get_chunks(self) -> Sequence[ChunkType]:
         """
         Retourne la liste des chunks à traiter pour cette phase.
