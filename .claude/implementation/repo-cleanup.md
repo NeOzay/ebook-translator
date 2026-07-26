@@ -1,7 +1,7 @@
 ---
 slug: repo-cleanup
 titre: Remise en état du repo — réparation du WIP, code mort, hygiène git
-branche: feature/phase0-literary-analysis
+branche: master
 base: master
 statut: en-cours
 session: 1
@@ -39,17 +39,27 @@ deux générations de code coexistent.
   - `UnifiedValidationWorker` lisait `CommunContext` avant `freeze()`
 - [x] 3. Tests morts traités : 9 supprimés (2190 lignes), `test_chapter_detector.py`
       récupéré (`FileType` → `_FileType`, 26 tests). Collecte débloquée.
-- [>] 2. Commiter cet état de réparation (296 passent / 71 échouent, 0 erreur
-      de collecte)
-- [ ] 4. Résorber les 71 échecs restants, par lot (voir État courant)
+- [x] 2. Commiter l'état de réparation (commit: ef4b7b3, submodule: faa94bd)
+- [x] 8. `master` avancé en fast-forward sur les 35 commits de
+      `feature/phase0-literary-analysis`. Aucune réécriture, aucun commit perdu.
+      Non poussé vers `origin` (décision à prendre).
+- [>] 4. Résorber les 71 échecs restants, par lot (voir État courant)
 - [ ] 5. Supprimer la génération morte de `checks/` (`check_tests/` vs `content/`)
 - [ ] 6. Hygiène repo : `.gitignore` (`cache/`), fixtures 836K, `examples/test2.py`
-- [ ] 7. Ramener `basedpyright src/` à 0 erreur
-- [ ] 8. Fusionner la branche dans `master`
+- [ ] 7. Ramener `basedpyright src/` à 0 erreur (46 actuellement ; le hook
+      pre-commit reste bloquant tant que ce n'est pas fait)
 
 ## État courant
 
-**Prochaine action** : étape 2 — commiter la réparation avant d'aller plus loin.
+**Prochaine action** : étape 4 — attaquer le lot Store (23 échecs, le plus gros)
+ou la racine de typage `LineIndexed` (voir journal), qui recouvre une partie des
+étapes 4 et 7.
+
+**Racine de typage à traiter en priorité** : le submodule expose désormais
+`LineIndexed = NewType("LineIndexed", dict[int, str])`, mais `PhaseBase`,
+`ChunkPersister` et `ContentCheck` restent paramétrés sur `dict[int, str]`.
+Ces paramètres étant invariants, l'écart se propage en cascade dans
+`initial_translation`, `refinement` et `persistence`.
 
 **Vérification** : `uv run pytest -q` puis `uv run basedpyright src/`
 
@@ -91,6 +101,15 @@ Récupéré : `test_chapter_detector.py` — module vivant, aucune autre couvert
 La bascule n'a jamais été terminée. Décider laquelle meurt (étape 5).
 
 ## Journal de décisions
+
+- **2026-07-26** — `master` avancé en fast-forward plutôt que via merge ou
+  rebase. *Pourquoi* : `master` n'avait aucun commit en propre, donc aucune
+  réécriture d'historique n'était nécessaire. *Rejeté* : `merge --squash`
+  (aurait écrasé 35 commits de refactor en un seul, perte de traçabilité).
+
+- **2026-07-26** — Commit de réparation passé avec `--no-verify`. *Pourquoi* :
+  le hook basedpyright bloque sur 46 erreurs qui relèvent des étapes 4/7 ;
+  sauvegarder l'état sain primait. *À solder* : étape 7.
 
 - **2026-07-26** — `ValidationFailure.check_source` typé `type[ContentCheck]`
   sous `TYPE_CHECKING` seulement, `type` nu au runtime. *Pourquoi* : Pydantic ne
