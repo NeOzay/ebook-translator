@@ -1,5 +1,34 @@
 # Refactor : PhaseBase autour de ConvertibleModel
 
+> **Archive de chantier — état atteint.** Ce document était le plan du refactor,
+> conservé dans `docs/` alors qu'il n'a jamais été une doc de référence. Il a été
+> déplacé ici le 2026-07-30 par le chantier `docs-realignment`. Son contenu est
+> laissé **intact** sous cet entête : c'est un instantané d'intention, pas une
+> description du code actuel. Pour l'architecture en vigueur, voir
+> [docs/ARCHITECTURE.md](../../../docs/ARCHITECTURE.md) et
+> [docs/VALIDATION.md](../../../docs/VALIDATION.md).
+>
+> **Ce qui a atterri** : les étapes 1 à 9 sont réalisées. `ValidationFailure`,
+> `diagnostics`, `RetryStrategy` et `RETRY_REGISTRY` existent ; `ContentCheck` a
+> remplacé les anciens `Check` ; `PhaseBase` est générique ; les quatre phases
+> sont migrées ; `translation/parser.py` et le package `validator/` sont
+> supprimés. Le solde a été fait par le chantier `repo-cleanup`
+> ([2026-07-30-repo-cleanup.md](2026-07-30-repo-cleanup.md)).
+>
+> **Quatre écarts avec la cible décrite ci-dessous**, vérifiés le 2026-07-30 :
+>
+> 1. `InstructorConfig[M]` n'a jamais été créé — `JsonRequestConfig` a été
+>    conservé et porte la voie Instructor (10 fichiers).
+> 2. `Store[M]` typé par phase n'existe pas. Le typage est passé ailleurs :
+>    `ChunkPersister` + `ByteStore` + `PhaseStorage`. `Store` reste non générique.
+> 3. `LineIndexedTranslation` a été renommé `LineIndexedLLMResponse`.
+> 4. Le critère « aucune occurrence de `dict[int, str]` dans `pipeline/`,
+>    `validation/`, `stores/` » n'est pas atteint : 6 occurrences subsistent,
+>    surtout sur le chemin de retry (`RetryContext.current_data`,
+>    `WorkerRetryContext.current_data`) et dans la lecture legacy de `Store`.
+>
+> Le paragraphe suivant décrit l'intention d'origine, non l'état du code.
+
 ## Objectif
 
 Faire que `PhaseBase` ne manipule **que** des `ConvertibleModel` typés (plus de

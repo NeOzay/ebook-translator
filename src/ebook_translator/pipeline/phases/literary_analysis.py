@@ -2,9 +2,8 @@
 
 Validation **entièrement schéma** : le modèle `AnalyseChapter` est passé au
 LLM via Instructor (`JsonRequestConfig`), qui garantit la structure côté
-API. Il n'y a donc ni `checks` legacy ni `content_checks` — l'ancien
-`AnalysisChecks` (parsing JSON + sections manquantes) est absorbé par
-Pydantic.
+API. Il n'y a donc pas de `content_checks` : le parsing JSON et le contrôle des
+sections obligatoires sont absorbés par Pydantic.
 """
 
 from collections.abc import Sequence
@@ -58,6 +57,7 @@ class LiteraryAnalysisPhase(
         default=5000
     )
     overlap_ratio: float = field(default=0.0, init=False)
+    head_tail_balance: float = field(default=0, init=False)
     execution_mode = ExecutionMode.SEQUENTIAL
 
     max_workers: int = field(
@@ -74,8 +74,9 @@ class LiteraryAnalysisPhase(
         """
         Retourne un chunk unique par chapitre pour analyse complète.
 
-        Note: Le nouveau template simplifié traite le chapitre complet en un seul
-        appel LLM (vs approche incrémentale multi-blocs de l'ancien système).
+        Un chapitre plus long que `max_tokens` est découpé en plusieurs
+        blocs, analysés en série : chacun reprend et enrichit la fiche du
+        précédent (cf. `render_prompt`).
         """
         all_chunks: list[ChapterPartChunk] = []
         for chapter in self.context.chapters.iter_chapter_chunks():

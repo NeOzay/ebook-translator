@@ -2,8 +2,8 @@
 
 Validation **entièrement schéma** : `LLMGlossaryModel` est passé au LLM via
 Instructor (`JsonRequestConfig`), qui garantit la structure côté API. Il n'y a
-donc pas de `content_checks` — l'ancien `GlossaryValidator` (parsing JSON +
-conversion du format compact) est absorbé par Pydantic.
+donc pas de `content_checks` : le parsing JSON et la conversion du format
+compact sont absorbés par Pydantic.
 """
 
 from collections.abc import Sequence

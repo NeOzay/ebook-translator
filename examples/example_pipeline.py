@@ -1,8 +1,8 @@
 """
 Exemple d'utilisation du pipeline de traduction modulaire.
 
-Ce script démontre comment utiliser le nouveau Pipeline modulaire pour traduire
-un EPUB avec des phases configurables et des transitions entre phases.
+Ce script démontre la configuration du pipeline via les builders : choix du
+client LLM, sélection des phases et de leurs paramètres, puis exécution.
 """
 
 from pathlib import Path
@@ -15,6 +15,7 @@ from ebook_translator import (
     PipelineBuilder,
 )
 from ebook_translator.glossary import Glossary
+from ebook_translator.llm.clients.deepseek import Deepseek, DeepseekModels
 
 
 def main():
@@ -36,15 +37,18 @@ def main():
             .language(Language.FRENCH)
             .llm(
                 LLMBuilder()
-                .model("deepseek-chat")
-                .reasoning("deepseek-reasoner")
-                .url("https://api.deepseek.com")
-                .temperature(0.5)
+                .default_client(
+                    Deepseek(
+                        DeepseekModels.FLASH,
+                        thinking=False,
+                        config={"temperature": 0.5},
+                    )
+                )
                 .glossary_max_terms(25)
             )
             .phases(
                 PhasesBuilder()
-                # .add_literary_analysis(max_tokens=5000)
+                .add_literary_analysis(max_tokens=5000)
                 .add_glossary_generation()
                 # .add_initial_translation()
                 # .add_refinement()
@@ -52,7 +56,6 @@ def main():
             .workers(2)
             .glossary(glossary)
             # .cache_dir(Path("cache"))
-            .max_retries(1)
             .bilingual_format(BilingualFormat.SEPARATE_TAG)
             .run()
         )

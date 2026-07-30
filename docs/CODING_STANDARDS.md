@@ -97,7 +97,7 @@ def load_glossary() -> GlossaryData:
     """Charge le glossaire avec type clair."""
     ...
 
-def validate_translation() -> ErrorData:
+def collect_errors() -> ErrorData:
     """Retourne les erreurs avec type clair."""
     ...
 
@@ -118,42 +118,41 @@ from typing import Protocol, runtime_checkable
 
 # ✅ BON : Protocol pour interface
 @runtime_checkable
-class Check(Protocol):
-    """Interface pour les checks de validation."""
+class ContentCheck[DT, CtxT](Protocol):
+    """Interface pour les checks de contenu (cf. checks/content_check.py)."""
 
-    @property
-    def name(self) -> str:
-        """Nom du check."""
+    error_type: ClassVar[ErreursType]
+    max_attempts: ClassVar[int]
+
+    def run(self, data: DT, source: ChunkSource) -> list[ValidationFailure[CtxT]]:
+        """Détecte les écarts entre `data` et la source."""
         ...
 
-    def validate(self, context: ValidationContext) -> CheckResult:
-        """Valide le contexte."""
-        ...
-
-# Implémentations n'ont pas besoin d'hériter
+# Les implémentations n'ont pas besoin d'hériter
 class LineCountCheck:
-    @property
-    def name(self) -> str:
-        return "LineCountCheck"
+    error_type: ClassVar[ErreursType] = ErreursType.LINES_MISSING
+    max_attempts: ClassVar[int] = 2
 
-    def validate(self, context: ValidationContext) -> CheckResult:
+    def run(self, data: LineIndexed, source: ChunkSource) -> list[ValidationFailure[Any]]:
         ...
 
-# Type checking fonctionne
-check: Check = LineCountCheck()  # ✅ OK
+# Le type checking fonctionne
+check: ContentCheck[LineIndexed, Any] = LineCountCheck()  # ✅ OK
 
-# ❌ MOINS BON : Classe abstraite (hébergement requis)
+# ❌ MOINS BON : classe abstraite (héritage requis)
 from abc import ABC, abstractmethod
 
-class Check(ABC):
+class ContentCheck(ABC):
     @abstractmethod
-    def validate(self, context: ValidationContext) -> CheckResult:
+    def run(self, data: Any, source: ChunkSource) -> list[ValidationFailure[Any]]:
         ...
 
 # Toutes les implémentations DOIVENT hériter
-class LineCountCheck(Check):  # Héritage obligatoire
+class LineCountCheck(ContentCheck):  # Héritage obligatoire
     ...
 ```
+
+Le protocole réel est dans [checks/content_check.py](../src/ebook_translator/checks/content_check.py), ses implémentations dans [checks/content/](../src/ebook_translator/checks/content/).
 
 ### 5. Union types (moderne)
 
@@ -248,50 +247,40 @@ Aucun autre format (reStructuredText, NumPy, etc.) n'est accepté. Cette standar
 ### Structure complète
 
 ```python
-def validate_translation(
-    original: dict[int, str],
-    translated: dict[int, str],
-    checks: list[Check],
-    max_retries: int = 2
-) -> ValidationResult:
+def validate_data[DT](
+    content_checks: Sequence[ContentCheck[DT, Any]],
+    data: DT,
+    source: ChunkSource,
+) -> list[ValidationFailure[Any]]:
     """
-    Valide une traduction selon une liste de checks structurels.
+    Applique une séquence de checks de contenu à une donnée validée en schéma.
 
-    Cette fonction exécute séquentiellement tous les checks de validation
-    sur une traduction et retourne un résultat agrégé. En cas d'échec,
-    elle peut tenter une correction automatique via LLM.
+    Chaque check est exécuté dans l'ordre fourni et ses échecs sont agrégés.
+    Aucune correction n'est tentée ici : la fonction se contente de détecter.
 
     Args:
-        original: Textes originaux indexés par numéro de ligne.
-            Format : {0: "First line", 1: "Second line"}
-        translated: Textes traduits indexés par numéro de ligne.
-            Doit avoir les mêmes clés que original.
-        checks: Liste des checks de validation à exécuter dans l'ordre.
-            Exemple : [LineCountCheck(), FragmentCountCheck()]
-        max_retries: Nombre maximum de tentatives de correction.
-            Défaut : 2 (tentative normale + tentative reasoning)
+        content_checks: Checks à exécuter, dans l'ordre de déclaration
+            de la phase. Exemple : (LineCountCheck(), FragmentCountCheck())
+        data: Vue TypedDict produite par `payload.build()`.
+        source: Accès à la source du chunk (`line_indices()`, `text_at()`).
 
     Returns:
-        ValidationResult contenant :
-        - is_valid: True si tous les checks passent
-        - errors: Liste des erreurs détectées
-        - corrections: Corrections appliquées (si any)
+        Liste des `ValidationFailure` collectées, vide si tout passe.
+        Chaque échec porte son `error_type`, son diagnostic typé `ctx`
+        et ses `relevant_indices`.
 
     Raises:
-        ValueError: Si original et translated n'ont pas les mêmes clés
-        RuntimeError: Si un check lève une exception inattendue
+        RuntimeError: Si un check lève une exception inattendue.
 
     Example:
-        >>> original = {0: "Hello world"}
-        >>> translated = {0: "Bonjour monde"}
-        >>> checks = [LineCountCheck(), FragmentCountCheck()]
-        >>> result = validate_translation(original, translated, checks)
-        >>> assert result.is_valid
+        >>> checks = (LineCountCheck(), FragmentCountCheck())
+        >>> failures = validate_data(checks, data, source)
+        >>> assert not failures
 
     Note:
-        Les checks sont exécutés dans l'ordre fourni. Si un check échoue,
-        les suivants sont quand même exécutés pour collecter toutes les erreurs.
-        La correction n'est tentée qu'après tous les checks.
+        Tous les checks sont exécutés même si l'un d'eux échoue, afin de
+        collecter l'ensemble des erreurs en un seul passage. Le routage
+        vers les prompts de correction relève de `RETRY_REGISTRY`.
     """
     ...
 ```
@@ -370,18 +359,18 @@ class ValidationWorkerPool:
 Module de validation structurelle des traductions.
 
 Ce module fournit un système de validation multi-thread avec checks
-paramétrables et retry progressif. Il s'intègre au pipeline de traduction
-pour garantir la qualité structurelle des traductions (nombre de lignes,
-fragments, ponctuation, etc.).
+paramétrables et corrections LLM ciblées. Il s'intègre au pipeline de
+traduction pour garantir la qualité structurelle des traductions (nombre
+de lignes, fragments, ponctuation, etc.).
 
 Classes principales:
     ValidationWorkerPool: Pool de workers pour validation parallèle
-    ValidationPipeline: Orchestrateur de checks de validation
-    ValidationContext: Contexte partagé entre checks
+    UnifiedValidationWorker: Cycle check-par-check et retry ciblé
+    SaveWorker: Écriture différée via le ChunkPersister de la phase
 
 Exemple d'utilisation:
     >>> from ebook_translator.validation import ValidationWorkerPool
-    >>> pool = ValidationWorkerPool(max_workers=4)
+    >>> pool = ValidationWorkerPool(num_workers=4, phase=phase)
     >>> pool.start()
     >>> # ... soumission de tâches ...
     >>> pool.wait_completion()
@@ -727,11 +716,11 @@ class TranslationPipeline(Segmentator, Translator, Validator):
 ```
 src/ebook_translator/
 ├── checks/
-│   └── check_tests/
+│   └── content/
 │       └── line_count_check.py
 
 tests/
-├── test_checks/
+├── checks/
 │   └── test_line_count_check.py
 ```
 
@@ -743,44 +732,37 @@ tests/
 class TestLineCountCheck:
     """Tests pour LineCountCheck."""
 
-    def test_validate_equal_line_counts(self):
-        """Vérifie que validate() retourne True si même nombre de lignes."""
+    def test_run_all_lines_present(self):
+        """Vérifie que run() ne retourne aucun échec si toutes les lignes sont là."""
         ...
 
-    def test_validate_different_line_counts(self):
-        """Vérifie que validate() retourne False si nombre différent."""
+    def test_run_missing_lines(self):
+        """Vérifie que run() signale les lignes absentes."""
         ...
 
-    def test_correct_missing_lines(self):
-        """Vérifie que correct() ajoute les lignes manquantes."""
+    def test_relevant_indices_target_missing_lines(self):
+        """Vérifie que relevant_indices porte bien les indices manquants."""
         ...
 ```
 
 ### 3. AAA Pattern (Arrange-Act-Assert)
 
 ```python
-def test_validate_unbalanced_quotes(self):
-    """Vérifie détection guillemets déséquilibrés."""
+def test_run_unbalanced_quotes(self):
+    """Vérifie la détection des paires de guillemets manquantes."""
     # Arrange : Setup
-    check = QuotationMarkCheck()
-    context = ValidationContext(
-        chunk=Chunk(index=0),
-        translated_texts={0: 'Il dit : « Bonjour.'},  # Guillemet fermant manquant
-        original_texts={0: "He said: 'Hello.'"},
-        llm=Mock(),
-        target_language="fr",
-        phase="initial",
-        max_retries=2,
-        filtered_lines=[],
-    )
+    check = PunctuationCheck()
+    source = FakeChunkSource({0: "He said: « Hello. »"})
+    data = LineIndexed({0: "Il dit : « Bonjour."})  # guillemet fermant manquant
 
     # Act : Exécution
-    result = check.validate(context)
+    failures = check.run(data, source)
 
     # Assert : Vérification
-    assert result.is_valid is False
-    assert "unbalanced_lines" in result.error_data
-    assert 0 in result.error_data["unbalanced_lines"]
+    assert len(failures) == 1
+    assert failures[0].error_type is ErreursType.PUNCTUATION_MISMATCH
+    assert failures[0].relevant_indices == frozenset({0})
+    assert failures[0].ctx["expected_pairs"] == 1
 ```
 
 ### 4. Mocking
@@ -854,10 +836,7 @@ def test_with_fixtures(sample_chunk, mock_llm):
 # Formater le code
 uv run black src/ tests/
 
-# Trier les imports
-uv run isort src/ tests/
-
-# Linting
+# Linting (les règles I de ruff trient aussi les imports)
 uv run ruff check src/ tests/
 uv run ruff check --fix src/ tests/  # Auto-fix
 
@@ -868,7 +847,7 @@ uv run pre-commit run --all-files
 ### Conventions
 
 - **Ligne max** : 88 caractères (black default)
-- **Imports** : Triés par isort (stdlib, third-party, local)
+- **Imports** : Triés par les règles `I` de ruff (stdlib, third-party, local)
 - **Quotes** : Doubles quotes `"` préférées (black default)
 - **Indentation** : 4 espaces (jamais tabs)
 

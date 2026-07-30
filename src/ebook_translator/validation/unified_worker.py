@@ -21,7 +21,7 @@ Flux par item :
         présente (cf. `is_instance_resolved`), passer au failure suivant.
 
    - Si l'instance survit après `max_attempts`, **drop** les indices
-     concernés de `data` (`extract_failure_indices`) et continuer.
+     concernés de `data` (`failure.relevant_indices`) et continuer.
 
 3. `phase.save_item_builder(chunk, data)` → `save_queue.put`.
 

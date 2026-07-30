@@ -6,25 +6,25 @@
 
 ## Overview
 
-**Ebook Translator** is a Python tool that translates EPUB files using Large Language Models (LLMs) such as DeepSeek, OpenAI, and other OpenAI-compatible APIs. The tool intelligently segments ebook content, translates it using asynchronous LLM calls, and reconstructs the translated EPUB while preserving structure and metadata.
+**Ebook Translator** is a Python tool that translates EPUB files using Large Language Models (LLMs) such as DeepSeek, OpenAI, and other OpenAI-compatible APIs. The tool segments ebook content, translates it through a multi-phase pipeline, and reconstructs the translated EPUB while preserving structure and metadata.
 
 ## Features
 
 - **EPUB Translation**: Translates entire EPUB files while maintaining structure
+- **Multi-Phase Pipeline**: Optional literary analysis and glossary extraction, then translation and refinement
 - **LLM-Powered**: Uses advanced language models (DeepSeek, OpenAI, etc.)
-- **Smart Segmentation**: Intelligently chunks content with token limits and overlap
-- **Async Processing**: Parallelizes translation calls for better performance
+- **Smart Segmentation**: Chunks content with token limits and configurable overlap
+- **Parallel Processing**: Parallelizes translation calls for better performance
 - **Metadata Preservation**: Keeps original title, authors, and structure
 - **HTML Structure**: Preserves formatting, images, CSS, and layout
-- **Automatic Validation**: Structural validation with progressive retry (reasoning mode)
+- **Two-Stage Validation**: Pydantic schema first, then content checks with targeted LLM corrections
+- **Glossary Learning**: Terminology consistency with weighted proposals and conflict detection
 - **Smart Logging**: Session-based logs with contextual naming
-- **Quality Control**: 4 structural checks (lines, fragments, punctuation, sentences)
-- **Template Architecture**: DRY templates with shared rules (-73% duplication)
 
 ## Requirements
 
-- Python 3.12 or higher
-- Poetry (for dependency management)
+- Python 3.14 or higher
+- [uv](https://docs.astral.sh/uv/) for dependency management
 - API key for DeepSeek or OpenAI
 
 ## Installation
@@ -37,7 +37,7 @@
 
 2. **Install dependencies**:
    ```bash
-   uv sync
+   uv sync --group dev
    ```
 
 3. **Configure API keys**:
@@ -64,160 +64,171 @@
 
 ## Usage
 
-### Basic Usage
-
-Create a Python file (e.g., `translate.py`):
+The pipeline is configured through chainable builders:
 
 ```python
-from ebook_translator import Language, LLM, EpubTranslator
+from pathlib import Path
 
-# Configure the LLM
-llm = LLM(
-    model_name="deepseek-chat",
-    url="https://api.deepseek.com",
-    max_retries=3,        # Automatic retry (default)
-    retry_delay=1.0,      # Initial delay in seconds
-    temperature=0.5,      # Optimal coherence (default since v0.4.0)
+from ebook_translator import Language, LLMBuilder, PhasesBuilder, PipelineBuilder
+from ebook_translator.llm.clients.deepseek import Deepseek, DeepseekModels
+
+stats = (
+    PipelineBuilder()
+    .epub(Path("my_book.epub"))
+    .output(Path("my_book_translated.epub"))
+    .language(Language.FRENCH)
+    .llm(
+        LLMBuilder().default_client(
+            Deepseek(
+                DeepseekModels.FLASH,
+                thinking=False,
+                config={"temperature": 0.5},
+            )
+        )
+    )
+    .phases(
+        PhasesBuilder()
+        .add_literary_analysis()
+        .add_initial_translation()
+        .add_refinement()
+    )
+    .workers(2)
+    .run()
 )
 
-# Translate the EPUB
-translator = EpubTranslator(llm, epub_path="my_book.epub")
-translator.translate(
-    target_language=Language.FRENCH,
-    output_epub="my_book_translated.epub",
-    max_concurrent=2,     # Number of parallel translations
-    overlap_ratio=0.15,   # Context overlap (15%)
-)
+for phase_name, phase_stats in stats.items():
+    print(f"{phase_name}: {phase_stats.chunks_validated} chunks validated")
 ```
 
-Then run:
-```bash
-python translate.py
-```
+The model, thinking mode, and sampling parameters belong to the **client**: each provider has its own base URL and model enum. `LLMBuilder` only carries `LLM` options (`prompt_dir`, `max_retries`, `retry_delay`, `glossary_max_terms`).
 
-### Complete Example
+### More Examples
 
-See [start.py](start.py) for a complete configuration example with all available parameters.
+See [examples/](examples/) — in particular [example_pipeline.py](examples/example_pipeline.py) for a full configuration and [example_phase0_analysis.py](examples/example_phase0_analysis.py) for a literary-analysis-only run.
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DEEPSEEK_API_KEY` | ✅ Yes | - | DeepSeek API key for authentication |
-| `DEEPSEEK_URL` | ❌ No | `https://api.deepseek.com` | Base API URL |
-| `OPENAI_API_KEY` | ❌ No | - | OpenAI API key (alternative to DeepSeek) |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `API_KEY` | ✅ Yes | API key used by the client provider, loaded from `.env` |
+
+`API_KEY` is the only variable read by the code ([llm/clients/client.py](src/ebook_translator/llm/clients/client.py)). A key passed explicitly to the client (`Deepseek(..., api_key=...)`) takes precedence. The base URL is not configurable through the environment: it is a class attribute of the client provider (`Deepseek.base_url`).
 
 ## Development
 
-**Type Checking**:
+**Type Checking** (must report 0 errors):
 ```bash
-basedpyright src/ebook_translator
+uv run basedpyright src/
 ```
 
 **Run Tests**:
 ```bash
-pytest tests/
+uv run pytest --no-cov
+```
+
+`uv run pytest` alone keeps the `--cov-fail-under=80` gate from `pyproject.toml`.
+Coverage currently sits at ~72%, so it exits 1 even when every test passes.
+
+**All quality checks**:
+```bash
+uv run pre-commit run --all-files
 ```
 
 ## Architecture
 
-The translation pipeline follows this flow:
+The pipeline runs a configurable list of phases, in order:
 
-1. **EPUB Loading** - Extracts metadata and content
-2. **Segmentation** - Chunks content with overlap (default: 15%)
-3. **Translation** - Parallel LLM calls with automatic retry
-4. **Validation** - Structural verification (lines, fragments, punctuation)
-5. **Saving** - Thread-safe persistence via SaveWorker
-6. **Reconstruction** - Text replacement in HTML DOM
-7. **EPUB Generation** - Creates translated file
+```
+EPUB → [Phase 0: Literary Analysis]  (optional, sequential)
+     → [Glossary Phase]              (optional, sequential)
+     → [Phase 1: Initial Translation] (parallel)
+     → [Phase 2: Refinement]          (sequential)
+     → EPUB Output
+```
+
+Within each phase, `PhaseExecutor` segments the content, calls the LLM, validates the output against a Pydantic schema, then hands the result to the validation pool. Validated chunks are written to the cache by a dedicated save thread, and the final EPUB is rebuilt from the HTML DOM.
 
 ### Key Components
 
+**Builders** ([pipeline/builder.py](src/ebook_translator/pipeline/builder.py)):
+- `PipelineBuilder`, `LLMBuilder`, `PhasesBuilder` — the public configuration API
+
 **Segmentator** ([segmentation/segmentator.py](src/ebook_translator/segmentation/segmentator.py)):
-- Chunks content into 2000-token segments (configurable)
-- Supports overlap_ratio >= 1.0 for extended context (v0.7.0)
-- Multi-chunk queue system
+- Chunks content into token-bounded segments with head/body/tail context
+- `overlap_ratio` below 1.0 is a percentage, at or above 1.0 a multiple of `max_tokens`
 
 **ValidationWorkerPool** ([validation/](src/ebook_translator/validation/)):
-- Multi-threaded architecture: N ValidationWorkers + 1 SaveWorker
-- Validation/save decoupling → +33-50% throughput
-- Progressive retry: attempt 1 (normal) + attempt 2 (reasoning)
+- N `UnifiedValidationWorker` threads + 1 `SaveWorker`
+- Validation/save decoupling keeps workers off the disk I/O path
+- Failed checks trigger targeted LLM corrections; unrecoverable lines are dropped rather than rejecting the whole chunk
 
 **LLM Client** ([llm/llm.py](src/ebook_translator/llm/llm.py)):
-- Async OpenAI client compatible with any OpenAI API
-- Automatic retry with exponential backoff (v0.3.0)
-- Reasoning mode support (deepseek-reasoner) for complex corrections (v0.8.0)
-- Contextual logging with lazy file creation (v0.6.0)
+- OpenAI-compatible client with automatic retry and exponential backoff
+- Structured output through Instructor for JSON phases
+- Contextual logging with lazy file creation
 
-**Validation Checks** ([checks/](src/ebook_translator/checks/)):
-- `LineCountCheck`: Verifies all lines are translated
-- `FragmentCountCheck`: Verifies `</>` separator counts
-- `PunctuationCheck`: Verifies quote pair balance
-- `SentenceCheck`: Verifies sentence counts
+**Content Checks** ([checks/content/](src/ebook_translator/checks/content/)):
+- `LineCountCheck`: verifies all lines are translated
+- `FragmentCountCheck`: verifies `</>` separator counts
+- `PunctuationCheck`: verifies quote pair balance
+- `SentenceCheck`: verifies sentence integrity
+
+**Persistence** ([persistence/](src/ebook_translator/persistence/), [stores/](src/ebook_translator/stores/)):
+- `ByteStore` for raw atomic I/O, `ChunkPersister` for cache layout, `PhaseStorage` to bind them
 
 ### Template Architecture
 
-**Categories**:
-- **TRANSLATE** (4 templates): Create new translations
-- **CORRECT** (3 templates): Fix structural errors
+Jinja2 templates live in the `template/` submodule. Each prompt is a **pair** of files — `<name>_system.jinja` and `<name>_user.jinja` — resolved together by the `PhaseTemplate` and `RetryTemplate` enums.
 
-**Shared Bases** (v0.9.0):
-- `common_translate_rules.jinja` (199 lines): Shared TRANSLATE rules
-- `common_correct_rules.jinja` (130 lines): Shared CORRECT rules
-
-**Benefits**:
-- -73% code duplication (1260 → 329 shared lines)
-- 7× easier to maintain (1 file instead of 7)
-- 100% guaranteed consistency
+```
+template/
+├── common/     # shared fragments, pulled in via {% include %}
+├── phase/      # phase prompts (translate_base, translate_refine, analyze_chapter*, glossary)
+└── retry/      # correction prompts, one per error type
+```
 
 ### Project Structure
 
 ```
 ebook-translator/
 ├── src/ebook_translator/
-│   ├── checks/              # Structural validation
-│   │   ├── check_tests/    # 4 checks: LineCount, FragmentCount, Punctuation, Sentence
-│   │   ├── pipeline.py     # ValidationPipeline orchestrator
-│   │   └── retry_helper.py # Progressive retry with reasoning mode
+│   ├── checks/              # ContentCheck protocol + content/ implementations
+│   ├── exporter/            # Markdown export for analyses and glossary
 │   ├── glossary.py          # Glossary for terminology consistency
-│   ├── llm/                 # LLM client and template renderers
-│   ├── pipeline/            # Translation pipeline (new since v0.9.0+)
-│   ├── segmentation/        # Content segmentation (Segmentator, Chunk)
-│   ├── transition/          # Phase transition management
-│   └── validation/          # Multi-threaded architecture (ValidationWorkerPool, SaveWorker)
-├── template/                # Jinja2 templates for LLM prompts
-│   ├── common_translate_rules.jinja  # Shared TRANSLATE rules
-│   ├── common_correct_rules.jinja    # Shared CORRECT rules
-│   └── [7 specific templates]
-├── tests/                   # Unit tests (107+ tests)
+│   ├── htmlpage/            # HTML parsing and text replacement
+│   ├── llm/                 # LLM client, providers, template renderers, retry registry
+│   ├── persistence/         # ChunkPersister implementations
+│   ├── pipeline/            # Pipeline, phases, executor, builders, storage
+│   ├── segmentation/        # Segmentator, Chunk, chapter detection
+│   ├── stores/              # ByteStore / Store
+│   ├── translation/         # EPUB I/O
+│   └── validation/          # Worker pool, unified worker, save worker, retry helpers
+├── src/template/            # Jinja2 prompt templates (submodule)
+├── examples/                # Runnable examples
+├── tests/                   # Unit tests (374 tests)
 ├── docs/                    # Specialized documentation
-│   ├── SETUP.md            # Configuration and installation
-│   ├── ARCHITECTURE.md     # Technical architecture
-│   ├── VALIDATION.md       # Validation system
-│   ├── TEMPLATES.md        # Template architecture
-│   ├── CHANGELOG.md        # Version history
-│   └── ROADMAP.md          # Future improvements
-└── logs/                    # Translation logs (per session)
-    └── run_YYYYMMDD_HHMMSS/ # Unique session
+└── logs/                    # Translation logs, one directory per session
+    └── run_YYYYMMDD_HHMMSS/
 ```
 
 For more details, see the complete documentation in [docs/](docs/) or [CLAUDE.md](CLAUDE.md).
 
 ## Documentation
 
-The project includes comprehensive documentation:
-
 | Document | Description |
 |----------|-------------|
-| **[CLAUDE.md](CLAUDE.md)** | Complete project overview and quick start |
+| **[CLAUDE.md](CLAUDE.md)** | Project overview and quick start |
 | **[docs/SETUP.md](docs/SETUP.md)** | Configuration, installation, troubleshooting |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Technical architecture, components |
-| **[docs/VALIDATION.md](docs/VALIDATION.md)** | Validation system, progressive retry |
+| **[docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md)** | Phase 0 and the `AnalyseChapter` schema |
+| **[docs/VALIDATION.md](docs/VALIDATION.md)** | Validation system, checks, retry registry |
 | **[docs/TEMPLATES.md](docs/TEMPLATES.md)** | LLM template architecture |
-| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history (v0.2.0 → v0.9.0) |
-| **[docs/ROADMAP.md](docs/ROADMAP.md)** | Future improvements (Phase 2) |
+| **[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md)** | Typing, docstrings, tests |
+| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history (0.12.0 onwards) |
+| **[docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md)** | Version history 0.2.0 → 0.11.0 |
+| **[docs/ROADMAP.md](docs/ROADMAP.md)** | Planned features |
 
 ## Security
 

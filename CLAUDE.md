@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ebook-translator** is a modular pipeline for translating EPUB ebooks using OpenAI-compatible LLM APIs (DeepSeek, OpenAI). The pipeline has three phases: optional literary analysis (Phase 0), initial translation (Phase 1), and refinement (Phase 2).
+**ebook-translator** is a modular pipeline for translating EPUB ebooks using OpenAI-compatible LLM APIs (DeepSeek, OpenAI). The pipeline runs a configurable list of phases: optional literary analysis (Phase 0), optional glossary extraction, initial translation (Phase 1), and refinement (Phase 2).
 
-**Entry point**: `src/ebook_translator/__main__.py` | **Example**: `examples/test.py`
+**Public API**: `PipelineBuilder` / `LLMBuilder` / `PhasesBuilder` ([pipeline/builder.py](src/ebook_translator/pipeline/builder.py)) | **Examples**: [examples/](examples/), start with `example_pipeline.py`
+
+There is no `__main__.py`: the package is used as a library, driven by the builders.
 
 ## Commands
 
@@ -17,19 +19,24 @@ uv sync --group dev
 # Type checking — must report 0 errors
 uv run basedpyright src/
 
-# Run all tests
+# Run all tests. NOTE: coverage is always on (pyproject `addopts`) with a
+# --cov-fail-under=80 gate. Coverage currently sits at ~72%, so this command
+# exits 1 even when every test passes — read the test summary, not the exit code.
 uv run pytest
 
 # Run a specific test file or function
 uv run pytest tests/path/to/test_file.py::TestClass::test_function -v
 
-# Run tests with coverage
-uv run pytest --cov=src/ebook_translator --cov-report=html
+# Tests without the coverage gate
+uv run pytest --no-cov
 
-# Format + lint
-uv run black src/ tests/ && uv run isort src/ tests/ && uv run ruff check src/ tests/
+# HTML coverage report (written to htmlcov/)
+uv run pytest --cov-report=html
 
-# All quality checks at once (runs black, isort, ruff, basedpyright)
+# Format + lint (isort is gone: ruff's I-rules handle import sorting)
+uv run black src/ tests/ && uv run ruff check --fix src/ tests/
+
+# All quality checks at once (runs black, ruff, basedpyright)
 uv run pre-commit run --all-files
 ```
 
@@ -39,77 +46,101 @@ uv run pre-commit run --all-files
 
 ```
 EPUB → [Phase 0: Literary Analysis (optional, sequential)]
+     → [Glossary Phase (optional, sequential)]
      → [Phase 1: Initial Translation (parallel)]
-     → [Transition: GlossaryValidation (optional)]
      → [Phase 2: Refinement (sequential)]
      → EPUB Output
 ```
 
+Two type parameters run through the whole system:
+
+- **`M` (payload)** — Pydantic model validating the *shape* of the LLM output
+- **`DT` (data)** — `TypedDict` view flowing through queues and cache. `M.build()` produces `DT`; the conversion is not reversible, so the Pydantic instance is dropped at the executor.
+
 Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline/base.py)) and declares:
 - `execution_mode`: PARALLEL or SEQUENTIAL
-- `max_tokens`, `overlap_ratio`: segmentation parameters
-- `checks`: list of `Check` instances run after each LLM response
+- `max_tokens`, `overlap_ratio`, `head_tail_balance`: segmentation parameters
+- `chunk_type`, `payload_type` (`M`), `data_type` (`DT`)
+- `content_checks`: tuple of `ContentCheck` run after schema validation
+- `persister`: `ChunkPersister` determining the cache layout
+- `depends_on`: phases whose output is required as input
 - Hooks: `before_phase/chunk`, `after_phase/chunk`
 
 **Within each phase**, `PhaseExecutor` ([pipeline/executor.py](src/ebook_translator/pipeline/executor.py)):
-1. `Segmentator` splits HTML items into `Chunk` objects (head/body/tail)
-2. Chunks are submitted to `ValidationWorkerPool`
-3. `ValidationWorker` threads translate via LLM and validate with checks
-4. `SaveWorker` writes validated translations to `Store`
+1. `Segmentator` splits HTML items into chunks (head/body/tail)
+2. Cached chunks are re-submitted for validation without an LLM call
+3. Otherwise: `render_prompt()` → LLM (text or Instructor path) → `payload_type.model_validate()` → `build()` → `DT`
+4. Chunks are submitted to `ValidationWorkerPool`
+5. `UnifiedValidationWorker` threads apply `content_checks` and request targeted corrections
+6. `SaveWorker` writes validated data through the phase's `ChunkPersister`
 
 ## Key Modules
 
 | Module | Role | Key Files |
 |--------|------|-----------|
-| `pipeline/` | Orchestration | `pipeline.py`, `base.py`, `executor.py`, `context.py`, `store_manager.py` |
-| `pipeline/phases/` | Phase implementations | `literary_analysis.py`, `initial_translation.py`, `refinement.py` |
-| `segmentation/` | Chunking + chapter detection | `segmentator.py`, `chunk.py`, `chapter_detector.py` |
-| `llm/` | LLM client + Jinja2 templates | `llm.py`, `template_renderers.py` |
-| `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `validation_worker.py`, `save_worker.py` |
-| `checks/` | Validation rules | `pipeline.py`, `check_tests/` |
-| `stores/` | Translation cache (JSON) | `store.py` |
-| `htmlpage/` | HTML parsing and text replacement | `page.py`, `replacement.py` |
-| `translation/` | EPUB I/O + LLM output parsing | `epub_handler.py`, `parser.py` |
-| `analysis/` | Phase 0 data types + validator | `translation_context.py`, `validator.py` |
-| `transition/` | Between-phase logic | `transitions/glossary_validation.py` |
+| `pipeline/` | Orchestration | `pipeline.py`, `base.py`, `executor.py`, `builder.py`, `context.py`, `store_manager.py`, `phase_storage.py` |
+| `pipeline/phases/` | Phase implementations | `literary_analysis.py`, `glossary.py`, `initial_translation.py`, `refinement.py` |
+| `segmentation/` | Chunking + chapter detection | `segmentator.py`, `chunk.py`, `chapter.py`, `chapter_detector.py` |
+| `llm/` | LLM client, providers, templates, retry registry | `llm.py`, `clients/`, `template_renderers.py`, `retry_registry.py` |
+| `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `unified_worker.py`, `save_worker.py`, `worker_retry.py` |
+| `checks/` | Validation rules | `content_check.py`, `content/` |
+| `persistence/` | Cache layout | `chunk_persister.py`, `line_indexed_persister.py`, `memoized_chunk_persister.py` |
+| `stores/` | Byte-level cache | `byte_store.py`, `store.py` |
+| `exporter/` | Markdown export | `analysis_exporter.py`, `glossary_exporter.py` |
+| `htmlpage/` | HTML parsing and text replacement | `page.py`, `replacement.py`, `bilingual.py` |
+| `translation/` | EPUB I/O | `epub_handler.py`, `language.py` |
 
 ## Data Formats
 
-**LLM output format** (parsed by [translation/parser.py](src/ebook_translator/translation/parser.py)):
+**LLM output format** — single source of truth: `LineIndexedLLMResponse` ([template/phase/translation_models.py](src/template/phase/translation_models.py)):
 - Lines numbered with tags: `<0/>text\n<1/>text\n...`
 - Fragment separator within a line: `</>` (must be preserved exactly)
 - End marker: `[=[END]=]`
 
-**Store** ([stores/store.py](src/ebook_translator/stores/store.py)): JSON files at `cache/{phase_name}/` mapping `{line_index: translated_text}`. Thread-safe with per-file locks + atomic rename.
+Phases with structured output (Phase 0, glossary) do not use this format: they go through Instructor on their own Pydantic schema.
 
-**Glossary** ([glossary.py](src/ebook_translator/glossary.py)): Learned automatically from translations, exported to prompts for Phase 2. Pre-populated by Phase 0 with `proposition_traduction` from `ContexteTraduction`.
+**Persistence** — three layers:
+- `ByteStore` ([stores/byte_store.py](src/ebook_translator/stores/byte_store.py)): raw bytes, per-file locks + atomic rename. `FileByteStore` is the disk implementation.
+- `ChunkPersister` ([persistence/](src/ebook_translator/persistence/)): decides *what* is written. `LineIndexedPersister` (one file per chunk, `{line_index: text}`), `MemoizedChunkPersister` (`outer_key`/`inner_key` memoization).
+- `PhaseStorage` ([pipeline/phase_storage.py](src/ebook_translator/pipeline/phase_storage.py)): binds a persister, a store, and an optional fallback.
+
+`StoreManager` creates one `Store` per phase under `<cache_dir>/<store_key>/`. Default `cache_dir` is `<epub_dir>/.<epub_stem>_cache/`.
+
+**Glossary** ([glossary.py](src/ebook_translator/glossary.py)): learned from translations with weighted proposals, confidence and dominance scores, conflict detection. Populated by `GlossaryPhase`, exported to prompts for Phases 1 and 2.
 
 ## Phase 0: Literary Analysis
 
-`LiteraryAnalysisPhase` ([pipeline/phases/literary_analysis.py](src/ebook_translator/pipeline/phases/literary_analysis.py)) runs before translation to extract a `ContexteTraduction` JSON ([analysis/translation_context.py](src/ebook_translator/analysis/translation_context.py)) per chapter:
-- Literary analysis (tone, style, themes, cultural references, translation guidance)
-- Glossary with `proposition_traduction` per term (auto-populates `Glossary`)
+`LiteraryAnalysisPhase` ([pipeline/phases/literary_analysis.py](src/ebook_translator/pipeline/phases/literary_analysis.py)) produces an `AnalyseChapter` per chapter block (5000 tokens, sequential, 1 worker), validated entirely by its Pydantic schema through Instructor — `content_checks = ()`.
 
-Uses `SequentialChapterDetector` ([segmentation/chapter_detector.py](src/ebook_translator/segmentation/chapter_detector.py)) via EPUB spine. Each `ChapterChunk` is up to 8000 tokens. See [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md).
+The schema is stratified: `noyau_stable` (genre, register, style, tone, translation guidance) and `couche_narrative` (summary, arcs, tensions, themes, cultural references). Analysis is **incremental**: each block carries forward and enriches the previous block's sheet.
+
+Downstream phases read it through `latest_analysis_for` injected into `Chapters` as an `AnalysisLookup` callable. See [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md).
 
 ## Validation System
 
-`ValidationWorkerPool` ([validation/validation_worker_pool.py](src/ebook_translator/validation/validation_worker_pool.py)):
-- N `ValidationWorker` threads (CPU-bound): apply `ValidationPipeline` checks, request LLM corrections on failure
-- 1 `SaveWorker` thread (I/O-bound): writes to `Store` in FIFO order
-- Progressive retry: attempt 1 (normal model) → attempt 2 (reasoning model, `deepseek-reasoner`)
-- Chunks are rejected and logged if validation still fails after retries
+Validation happens in two stages: the **schema** (`payload_type`, applied by the executor) then the **content** (`content_checks`, applied by the worker).
 
-**Available checks** ([checks/check_tests/](src/ebook_translator/checks/check_tests/)): `LineCountCheck`, `FragmentCountCheck`, `PunctuationCheck`, `SentenceCheck`. Each implements `validate()` and `correct()`. See [docs/VALIDATION.md](docs/VALIDATION.md).
+`ValidationWorkerPool` ([validation/validation_worker_pool.py](src/ebook_translator/validation/validation_worker_pool.py)):
+- N `UnifiedValidationWorker` threads: apply `content_checks` check-by-check, request targeted LLM corrections on failure
+- 1 `SaveWorker` thread (I/O-bound): writes through the phase's `ChunkPersister` in FIFO order
+- If a failure survives `max_attempts`, its `relevant_indices` are dropped and the chunk is saved partial — a chunk with holes beats a rejected chunk
+
+Correction routing lives in `RETRY_REGISTRY` ([llm/retry_registry.py](src/ebook_translator/llm/retry_registry.py)), which maps each `ErreursType` to a retry template, a params `TypedDict`, a `build` function, and a merge mode.
+
+**Available checks** ([checks/content/](src/ebook_translator/checks/content/)): `LineCountCheck`, `FragmentCountCheck`, `PunctuationCheck`, `SentenceCheck`. Each implements `run(data, source)` and declares `error_type`, `retry_strategy`, `max_attempts`. See [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Templates
 
-Jinja2 templates in `template/` rendered via `TemplateRenderer` ([llm/template_renderers.py](src/ebook_translator/llm/template_renderers.py)):
-- `translate_base.jinja` — Phase 1 initial translation
-- `translate_refine.jinja` — Phase 2 refinement (includes glossary)
-- `analyze_chapter_simplified.jinja` — Phase 0 analysis (JSON mode)
-- `retry_*.jinja` — Correction templates for validation failures
-- `common_translate_rules.jinja`, `common_correct_rules.jinja` — Shared base rules (DRY)
+Jinja2 templates live in the `template/` submodule, rendered via `TemplateRenderer` ([llm/template_renderers.py](src/ebook_translator/llm/template_renderers.py)). Each prompt is a **pair** `<name>_system.jinja` + `<name>_user.jinja`, resolved by the `PhaseTemplate` (prefix `phase/`) and `RetryTemplate` (prefix `retry/`) enums.
+
+- `phase/translate_base_*` — Phase 1 initial translation
+- `phase/translate_refine_*` — Phase 2 refinement (includes glossary)
+- `phase/analyze_chapter_layered_*` — Phase 0 stratified analysis
+- `phase/glossary_*` — glossary extraction
+- `retry/*` — correction prompts, one per error type
+- `common/*` — shared fragments pulled in via `{% include %}`
+
+Template parameters are `TypedDict`s in [template/template_params.py](src/template/template_params.py). See [docs/TEMPLATES.md](docs/TEMPLATES.md).
 
 ## Code Standards
 
@@ -118,15 +149,17 @@ Jinja2 templates in `template/` rendered via `TemplateRenderer` ([llm/template_r
 - **Tests**: 80% minimum coverage for new code; all tests must pass before commit
 - **Incremental development**: For complex features, decompose into independently testable sub-tasks with atomic commits
 
+Beware of `**kwargs` unpacking typed as `dict[str, Any]`: it hides non-existent keyword arguments from basedpyright. Prefer explicit calls.
+
 See [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) for detailed standards and examples.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DEEPSEEK_API_KEY` | Yes | DeepSeek API key |
-| `DEEPSEEK_URL` | No | API base URL (default: `https://api.deepseek.com`) |
-| `OPENAI_API_KEY` | No | Alternative to DeepSeek |
+| `API_KEY` | Yes | API key read by the client provider |
+
+`API_KEY` is the only variable the code reads ([llm/clients/client.py](src/ebook_translator/llm/clients/client.py)). A key passed explicitly to the client (`Deepseek(..., api_key=...)`) wins. The base URL is a class attribute of the provider (`Deepseek.base_url`), not an environment variable.
 
 Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.md).
 
@@ -135,10 +168,11 @@ Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.
 | Document | Content |
 |----------|---------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full system design, data flow, all components |
-| [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) | Phase 0 details, `ContexteTraduction` schema |
-| [docs/VALIDATION.md](docs/VALIDATION.md) | Validation pipeline, checks, retry logic |
+| [docs/LITERARY_ANALYSIS.md](docs/LITERARY_ANALYSIS.md) | Phase 0 details, `AnalyseChapter` schema |
+| [docs/VALIDATION.md](docs/VALIDATION.md) | Validation pipeline, checks, retry registry |
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | Template architecture, variables, format |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Type annotations, docstrings, tests |
 | [docs/SETUP.md](docs/SETUP.md) | Installation, API keys, dev environment |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features (not yet implemented) |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Version history |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Version history (0.12.0 onwards) |
+| [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md) | Version history 0.2.0 → 0.11.0, kept as-is |

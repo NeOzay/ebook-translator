@@ -217,4 +217,5 @@ Si toutes les améliorations **haute priorité** sont implémentées :
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Architecture globale du système
 - [VALIDATION.md](VALIDATION.md) - Architecture de validation
 - [TEMPLATES.md](TEMPLATES.md) - Architecture des templates LLM
-- [CHANGELOG.md](CHANGELOG.md) - Historique des versions implémentées
+- [CHANGELOG.md](CHANGELOG.md) - Historique des versions implémentées (à partir de 0.12.0)
+- [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md) - Historique 0.2.0 → 0.11.0

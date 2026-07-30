@@ -8,7 +8,7 @@ chunk) adresse une contribution indépendante.
 Cas d'usage :
 
 - **Phase 0 (analyse littéraire)** : un fichier par chapitre, chaque
-  `ChapterPartChunk` produit un `ContexteTraduction` partiel mémoïsé
+  `ChapterPartChunk` produit un `AnalyseChapter` partiel mémoïsé
   par fingerprint. Un fingerprint vu = chunk déjà traité, on saute.
 - **Phase glossaire** : un fichier global, chaque chunk (tous chapitres
   confondus) produit ses entrées mémoïsées par fingerprint.

@@ -18,6 +18,7 @@ from .template_renderers import TemplateRenderer
 logger = get_logger(__name__)
 
 
+# TODO Je trouve que le nom de la classe est mauvais et porte a confusion avec les clients LLM
 class LLM:
     """
     Classe synchrone pour gérer un LLM (DeepSeek, GPT, etc.)
@@ -30,14 +31,17 @@ class LLM:
 
     def __init__(
         self,
-        client: ClientProviderProtocol,
-        api_key: str | None = None,
+        # `Any` sur les paramètres du provider : `LLM` ne fait que relayer les
+        # configs, il n'a pas à connaître la forme des kwargs d'un provider
+        # donné. Sans cela, la contravariance de `U` rejette tout client
+        # concret (Deepseek, …) au profit du seul `UserKwargs` de base.
+        client: ClientProviderProtocol[Any, Any],
         prompt_dir: str = "template",
         max_retries: int = 3,
         retry_delay: float = 1.0,
         glossary_max_terms: int = 25,
     ):
-        self.client: ClientProviderProtocol = client
+        self.client: ClientProviderProtocol[Any, Any] = client
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self._exchange_counter = 0

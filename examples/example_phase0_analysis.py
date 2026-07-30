@@ -6,8 +6,8 @@ pour extraire:
 - Analyse littéraire (ton, style, thèmes, pistes de traduction)
 - Glossaire avec propositions de traduction
 
-Le nouveau format ContexteTraduction réduit de ~67% les tokens LLM
-par rapport à l'ancien ChapterAnalysis.
+L'analyse est produite en sortie structurée (Instructor) sur le schéma
+`AnalyseChapter`, puis mise en cache par chapitre.
 
 Workflow complet:
   1. Charger EPUB
@@ -23,6 +23,7 @@ Requirements:
 from pathlib import Path
 
 from ebook_translator import LLM, Language, LiteraryAnalysisPhase, Pipeline
+from ebook_translator.llm.clients.deepseek import Deepseek, DeepseekModels
 
 
 def main() -> None:
@@ -35,11 +36,13 @@ def main() -> None:
     target_language = Language.FRENCH  # Pour propositions de traduction
 
     # === 1. Initialiser LLM ===
+    # Le modèle, le mode thinking et la température sont portés par le client.
     llm = LLM(
-        url="https://api.deepseek.com",
-        model_name="deepseek-chat",  # Utilisé pour l'analyse
-        reasoning_name="deepseek-reasoner",
-        temperature=0.3,  # Analyse structurée (moins de créativité)
+        client=Deepseek(
+            DeepseekModels.FLASH,
+            thinking=False,
+            config={"temperature": 0.3},  # Analyse structurée, peu de créativité
+        )
     )
 
     # === 2. Charger EPUB ===

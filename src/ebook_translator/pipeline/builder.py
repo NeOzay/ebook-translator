@@ -9,10 +9,8 @@ Exemple d'utilisation :
         .language("français")
         .llm(
             LLMBuilder()
-            .model("deepseek-chat")
-            .reasoning("deepseek-reasoner")
-            .url("https://api.deepseek.com")
-            .temperature(0.7)
+            .default_client(Deepseek(DeepseekModels.FLASH, thinking=False))
+            .glossary_max_terms(25)
         )
         .phases(
             PhasesBuilder()
@@ -30,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 from ..htmlpage import BilingualFormat
 from ..llm import LLM
+from ..llm.clients.client import ClientProviderProtocol
 from ..llm.llm_config import FullKwargs, LLMConfig, UserKwargs
 from ..pipeline.phases import (
     GlossaryPhase,
@@ -52,67 +51,41 @@ def _skip_none(**overrides: Any) -> dict[str, Any]:
 class LLMBuilder:
     """Builder pour configurer un LLM.
 
+    Le choix du modèle, du mode raisonnement et des paramètres
+    d'échantillonnage relève du client (`ClientProviderProtocol`), pas du
+    builder : chaque provider expose sa propre enum de modèles et sa propre
+    URL de base. Le builder ne porte que les options de `LLM` lui-même.
+
     Example:
-        >>> llm = LLMBuilder().model("deepseek-chat").reasoning("deepseek-reasoner").url("...").build()
+        >>> from ebook_translator.llm.clients.deepseek import Deepseek, DeepseekModels
+        >>> llm = (
+        ...     LLMBuilder()
+        ...     .default_client(Deepseek(DeepseekModels.FLASH, thinking=False))
+        ...     .glossary_max_terms(25)
+        ...     .build()
+        ... )
     """
 
+    # Defaults alignés sur `LLM.__init__` (llm/llm.py) : les porter ici plutôt
+    # que de passer des `None` permet à basedpyright de vérifier l'appel.
     def __init__(self) -> None:
-        self._model_name: str | None = None
-        self._reasoning_name: str | None = None
-        self._url: str | None = None
-        self._api_key: str | None = None
-        self._prompt_dir: str | None = None
-        self._temperature: float | None = None
-        self._max_retries: int | None = None
-        self._retry_delay: float | None = None
-        self._glossary_max_terms: int | None = None
+        self._client: ClientProviderProtocol[Any, Any] | None = None
+        self._prompt_dir: str = "template"
+        self._max_retries: int = 3
+        self._retry_delay: float = 1.0
+        self._glossary_max_terms: int = 25
 
-    def model(self, name: str) -> Self:
-        """Nom du modèle principal (ex: 'deepseek-chat').
+    def default_client(self, provider: ClientProviderProtocol[Any, Any]) -> Self:
+        """Client LLM déjà configuré (modèle, thinking, température).
 
         Args:
-            name: Identifiant du modèle LLM principal.
+            provider: Instance de client, par exemple
+                `Deepseek(DeepseekModels.FLASH, thinking=False)`.
 
         Returns:
             self pour chaînage.
         """
-        self._model_name = name
-        return self
-
-    def reasoning(self, name: str) -> Self:
-        """Nom du modèle de raisonnement pour les retries avancés.
-
-        Args:
-            name: Identifiant du modèle de raisonnement (ex: 'deepseek-reasoner').
-
-        Returns:
-            self pour chaînage.
-        """
-        self._reasoning_name = name
-        return self
-
-    def url(self, base_url: str) -> Self:
-        """URL de base de l'API LLM.
-
-        Args:
-            base_url: URL de l'endpoint API (ex: 'https://api.deepseek.com').
-
-        Returns:
-            self pour chaînage.
-        """
-        self._url = base_url
-        return self
-
-    def api_key(self, key: str) -> Self:
-        """Clé API. Si non fournie, lue depuis la variable d'environnement API_KEY.
-
-        Args:
-            key: Clé d'authentification API.
-
-        Returns:
-            self pour chaînage.
-        """
-        self._api_key = key
+        self._client = provider
         return self
 
     def prompt_dir(self, directory: str) -> Self:
@@ -125,18 +98,6 @@ class LLMBuilder:
             self pour chaînage.
         """
         self._prompt_dir = directory
-        return self
-
-    def temperature(self, t: float) -> Self:
-        """Température d'échantillonnage du LLM (défaut: 0.5).
-
-        Args:
-            t: Valeur entre 0.0 (déterministe) et 1.0 (créatif).
-
-        Returns:
-            self pour chaînage.
-        """
-        self._temperature = t
         return self
 
     def max_retries(self, n: int) -> Self:
@@ -182,27 +143,17 @@ class LLMBuilder:
             Instance LLM configurée.
 
         Raises:
-            ValueError: Si model, reasoning ou url ne sont pas définis.
+            ValueError: Si le client n'est pas défini.
         """
-        if self._model_name is None:
-            raise ValueError("LLMBuilder: .model() requis")
-        if self._reasoning_name is None:
-            raise ValueError("LLMBuilder: .reasoning() requis")
-        if self._url is None:
-            raise ValueError("LLMBuilder: .url() requis")
+        if self._client is None:
+            raise ValueError("LLMBuilder: .default_client() requis")
 
         return LLM(
-            **_skip_none(
-                model_name=self._model_name,
-                reasoning_name=self._reasoning_name,
-                url=self._url,
-                api_key=self._api_key,
-                prompt_dir=self._prompt_dir,
-                temperature=self._temperature,
-                max_retries=self._max_retries,
-                retry_delay=self._retry_delay,
-                glossary_max_terms=self._glossary_max_terms,
-            )
+            client=self._client,
+            prompt_dir=self._prompt_dir,
+            max_retries=self._max_retries,
+            retry_delay=self._retry_delay,
+            glossary_max_terms=self._glossary_max_terms,
         )
 
 
@@ -219,17 +170,21 @@ class PhasesBuilder:
     def add_literary_analysis(
         self,
         max_tokens: int | None = None,
-        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
+        llm_config: (
+            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
+        ) = None,
     ) -> PhasesBuilder:
         """Ajoute la Phase 0 : analyse littéraire du livre avant traduction.
 
         Les valeurs non fournies utilisent les defaults de LiteraryAnalysisPhase.
 
         Args:
-            max_tokens: Tokens maximum par chunk de chapitre.
-            overlap_ratio: Ratio de chevauchement entre chunks.
+            max_tokens: Tokens maximum par chunk de chapitre. `overlap_ratio`
+                n'est pas paramétrable : la phase le fixe à 0.0 (un chapitre
+                entier par chunk, aucun chevauchement).
             llm_config: Overrides LLM pour cette phase (ex: temperature, max_tokens).
-                Note: use_json_mode est toujours forcé à True par cette phase.
+                La sortie structurée est portée par le schéma `AnalyseChapter`
+                via Instructor.
 
         Returns:
             self pour chaînage.
@@ -238,7 +193,7 @@ class PhasesBuilder:
             LiteraryAnalysisPhase(
                 **_skip_none(
                     max_tokens=max_tokens,
-                    llm_config=llm_config,
+                    llm=llm_config,
                 )
             )
         )
@@ -247,15 +202,29 @@ class PhasesBuilder:
     def add_glossary_generation(
         self,
         max_tokens: int | None = None,
-        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
+        llm_config: (
+            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
+        ) = None,
         overlap_ratio: float | None = None,
     ) -> Self:
+        """Ajoute la phase glossaire : extraction des termes avant traduction.
+
+        Les valeurs non fournies utilisent les defaults de GlossaryPhase.
+
+        Args:
+            max_tokens: Tokens maximum par chunk de chapitre.
+            llm_config: Overrides LLM pour cette phase.
+            overlap_ratio: Ratio de chevauchement entre chunks.
+
+        Returns:
+            self pour chaînage.
+        """
         self._phases.append(
             GlossaryPhase(
                 **_skip_none(
-                    llm_config=llm_config,
+                    llm=llm_config,
                     max_tokens=max_tokens,
-                    overrides=overlap_ratio,
+                    overlap_ratio=overlap_ratio,
                 )
             )
         )
@@ -266,7 +235,9 @@ class PhasesBuilder:
         max_tokens: int | None = None,
         overlap_ratio: float | None = None,
         max_workers: int | None = None,
-        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
+        llm_config: (
+            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
+        ) = None,
     ) -> Self:
         """Ajoute la Phase 1 : traduction initiale en parallèle.
 
@@ -287,7 +258,7 @@ class PhasesBuilder:
                     max_tokens=max_tokens,
                     overlap_ratio=overlap_ratio,
                     max_workers=max_workers,
-                    llm_config=llm_config,
+                    llm=llm_config,
                 )
             )
         )
@@ -297,7 +268,9 @@ class PhasesBuilder:
         self,
         max_tokens: int | None = None,
         overlap_ratio: float | None = None,
-        llm_config: LLMConfig[UserKwargs, FullKwargs] | None = None,
+        llm_config: (
+            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
+        ) = None,
     ) -> Self:
         """Ajoute la Phase 2 : affinage séquentiel avec glossaire.
 
@@ -317,7 +290,7 @@ class PhasesBuilder:
                 **_skip_none(
                     max_tokens=max_tokens,
                     overlap_ratio=overlap_ratio,
-                    llm_config=llm_config,
+                    llm=llm_config,
                 )
             )
         )
@@ -346,7 +319,7 @@ class PipelineBuilder:
         ...     .epub("input.epub")
         ...     .output("output.epub")
         ...     .language("français")
-        ...     .llm(LLMBuilder().model("deepseek-chat").reasoning("deepseek-reasoner").url("..."))
+        ...     .llm(LLMBuilder().default_client(Deepseek(DeepseekModels.FLASH)))
         ...     .phases(PhasesBuilder().add_initial_translation().add_refinement())
         ...     .run()
         ... )
@@ -361,9 +334,8 @@ class PipelineBuilder:
         self._phases_builder: PhasesBuilder | None = None
         self._num_validation_workers: int | None = 2
         self._cache_dir: Path | None = None
-        self._max_retries: int | None = 3
+        self._bilingual_format: BilingualFormat | None = None
         self._glossary: Glossary | None = None
-        self._bilingual_format: BilingualFormat | None
 
     def epub(self, path: str | Path) -> Self:
         """Chemin vers l'EPUB source.
@@ -463,18 +435,6 @@ class PipelineBuilder:
         self._cache_dir = path if isinstance(path, Path) else Path(path)
         return self
 
-    def max_retries(self, n: int) -> Self:
-        """Nombre maximum de retries de validation par chunk (défaut: 3).
-
-        Args:
-            n: Nombre de tentatives.
-
-        Returns:
-            self pour chaînage.
-        """
-        self._max_retries = n
-        return self
-
     def glossary(self, glossary: "Glossary") -> Self:
         """Glossaire pré-rempli à utiliser. Créé automatiquement si non fourni.
 
@@ -541,7 +501,6 @@ class PipelineBuilder:
             **{
                 "target_language": self._target_language,
                 "output_epub": self._output_epub,
-                "max_retries": self._max_retries,
                 "bilingual_format": self._bilingual_format,
             }
         )

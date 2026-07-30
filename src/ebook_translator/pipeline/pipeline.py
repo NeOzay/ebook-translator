@@ -86,10 +86,7 @@ class Pipeline:
             llm: Instance LLM pour traduction
             epub_path: Chemin vers l'EPUB source
             cache_dir: Répertoire racine du cache
-            phases: Liste des classes de phases à exécuter (dans l'ordre)
-            transitions: Transitions entre phases (optionnel)
-                        Clé: (from_phase, to_phase)
-                        Valeur: Classe TransitionBase
+            phases: Liste des phases à exécuter (dans l'ordre)
             num_validation_workers: Nombre de workers pour validation (défaut: 2)
         """
         self.llm = llm
@@ -162,7 +159,6 @@ class Pipeline:
         target_language: str,
         output_epub: str | Path,
         glossary: Glossary | None = None,
-        max_retries: int = 3,
         bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG,
     ) -> dict[PhaseName, PhaseStats]:
         """
@@ -172,7 +168,6 @@ class Pipeline:
             target_language: Langue cible (ex: "français", "english")
             output_epub: Chemin de sortie de l'EPUB traduit
             glossary: Glossaire optionnel (créé automatiquement si None)
-            max_retries: Nombre max de retries pour les corrections (défaut: 3)
             bilingual_format: Format de sortie bilingue (défaut: SEPARATE_TAG)
 
         Returns:
