@@ -146,12 +146,15 @@ class LLM:
                     )
 
             except APIError as e:
+                last_error = e
                 self.llm_logger.error(f"❌ Erreur API: {e}")
 
             except OpenAIError as e:
+                last_error = e
                 self.llm_logger.error(f"❌ Erreur OpenAI générique: {e}")
 
             except Exception as e:
+                last_error = e
                 self.llm_logger.exception(
                     f"❌ Erreur inattendue lors de la requête LLM: {e}"
                 )

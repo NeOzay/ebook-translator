@@ -6,7 +6,7 @@ Couvre `WorkerRetryContext`, `merge_data`, `lookup_strategy`.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import FrozenInstanceError, dataclass
 from typing import Any, ClassVar
 
 import pytest
@@ -48,12 +48,17 @@ class TestWorkerRetryContext:
             chunk=_FakeChunk(),  # type: ignore[arg-type]
             source=_FakeSource(texts={0: "x"}),
             current_data={0: "X"},
+            max_attempts=2,
+            attempt=0,
         )
-        # Smoke: lecture des 4 attributs du Protocol
+        # Smoke: lecture des attributs du Protocol
         assert ctx.target_language == "fr"
         assert ctx.chunk.index == 0
         assert ctx.source.text_at(0) == "x"
         assert ctx.current_data == {0: "X"}
+        # Pilotent le durcissement du prompt entre tentatives (cf. `_build_fragments`)
+        assert ctx.max_attempts == 2
+        assert ctx.attempt == 0
 
     def test_frozen(self) -> None:
         ctx = WorkerRetryContext(
@@ -61,8 +66,10 @@ class TestWorkerRetryContext:
             chunk=_FakeChunk(),  # type: ignore[arg-type]
             source=_FakeSource(texts={}),
             current_data={},
+            max_attempts=2,
+            attempt=0,
         )
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(FrozenInstanceError):
             ctx.target_language = "en"  # type: ignore[misc]
 
 
@@ -134,6 +141,7 @@ class TestLookupStrategy:
             error_type=ErreursType.OUTPUT_FORMAT_INVALID,
             msg="bad format",
             ctx={},
+            relevant_indices=frozenset(),
         )
         strategy, max_attempts = lookup_strategy(failure, content_checks=())
         assert strategy == SCHEMA_RETRY_STRATEGY
@@ -149,6 +157,7 @@ class TestLookupStrategy:
             error_type=ErreursType.LINES_MISSING,
             msg="missing",
             ctx={"missing_indices": [1]},
+            relevant_indices=frozenset({1}),
         )
         strategy, max_attempts = lookup_strategy(failure, content_checks=(check,))  # type: ignore[arg-type]
         assert strategy == RetryStrategy.NORMAL_ONLY
@@ -165,6 +174,7 @@ class TestLookupStrategy:
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="frag",
             ctx={"line": 0, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({0}),
         )
         strategy, max_attempts = lookup_strategy(failure, content_checks=(c1, c2))  # type: ignore[arg-type]
         assert strategy == RetryStrategy.PROGRESSIVE_REASONING
@@ -176,6 +186,7 @@ class TestLookupStrategy:
             error_type=ErreursType.SENTENCE_INVALID,
             msg="x",
             ctx={"invalid_indices": [0]},
+            relevant_indices=frozenset({0}),
         )
         with pytest.raises(KeyError, match="Aucune politique"):
             lookup_strategy(failure, content_checks=())
@@ -190,12 +201,14 @@ class TestIsInstanceResolved:
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="",
             ctx={"line": 3, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({3}),
         )
         # Failure courante sur une AUTRE ligne du même type : résolu pour ligne 3.
         other = ValidationFailure[Any](
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="",
             ctx={"line": 5, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({5}),
         )
         assert is_instance_resolved(prev, [other], "replace") is True
 
@@ -204,11 +217,13 @@ class TestIsInstanceResolved:
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="",
             ctx={"line": 3, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({3}),
         )
         same = ValidationFailure[Any](
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="",
             ctx={"line": 3, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({3}),
         )
         assert is_instance_resolved(prev, [same], "replace") is False
 
@@ -217,6 +232,7 @@ class TestIsInstanceResolved:
             error_type=ErreursType.LINES_MISSING,
             msg="",
             ctx={"missing_indices": [3, 5]},
+            relevant_indices=frozenset({3, 5}),
         )
         assert is_instance_resolved(prev, [], "merge") is True
 
@@ -225,11 +241,13 @@ class TestIsInstanceResolved:
             error_type=ErreursType.LINES_MISSING,
             msg="",
             ctx={"missing_indices": [3, 5]},
+            relevant_indices=frozenset({3, 5}),
         )
         # Batch rétréci à [5] → toujours la même instance pour `merge`.
         shrunk = ValidationFailure[Any](
             error_type=ErreursType.LINES_MISSING,
             msg="",
             ctx={"missing_indices": [5]},
+            relevant_indices=frozenset({5}),
         )
         assert is_instance_resolved(prev, [shrunk], "merge") is False

@@ -17,7 +17,6 @@ class DummyPhase(PhaseBase[Chunk]):
     execution_mode = ExecutionMode.SEQUENTIAL
     max_workers: int = field(default=0, init=False)
     store_readonly: bool = field(default=True, init=False)
-    checks = ()
 
     @override
     def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:

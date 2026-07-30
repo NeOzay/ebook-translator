@@ -171,11 +171,20 @@ def _save_cache(cache_file: Path, translations_by_index: dict[str, str]) -> None
 
 
 def _clear_cache() -> None:
+    """Vide le cache de données et purge les verrous inutilisés.
+
+    Les verrous actuellement pris sont conservés : un thread les détient,
+    les retirer du registre ferait créer un second verrou pour le même
+    fichier au prochain `_get_lock_for_file`, donc perdrait l'exclusion.
+
+    La liste des clés est matérialisée avant la boucle — supprimer une
+    entrée pendant l'itération sur `.items()` lève `RuntimeError`.
+    """
     with _global_lock:
         _data_cache.clear()
-        for name, lock in _lockfiles.items():
-            if not lock.locked():
-                _lockfiles.pop(name)
+        for name in list(_lockfiles):
+            if not _lockfiles[name].locked():
+                del _lockfiles[name]
 
 
 class Store:
@@ -202,14 +211,11 @@ class Store:
         self.cache_dir = cache_dir.absolute()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self._key_cache = str(self.cache_dir)
         self._fallback = fallback
-        # Protection thread-safe : Lock par fichier de cache
-        # Clé = chemin absolu du fichier cache, Valeur = Lock dédié
-        self._file_locks: dict[str, threading.Lock] = {}
-        self._file_locks_lock = threading.Lock()  # Protéger accès au dict lui-même
+        # Les verrous par fichier vivent au niveau module (`_lockfiles`) : deux
+        # `Store` pointant le même répertoire doivent partager leur exclusion.
 
-    def _get_cache_file_name(self, source_file: str | Path) -> Path:
+    def _get_cache_file(self, source_file: str | Path) -> Path:
         """
         Génère le chemin du fichier de cache basé sur le fichier source.
 
@@ -243,7 +249,7 @@ class Store:
         Returns:
             Le texte traduit si trouvé, None sinon
         """
-        file_key = self.cache_dir / self._get_cache_file_name(file_name)
+        file_key = self._get_cache_file(file_name)
         if file_key not in _data_cache:
             _data_cache[file_key] = _load_cache(file_key)
         data = _data_cache[file_key].get(line_index)
@@ -264,8 +270,8 @@ class Store:
         Returns:
             Dictionnaire {line_index: texte_traduit ou None}
         """
-        file_key = self._key_cache / self._get_cache_file_name(file_name)
-        missing_indices: list[str] | None = None
+        file_key = self._get_cache_file(file_name)
+        missing_indices: list[str] = []
         results: dict[str, str | None] = {}
         has_fallback = use_fallback and self._fallback is not None
         if file_key not in _data_cache:
@@ -276,9 +282,7 @@ class Store:
             if idx in data:
                 results[idx] = data[idx]
             elif has_fallback:
-                missing_indices = (
-                    [idx] if missing_indices is None else missing_indices.append(idx)
-                )
+                missing_indices.append(idx)
             else:
                 results[idx] = None
 
@@ -324,7 +328,7 @@ class Store:
             >>> store = Store()
             >>> store.save("file.html", 0, "Bonjour")
         """
-        cache_file: Path = self._get_cache_file_name(source_file)
+        cache_file: Path = self._get_cache_file(source_file)
         data = _load_cache(cache_file)
         data[line_index] = translated_text
         _save_cache(cache_file, data)
@@ -341,7 +345,7 @@ class Store:
             >>> store = Store()
             >>> store.save_all("file.html", {0: "Bonjour", 1: "Monde"})
         """
-        cache_file = self._get_cache_file_name(source_file)
+        cache_file = self._get_cache_file(source_file)
         data = _load_cache(cache_file)
         data.update(translations_dict)
         _save_cache(cache_file, data)
@@ -491,7 +495,7 @@ class Store:
             >>> translations = store.get_from_file("file.html")
             >>> print(translations)  # {"0": "Bonjour", "1": "Monde"}
         """
-        data = _load_cache(self._get_cache_file_name(file_name))
+        data = _load_cache(self._get_cache_file(file_name))
         if use_fallback and self._fallback is not None:
             fallback_data = self._fallback.get_from_file(file_name, use_fallback=True)
             return {**fallback_data, **data}
@@ -509,7 +513,7 @@ class Store:
             >>> store = Store()
             >>> store.clear("file.html")
         """
-        cache_file = self._get_cache_file_name(source_file)
+        cache_file = self._get_cache_file(source_file)
         if cache_file.exists():
             cache_file.unlink()
 

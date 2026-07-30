@@ -1,41 +1,15 @@
+"""Validation contenu des sorties LLM.
+
+Deux niveaux de validation cohabitent dans le pipeline :
+
+- **schéma** : porté par le modèle Pydantic de la phase (`payload_type`),
+  qui garantit la structure de la sortie LLM.
+- **contenu** : porté par les `ContentCheck` de ce paquet, qui vérifient la
+  fidélité au texte source une fois la structure acquise.
+
+Ce paquet n'expose rien à sa racine : importer depuis les sous-modules
+(`checks.content_check` pour le Protocol, `checks.content` pour les
+implémentations). Un ré-export ici refermerait le cycle
+`checks` ↔ `validation` que `validation.failure` évite déjà sous
+`TYPE_CHECKING`.
 """
-Système de validation et correction des traductions.
-
-Ce module fournit un pipeline composable de checks pour valider
-et corriger automatiquement les traductions avant sauvegarde.
-"""
-
-from .check_tests.base import (
-    Check,
-    CheckResult,
-    ErrorData,
-    FilteredLine,
-    FragmentCountErrorData,
-    FragmentErrorDetail,
-    LineCountErrorData,
-    ValidationContext,
-)
-from .check_tests.fragment_count_check import FragmentCountCheck
-from .check_tests.line_count_check import LineCountCheck
-from .check_tests.punctuation_check import PunctuationCheck
-from .check_tests.sentence_check import SentenceCheck
-from .check_tests.validate_analysis import AnalysisChecks
-from .pipeline import ValidationPipeline
-
-__all__ = [
-    "Check",
-    "CheckResult",
-    "ValidationContext",
-    "ValidationPipeline",
-    "LineCountCheck",
-    "FragmentCountCheck",
-    "PunctuationCheck",
-    "SentenceCheck",
-    "AnalysisChecks",
-    # TypedDicts pour error_data
-    "ErrorData",
-    "LineCountErrorData",
-    "FragmentCountErrorData",
-    "FragmentErrorDetail",
-    "FilteredLine",
-]

@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, override
 
 from ebook_translator.config import Config
+from ebook_translator.persistence.memoized_chunk_persister import MemoChunk
 from ebook_translator.segmentation.helper import count_tokens
 
 from ..htmlpage.page import get_texts
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(kw_only=True)
-class ChapterPartChunk(Chunk):
+class ChapterPartChunk(Chunk, MemoChunk):
     total_parts: int
     part: int
     chapter: ChapterChunk
@@ -63,6 +64,21 @@ class ChapterPartChunk(Chunk):
 
     def is_last(self) -> bool:
         return self.part == self.total_parts - 1
+
+    @property
+    def outer_key(self) -> str:
+        """Clé de regroupement `MemoChunk` : un fichier de cache par chapitre."""
+        return self.chapter.name
+
+    @property
+    def inner_key(self) -> str:
+        """Fingerprint `MemoChunk` de ce bloc dans son chapitre.
+
+        Format identique à la clé utilisée par la voie `Store` legacy
+        (`{index}_{hash[:8]}`) pour que le cache disque reste lisible
+        d'une voie à l'autre.
+        """
+        return f"{self.index}_{self.calculate_chunk_hash()[:8]}"
 
 
 @dataclass

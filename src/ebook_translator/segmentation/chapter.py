@@ -8,7 +8,7 @@ Ce module fournit :
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from typing import TYPE_CHECKING
 
 from ebook_translator.config import Config
@@ -20,20 +20,26 @@ from ebook_translator.segmentation.chapter_detector import (
     SequentialDetectorConfig,
     extract_toc_map,
 )
-from ebook_translator.validator.analysis_validator import AnalysisValidator
+from template.phase.analyze_chapter_layered_models import AnalyseChapter
 
 if TYPE_CHECKING:
     from ebooklib import epub
 
-    from ebook_translator.pipeline.store_manager import StoreManager
     from ebook_translator.segmentation import Chunk
-    from ebook_translator.validator.translation_context import ContexteTraduction
 
     from .chapter_chunk import ChapterChunk
 
 logger = get_logger(__name__)
 
-__all__ = ["ChapterInfo", "Chapters"]
+type AnalysisLookup = Callable[[str], AnalyseChapter | None]
+"""Lecture d'une fiche Phase 0 par nom de chapitre.
+
+Injecté dans `Chapters` pour que `segmentation` ne dépende ni du
+`StoreManager`, ni du `ByteStore`, ni du persister de Phase 0 — seule la
+phase qui écrit ces fiches sait les relire.
+"""
+
+__all__ = ["AnalysisLookup", "ChapterInfo", "Chapters"]
 
 
 def _extract_spine_items(book: epub.EpubBook) -> list[epub.EpubHtml]:
@@ -105,17 +111,19 @@ class Chapters:
     def __init__(
         self,
         book: epub.EpubBook,
-        store_manager: StoreManager | None = None,
+        analysis_lookup: AnalysisLookup | None = None,
         config: SequentialDetectorConfig | None = None,
     ) -> None:
         """Initialise le gestionnaire de chapitres depuis un EpubBook.
 
         Args:
             book: Livre EPUB source (fournit spine + TOC)
-            store_manager: Gestionnaire de stores pour accéder aux analyses
+            analysis_lookup: Accès aux fiches Phase 0, par nom de chapitre
+                (typiquement `LiteraryAnalysisPhase.latest_analysis_for`).
+                `None` si Phase 0 n'est pas dans le pipeline.
             config: Configuration optionnelle du détecteur
         """
-        self._store_manager = store_manager
+        self._analysis_lookup = analysis_lookup
         html_items = _extract_spine_items(book)
         toc_names = _extract_toc_names(book)
         self._infos, self._file_to_info = _build_chapters(html_items, toc_names, config)
@@ -124,21 +132,22 @@ class Chapters:
     def from_html_items(
         cls,
         html_items: list[epub.EpubHtml],
-        store_manager: StoreManager | None = None,
+        analysis_lookup: AnalysisLookup | None = None,
         config: SequentialDetectorConfig | None = None,
     ) -> Chapters:
         """Construit depuis une liste de fichiers HTML (sans accès au TOC).
 
         Args:
             html_items: Liste des items HTML dans l'ordre du spine
-            store_manager: Gestionnaire de stores pour accéder aux analyses
+            analysis_lookup: Accès aux fiches Phase 0, par nom de chapitre
+                (cf. `__init__`)
             config: Configuration optionnelle du détecteur
 
         Returns:
             Instance de Chapters sans informations TOC
         """
         instance = object.__new__(cls)
-        instance._store_manager = store_manager
+        instance._analysis_lookup = analysis_lookup
         instance._infos, instance._file_to_info = _build_chapters(
             html_items, {}, config
         )
@@ -196,42 +205,28 @@ class Chapters:
 
         return None
 
-    def get_literary_analysis(self, chunk: Chunk) -> ContexteTraduction | None:
+    def get_literary_analysis(self, chunk: Chunk) -> AnalyseChapter | None:
         """Récupère l'analyse littéraire applicable à ce chunk.
 
-        Stratégie :
-        1. Trouver le chapitre du chunk
-        2. Récupérer toutes les analyses du chapitre depuis le store
-        3. Retourner la première analyse valide
+        Résout le chapitre du chunk, puis délègue la lecture du cache au
+        `analysis_lookup` fourni à la construction — c'est Phase 0 qui sait
+        où et comment ses fiches sont stockées.
 
         Args:
             chunk: Chunk à analyser
 
         Returns:
-            Analyse littéraire (ContexteTraduction) ou None
+            Analyse littéraire (`AnalyseChapter`), ou `None` si Phase 0 est
+            absente du pipeline ou n'a pas tourné sur ce chapitre.
         """
-        if self._store_manager is None:
+        if self._analysis_lookup is None:
             return None
 
         chapter_info = self.get_chapter_for_chunk(chunk)
         if chapter_info is None:
             return None
 
-        try:
-            store = self._store_manager.get_store("literary analysis")
-        except KeyError:
-            return None
-
-        for json_str in store.get_from_file(chapter_info.name).values():
-            try:
-                return AnalysisValidator.load(json_str)
-            except Exception as e:
-                logger.warning(
-                    f"Erreur lors de la validation de l'analyse littéraire : {e}"
-                )
-                continue
-
-        return None
+        return self._analysis_lookup(chapter_info.name)
 
     def __len__(self) -> int:
         return len(self._infos)

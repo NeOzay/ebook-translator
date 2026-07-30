@@ -1,39 +1,93 @@
-"""Phase 0 : Analyse littéraire pour contexte de traduction."""
+"""Phase glossaire : extraction des termes récurrents et de leur traduction.
 
+Validation **entièrement schéma** : `LLMGlossaryModel` est passé au LLM via
+Instructor (`JsonRequestConfig`), qui garantit la structure côté API. Il n'y a
+donc pas de `content_checks` — l'ancien `GlossaryValidator` (parsing JSON +
+conversion du format compact) est absorbé par Pydantic.
+"""
+
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, override
 
-from ebook_translator.checks import Check
-
-# from ebook_translator.checks.check_tests.validate_glossary import GlossaryChecks
 from ebook_translator.exporter import GlossaryExporter
 from ebook_translator.llm.llm_config import JsonRequestConfig
 from ebook_translator.logger import get_logger
+from ebook_translator.persistence.memoized_chunk_persister import (
+    MemoizedChunkPersister,
+)
 from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.segmentation.chunk import Chunk
-from ebook_translator.validation.validation_queue import SaveItem
-from ebook_translator.validator.glossary_validator import GlossaryValidator
+from ebook_translator.segmentation.segmentator import Segmentator
 from template.phase.glossary_models import LLMGlossaryModel, LLMTermeGlossary
 from template.types import ConvertibleModel
 
 logger = get_logger(__name__)
 
+_OUTER_KEY = "glossary"
+"""Namespace de cache : un fichier unique pour tout le livre.
+
+Contrairement à Phase 0 (un fichier par chapitre), les termes du glossaire
+sont globaux — le découpage en chunks ne porte aucune sémantique de
+regroupement.
+"""
+
+_PERSISTER = MemoizedChunkPersister(list[LLMTermeGlossary])
+
 
 @dataclass
-class GlossaryPhase(PhaseBase):
+class GlossaryChunk(Chunk):
+    """`Chunk` mémoïsable : expose les deux clés attendues par `MemoChunk`."""
+
+    @classmethod
+    def from_chunk(cls, chunk: Chunk) -> "GlossaryChunk":
+        """Recopie un `Chunk` générique produit par le `Segmentator`.
+
+        Args:
+            chunk: Chunk source à convertir
+
+        Returns:
+            `GlossaryChunk` portant les mêmes fragments
+        """
+        return cls(
+            index=chunk.index,
+            head=chunk.head.copy(),
+            body=chunk.body.copy(),
+            tail=chunk.tail.copy(),
+            token_count=chunk.token_count,
+            token_encoding=chunk.token_encoding,
+        )
+
+    @property
+    def outer_key(self) -> str:
+        """Clé de regroupement `MemoChunk` : un seul fichier pour le livre."""
+        return _OUTER_KEY
+
+    @property
+    def inner_key(self) -> str:
+        """Fingerprint `MemoChunk` de ce chunk.
+
+        Format identique à la clé utilisée par la voie `Store` legacy
+        (`{index}_{hash[:8]}`) pour que les caches existants restent lisibles.
+        """
+        return f"{self.index}_{self.calculate_chunk_hash()[:8]}"
+
+
+@dataclass
+class GlossaryPhase(PhaseBase[GlossaryChunk, list[LLMTermeGlossary], LLMGlossaryModel]):
     """
-    Phase 0 : Analyse littéraire simplifiée pour contexte de traduction.
+    Phase glossaire : extraction des termes et de leur proposition de traduction.
 
-    Cette phase analyse chaque chapitre pour extraire :
-    - Analyse littéraire (ton, style, thèmes, pistes de traduction)
-    - Glossaire avec propositions de traduction
-
-    Le format simplifié ContexteTraduction réduit de ~67% les tokens LLM
-    par rapport à l'ancien ChapterAnalysis.
+    Chaque chunk produit une liste d'entrées, mémoïsée par fingerprint dans un
+    fichier de cache unique. Les entrées alimentent le `Glossary` global, qui
+    est ensuite réinjecté dans les prompts des phases de traduction.
     """
 
     name = PhaseName.GLOSSARY
-    chunk_type = Chunk
+    chunk_type = GlossaryChunk
+    payload_type = LLMGlossaryModel
+    data_type = list[LLMTermeGlossary]
+
     max_tokens: int = field(  # Un seul bloc par chapitre (vs 4000 multi-blocs avant)
         default=2000
     )
@@ -47,32 +101,27 @@ class GlossaryPhase(PhaseBase):
         default=1, init=False
     )  # Analyse séquentielle pour cohérence
 
-    checks: tuple[Check[Any], ...] = field(default=tuple(), init=False)
+    # Validation portée par le schéma Pydantic seul (voir docstring module).
+    content_checks = ()
 
-    file_name: str = field(
-        default="glossary", init=False
-    )  # Nom de fichier pour stockage dans le store
-
-    @override
-    def get_translation_cache(self, chunk: Chunk) -> tuple[dict[int, str], bool]:
-        """
-        Récupère l'analyse JSON depuis le store si elle existe.
-
-        Returns:
-            Tuple (résultat, has_missing) où:
-            - résultat: dict avec l'analyse (ou vide si pas trouvée)
-            - has_missing: True si l'analyse est manquante, False sinon
-        """
-        store = self.get_store()
-        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
-        cached_json = store.get(self.file_name, keyname)
-        if cached_json is None:
-            return ({}, True)  # Analyse manquante
-        return ({0: cached_json}, False)  # Analyse trouvée
+    persister = _PERSISTER
 
     @override
-    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
-        """Génère le prompt d'analyse simplifiée."""
+    def get_chunks(self) -> Sequence[GlossaryChunk]:
+        """Segmente le livre entier, puis convertit en chunks mémoïsables."""
+        segments = Segmentator(
+            epub_source=self.context.html_pages,
+            max_tokens=self.max_tokens,
+            overlap_ratio=self.overlap_ratio,
+            head_tail_balance=self.head_tail_balance,
+        ).get_all_segments()
+        return [GlossaryChunk.from_chunk(chunk) for chunk in segments]
+
+    @override
+    def render_prompt(
+        self, chunk: GlossaryChunk, context: ChunkContext
+    ) -> tuple[str, str]:
+        """Génère le prompt d'extraction du glossaire."""
         return context.llm.renderer.render_glossary(
             chunk=chunk,
             target_language=context.target_language,
@@ -81,75 +130,40 @@ class GlossaryPhase(PhaseBase):
 
     @override
     def get_llm_config(
-        self, chunk: Chunk, context: ChunkContext
+        self, chunk: GlossaryChunk, context: ChunkContext
     ) -> JsonRequestConfig[ConvertibleModel[Any]]:
-        """Active le mode JSON pour parsing structuré."""
+        """Voie Instructor : la structure est portée par le schéma Pydantic."""
         return JsonRequestConfig(config=self.llm, response_model=LLMGlossaryModel)
 
     @override
-    def process_llm_response(
-        self, chunk: Chunk, response: str, context: ChunkContext
-    ) -> dict[int, str]:
-        """
-        Valide la réponse JSON et peuple le glossaire.
-
-        Args:
-            chunk: ChapterPartChunk analysé
-            response: JSON stringifié du LLM (ContexteTraduction)
-            context: Contexte avec glossaire
-
-        Returns:
-            Dict {0: json_string} pour stockage dans le store
-
-        Raises:
-            ValueError: Si validation échoue ou JSON invalide
-        """
-        return {0: response}
+    def after_chunk(
+        self,
+        chunk: GlossaryChunk,
+        data: list[LLMTermeGlossary],
+        context: ChunkContext,
+    ) -> None:
+        """Peuple le glossaire global et exporte le Markdown de revue."""
+        self._populate_glossary(data, chunk.index)
+        GlossaryExporter.save_glossary_markdown(
+            data, self.get_store().cache_dir / f"chunk {chunk.index}.md"
+        )
 
     def _populate_glossary(
         self, termes: list[LLMTermeGlossary], chunk_index: int
     ) -> None:
         """
-        Peuple le glossaire depuis l'analyse d'un chapitre.
-
-        Extrait les termes depuis analysis["glossaire"] et les ajoute au glossaire
-        en utilisant validate_translation() pour priorité maximale.
+        Peuple le glossaire depuis les termes extraits d'un chunk.
 
         Args:
-            analysis: Contexte de traduction validé
-            chapter_name: Nom du chapitre (pour logging)
+            termes: Entrées proposées par le LLM pour ce chunk
+            chunk_index: Index du chunk (pour logging)
         """
-        terms_added = 0
         glossary = self.context.glossary
 
         for term_entry in termes:
-            # Ajouter au glossaire (validate_translation)
             glossary.learn(term_entry)
-            terms_added += 1
 
         logger.info(
-            f"[GlossaryPhase] chunk {chunk_index} - {terms_added} termes ajoutés au glossaire (total: {len(glossary)})"
-        )
-
-    @override
-    def save_item_builder(self, chunk: Chunk, final_result: dict[int, str]) -> SaveItem:
-        """Construit l'item de sauvegarde pour le store."""
-        result = final_result[0]  # ChapterChunk a toujours index 0
-        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
-        store = self.get_store()
-
-        def on_save(item: SaveItem) -> None:
-            glossary = GlossaryValidator.load(item.final_result[0])
-            # Peupler le glossaire global
-            self._populate_glossary(glossary, chunk.index)
-            # Exporter l'analyse en markdown pour revue humaine
-            GlossaryExporter.save_glossary_markdown(
-                glossary, store.cache_dir / f"chunk {chunk.index}.md"
-            )
-
-        return SaveItem(
-            chunk=chunk,
-            final_result=final_result,
-            source_files={self.file_name: {keyname: result}},
-            on_save=on_save,
+            f"[GlossaryPhase] chunk {chunk_index} - {len(termes)} termes ajoutés "
+            f"au glossaire (total: {len(glossary)})"
         )

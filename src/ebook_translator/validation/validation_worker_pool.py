@@ -9,9 +9,9 @@ Architecture (Bloc B Step 4c) :
                        ByteStore (via SaveItem self-contained)
 
 Chaque `UnifiedValidationWorker` route via `RETRY_REGISTRY` et les
-métadonnées des `ContentCheck` ; aucune dépendance à `ValidationPipeline`
-ni à `ValidationContext`. Le pool ne porte donc plus de `pipeline` ni
-de `max_retries` — la politique de retry vit dans les checks.
+métadonnées des `ContentCheck`. Le pool ne porte ni `pipeline` ni
+`max_retries` — la politique de retry (`retry_strategy`, `max_attempts`)
+est déclarée par chaque check.
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from .validation_queue import SaveQueue, ValidationItem, ValidationQueue
 if TYPE_CHECKING:
     from ebook_translator.pipeline.base import PhaseProtocol
 
-    from ..llm import LLM
 
 logger = get_logger(__name__)
 
@@ -54,8 +53,6 @@ class ValidationWorkerPool:
     def __init__(
         self,
         num_workers: int,
-        llm: LLM,
-        target_language: str,
         phase: PhaseProtocol,
     ) -> None:
         self.num_workers = num_workers
@@ -70,17 +67,16 @@ class ValidationWorkerPool:
             stop_event=self._stop_event,
         )
 
+        # Le worker lit `llm` et `target_language` sur `CommunContext`, gelé
+        # par le `Pipeline` avant la construction du pool.
         self.workers: list[UnifiedValidationWorker] = [
             UnifiedValidationWorker(
-                worker_id=i,
                 validation_queue=self.validation_queue,
                 save_queue=self.save_queue,
                 phase=phase,
-                llm=llm,
-                target_language=target_language,
                 stop_event=self._stop_event,
             )
-            for i in range(num_workers)
+            for _ in range(num_workers)
         ]
 
         self.threads: list[threading.Thread] = []

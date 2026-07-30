@@ -1,40 +1,59 @@
-"""Phase 0 : Analyse littéraire pour contexte de traduction."""
+"""Phase 0 : Analyse littéraire stratifiée pour contexte de traduction.
 
-import json
+Validation **entièrement schéma** : le modèle `AnalyseChapter` est passé au
+LLM via Instructor (`JsonRequestConfig`), qui garantit la structure côté
+API. Il n'y a donc ni `checks` legacy ni `content_checks` — l'ancien
+`AnalysisChecks` (parsing JSON + sections manquantes) est absorbé par
+Pydantic.
+"""
+
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, override
+from typing import Any, override
 
-from ebook_translator.checks import AnalysisChecks
 from ebook_translator.exporter import AnalysisExporter
+from ebook_translator.llm.llm_config import JsonRequestConfig
 from ebook_translator.logger import get_logger
+from ebook_translator.persistence.memoized_chunk_persister import (
+    MemoizedChunkPersister,
+)
 from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, PhaseName
 from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
-from ebook_translator.segmentation.chunk import Chunk
-from ebook_translator.validation.validation_queue import SaveItem
-from ebook_translator.validator import AnalysisValidator
-
-if TYPE_CHECKING:
-    from ebook_translator.llm.llm_config import CompleteLLMConfig
+from template.phase.analyze_chapter_layered_models import AnalyseChapter
+from template.types import ConvertibleModel
 
 logger = get_logger(__name__)
 
+_PERSISTER = MemoizedChunkPersister(AnalyseChapter)
+"""Persister de la phase, isolé du champ `PhaseBase.persister`.
+
+Ce dernier est déclaré `ChunkPersister[...] | None` (voie non migrée
+possible) et ne donne donc pas accès à `all_for_outer`. La constante
+garde le type concret pour la lecture des fiches voisines.
+"""
+
 
 @dataclass
-class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
+class LiteraryAnalysisPhase(
+    PhaseBase[ChapterPartChunk, AnalyseChapter, AnalyseChapter]
+):
     """
-    Phase 0 : Analyse littéraire simplifiée pour contexte de traduction.
+    Phase 0 : analyse littéraire stratifiée pour contexte de traduction.
 
-    Cette phase analyse chaque chapitre pour extraire :
-    - Analyse littéraire (ton, style, thèmes, pistes de traduction)
-    - Glossaire avec propositions de traduction
+    Produit une fiche `AnalyseChapter` par bloc de chapitre :
+    - `noyau_stable` : genre, registre, style, tonalité, pistes de traduction
+    - `couche_narrative` : résumé, arcs, tensions, thèmes, références
 
-    Le format simplifié ContexteTraduction réduit de ~67% les tokens LLM
-    par rapport à l'ancien ChapterAnalysis.
+    Chaque bloc reprend la fiche du bloc précédent (mode incrémental) et la
+    met à jour. Les fiches sont mémoïsées par fingerprint de chunk, un
+    fichier de cache par chapitre.
     """
 
     name = PhaseName.LITERARY_ANALYSIS
     chunk_type = ChapterPartChunk
+    payload_type = AnalyseChapter
+    data_type = AnalyseChapter
+
     max_tokens: int = field(  # Un seul bloc par chapitre (vs 4000 multi-blocs avant)
         default=5000
     )
@@ -45,7 +64,10 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         default=1, init=False
     )  # Analyse séquentielle pour cohérence
 
-    checks = (AnalysisChecks(),)
+    # Validation portée par le schéma Pydantic seul (voir docstring module).
+    content_checks = ()
+
+    persister = _PERSISTER
 
     @override
     def get_chunks(self) -> Sequence[ChapterPartChunk]:
@@ -70,118 +92,94 @@ class LiteraryAnalysisPhase(PhaseBase[ChapterPartChunk]):
         )
         return all_chunks
 
-    @override
-    def get_translation_cache(self, chunk: Chunk) -> tuple[dict[int, str], bool]:
-        """
-        Récupère l'analyse JSON depuis le store si elle existe.
+    def latest_analysis_for(self, chapter_name: str) -> AnalyseChapter | None:
+        """Fiche consolidée d'un chapitre, pour les phases aval.
 
-        Returns:
-            Tuple (résultat, has_missing) où:
-            - résultat: dict avec l'analyse (ou vide si pas trouvée)
-            - has_missing: True si l'analyse est manquante, False sinon
-        """
-        if not isinstance(chunk, ChapterPartChunk):
-            raise TypeError(f"Expected ChapterPartChunk, got {type(chunk).__name__}")
-        store = self.get_store()
-        chapter_name = chunk.chapter.name
-        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
-        cached_json = store.get(chapter_name, keyname)
-        if cached_json is None:
-            return ({}, True)  # Analyse manquante
-        return ({0: cached_json}, False)  # Analyse trouvée
+        Les fiches sont incrémentales : chaque bloc reprend et enrichit celle
+        du bloc précédent. La **dernière écrite** consolide donc tout le
+        chapitre — l'ordre d'itération suit l'ordre d'écriture des blocs.
 
-    def _get_previous_chunk_json(
-        self, chunk: ChapterPartChunk, context: ChunkContext
-    ) -> str | None:
-        """Récupère le JSON d'analyse du chunk précédent depuis le store.
+        Injectée dans `Chapters` sous forme de callable (`analysis_lookup`) :
+        `segmentation` n'a ainsi à connaître ni le `StoreManager`, ni le
+        `ByteStore`, ni le persister de cette phase.
 
         Args:
-            chunk: Chunk courant dont on veut le résultat du prédécesseur.
+            chapter_name: Nom du chapitre (clé de regroupement du cache).
 
         Returns:
-            JSON stringifié du chunk précédent, ou chaîne vide si introuvable.
+            Dernière fiche mémoïsée du chapitre, ou `None` si la phase n'a
+            pas tourné dessus.
         """
-        if chunk.is_first():
-            if not isinstance(context.previous_chunk, ChapterPartChunk):
-                return None
-            chapter_name = context.previous_chunk.chapter.name
-            index = context.previous_chunk.total_parts
-        else:
-            chapter_name = chunk.chapter.name
-            index = chunk.index
+        entries = _PERSISTER.all_for_outer(chapter_name, self.get_byte_store())
+        if not entries:
+            return None
+        return list(entries.values())[-1]
 
-        all_cached = self.get_store().get_from_file(chapter_name)
-        prefix = f"{index - 1}_"
-        for key, value in all_cached.items():
-            if key.startswith(prefix):
-                analysis_data = AnalysisValidator.load(value)
-                analysis_data = {
-                    k: v
-                    for k, v in analysis_data.items()
-                    if k in ["chapitre", "analyse"]
-                }
-                return json.dumps(analysis_data, ensure_ascii=False, index=2)
+    def _snapshot_for(self, outer_key: str, global_index: int) -> str | None:
+        """Fiche mémoïsée d'un bloc voisin, sérialisée en JSON.
+
+        Args:
+            outer_key: Chapitre où chercher (clé de regroupement du cache).
+            global_index: Index global du bloc recherché (`chapitre * 100 + part`).
+
+        Returns:
+            JSON de la fiche si elle est en cache, `None` sinon.
+        """
+        entries = _PERSISTER.all_for_outer(outer_key, self.get_byte_store())
+        prefix = f"{global_index}_"
+        for inner_key, analyse in entries.items():
+            if inner_key.startswith(prefix):
+                return analyse.model_dump_json()
         return None
 
-    @override
-    def render_prompt(self, chunk: Chunk, context: ChunkContext) -> tuple[str, str]:
-        """Génère le prompt d'analyse simplifiée."""
-        if not isinstance(chunk, ChapterPartChunk):
-            raise ValueError("chunk must be ChapterPartChunk")
+    def _previous_block_snapshot(self, chunk: ChapterPartChunk) -> str | None:
+        """Fiche du bloc précédent **du même chapitre** (mode incrémental)."""
+        if chunk.is_first():
+            return None
+        return self._snapshot_for(chunk.outer_key, chunk.index - 1)
 
+    def _previous_chapter_snapshot(self, context: ChunkContext) -> str | None:
+        """Fiche finale du chapitre précédent, amorce du chapitre courant (seed)."""
+        previous = context.previous_chunk
+        if not isinstance(previous, ChapterPartChunk):
+            return None
+        return self._snapshot_for(previous.outer_key, previous.index)
+
+    @override
+    def render_prompt(
+        self, chunk: ChapterPartChunk, context: ChunkContext
+    ) -> tuple[str, str]:
+        """Génère le prompt d'analyse stratifiée.
+
+        Trois modes, résolus par le renderer selon les snapshots fournis :
+        incrémental (bloc N>0 du chapitre), seed (premier bloc, fiche du
+        chapitre précédent en amorce), bootstrap (tout premier bloc du livre).
+        """
+        existing = self._previous_block_snapshot(chunk)
+        seed = self._previous_chapter_snapshot(context) if existing is None else None
         return context.llm.renderer.render_analyze_chapter_layered(
             chunk=chunk,
             target_language=context.target_language,
-            existing_analysis_json=self._get_previous_chunk_json(chunk),
+            existing_analysis_json=existing,
+            seed_analysis_json=seed,
+            bootstrap=existing is None and seed is None,
         )
 
     @override
-    def get_llm_config(self, chunk: Chunk, context: ChunkContext) -> CompleteLLMConfig:
-        """Active le mode JSON pour parsing structuré."""
-        conf = self.llm_config.copy()
-        conf["use_json_mode"] = True
-        return conf
+    def get_llm_config(
+        self, chunk: ChapterPartChunk, context: ChunkContext
+    ) -> JsonRequestConfig[ConvertibleModel[Any]]:
+        """Voie Instructor : la structure est portée par le schéma Pydantic."""
+        return JsonRequestConfig(config=self.llm, response_model=AnalyseChapter)
 
     @override
-    def process_llm_response(
-        self, chunk: Chunk, response: str, context: ChunkContext
-    ) -> dict[int, str]:
-        """
-        Valide la réponse JSON et peuple le glossaire.
-
-        Args:
-            chunk: ChapterPartChunk analysé
-            response: JSON stringifié du LLM (ContexteTraduction)
-            context: Contexte avec glossaire
-
-        Returns:
-            Dict {0: json_string} pour stockage dans le store
-
-        Raises:
-            ValueError: Si validation échoue ou JSON invalide
-        """
-        return {0: response}
-
-    @override
-    def save_item_builder(self, chunk: Chunk, final_result: dict[int, str]) -> SaveItem:
-        """Construit l'item de sauvegarde pour le store."""
-        if not isinstance(chunk, ChapterPartChunk):
-            raise TypeError(f"Expected ChapterPartChunk, got {type(chunk).__name__}")
-        result = final_result[0]  # ChapterChunk a toujours index 0
-        store = self.get_store()
-        name = chunk.chapter.name
-        keyname = f"{chunk.index}_{chunk.calculate_chunk_hash()[:8]}"
-
-        def on_save(item: SaveItem) -> None:
-            analysis = AnalysisValidator.load(item.final_result[0])
-            # Exporter l'analyse en markdown pour revue humaine
-            AnalysisExporter.save_analysis_markdown(
-                analysis, store.cache_dir / f"{name}.md", 0
-            )
-
-        return SaveItem(
-            chunk=chunk,
-            final_result=final_result,
-            source_files={name: {keyname: result}},
-            on_save=on_save,
+    def after_chunk(
+        self,
+        chunk: ChapterPartChunk,
+        data: AnalyseChapter,
+        context: ChunkContext,
+    ) -> None:
+        """Exporte la fiche en Markdown pour revue humaine."""
+        AnalysisExporter.save_analysis_markdown(
+            data, self.get_store().cache_dir / f"{chunk.outer_key}.md"
         )

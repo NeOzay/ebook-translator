@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from ebook_translator.stores import Store
+from ebook_translator.stores.store import _load_cache, _save_cache
 
 
 def test_concurrent_read_write(tmp_path: Path) -> None:
@@ -51,7 +52,7 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
                         source_file
                     )
                 )
-                _ = store._load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
+                _ = _load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
 
                 with lock_stats:
                     stats["reads"] += 1
@@ -78,9 +79,7 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
 
                 # Écrire des données
                 data = {str(i): f"Translation {counter}_{i}" for i in range(10)}
-                store._save_cache(  # pyright: ignore[reportPrivateUsage]
-                    cache_file, data
-                )
+                _save_cache(cache_file, data)  # pyright: ignore[reportPrivateUsage]
 
                 with lock_stats:
                     stats["writes"] += 1
@@ -189,7 +188,7 @@ def test_concurrent_save_all(tmp_path: Path) -> None:
     cache_file = store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
         source_file
     )
-    data = store._load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
+    data = _load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
 
     # Note: save_all fait un update, donc les anciennes valeurs sont écrasées
     # On vérifie juste qu'il y a des données

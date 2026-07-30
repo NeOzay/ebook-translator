@@ -53,13 +53,16 @@ class TagKey:
 
     def __eq__(self, other: object) -> bool:
         """
-        Compare deux TagKey par identité d'objet.
+        Compare deux TagKey par identité du tag, de la page et par index.
+
+        Le hash ne porte que sur l'identité du tag : l'égalité est donc plus
+        stricte que le hash, ce qui reste conforme au contrat de `dict`.
 
         Args:
             other: L'objet à comparer
 
         Returns:
-            True si les deux TagKey encapsulent le même objet Tag
+            True si les deux TagKey désignent le même fragment
         """
         if not isinstance(other, TagKey):
             return False

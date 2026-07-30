@@ -5,23 +5,11 @@ Phase 2: Raffinage avec glossaire et petits blocs.
 from dataclasses import dataclass, field
 from typing import override
 
-from ebook_translator.checks import (
+from ebook_translator.checks.content import (
     FragmentCountCheck,
     LineCountCheck,
     PunctuationCheck,
     SentenceCheck,
-)
-from ebook_translator.checks.content import (
-    FragmentCountCheck as ContentFragmentCountCheck,
-)
-from ebook_translator.checks.content import (
-    LineCountCheck as ContentLineCountCheck,
-)
-from ebook_translator.checks.content import (
-    PunctuationCheck as ContentPunctuationCheck,
-)
-from ebook_translator.checks.content import (
-    SentenceCheck as ContentSentenceCheck,
 )
 from ebook_translator.logger import get_logger
 from ebook_translator.persistence.line_indexed_persister import LineIndexedPersister
@@ -30,13 +18,13 @@ from ebook_translator.pipeline.context import ChunkContext
 from ebook_translator.pipeline.phases.initial_translation import InitialTranslationPhase
 from ebook_translator.segmentation.segmentator import Chunk
 from ebook_translator.stores.byte_store import ByteStore, FileByteStore
-from template.phase.translation_models import LineIndexedLLMResponse
+from template.phase.translation_models import LineIndexed, LineIndexedLLMResponse
 
 logger = get_logger(__name__)
 
 
 @dataclass
-class RefinementPhase(PhaseBase[Chunk, dict[int, str]]):
+class RefinementPhase(PhaseBase[Chunk, LineIndexed]):
     """
     Phase 2: Raffinage avec glossaire (petits blocs, séquentiel).
 
@@ -64,21 +52,12 @@ class RefinementPhase(PhaseBase[Chunk, dict[int, str]]):
     max_workers: int = field(default=1, init=False)
     depends_on = (InitialTranslationPhase,)  # Nécessite Phase 1
 
-    checks = (
+    payload_type = LineIndexedLLMResponse
+    content_checks = (
         LineCountCheck(),
         FragmentCountCheck(),
         PunctuationCheck(),
         SentenceCheck(),
-    )
-
-    # Nouvelle API (étape 5+). Cohabite avec `checks` legacy ; le worker
-    # unifié de l'étape 7 lira `payload_type` + `content_checks`.
-    payload_type = LineIndexedLLMResponse
-    content_checks = (
-        ContentLineCountCheck(),
-        ContentFragmentCountCheck(),
-        ContentPunctuationCheck(),
-        ContentSentenceCheck(),
     )
 
     persister = LineIndexedPersister(LineIndexedLLMResponse)

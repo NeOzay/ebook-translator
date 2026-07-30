@@ -14,10 +14,12 @@ import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
+from unittest.mock import Mock
 
-from pydantic import TypeAdapter
+import pytest
 
 from ebook_translator.checks.content_check import ChunkSource
+from ebook_translator.pipeline.context import CommunContext
 from ebook_translator.validation.diagnostics import ErreursType
 from ebook_translator.validation.failure import ValidationFailure
 from ebook_translator.validation.retry_strategy import RetryStrategy
@@ -86,6 +88,7 @@ class _FakeCheck:
                 error_type=self.error_type,
                 msg=f"{len(missing)} manquantes",
                 ctx={"missing_indices": missing},
+                relevant_indices=frozenset(missing),
             )
         ]
 
@@ -95,9 +98,17 @@ class _FakeRenderer:
         return ("sys", f"user:{kwargs}")
 
 
+class _FakeClient:
+    """Surface minimale attendue par le worker sur `llm.client`."""
+
+    def get_model_preset_config(self, preset: str, reasoning: bool) -> None:
+        return None
+
+
 @dataclass
 class _FakeLLM:
     renderer: _FakeRenderer = field(default_factory=_FakeRenderer)
+    client: _FakeClient = field(default_factory=_FakeClient)
     responses: list[str] = field(default_factory=list)
     calls: list[tuple[str, str]] = field(default_factory=list)
 
@@ -133,17 +144,6 @@ class _FakePhase:
             failures.extend(c.run(data, source))
         return failures
 
-    def validate_payload(
-        self, raw: str | _FakePayload, source: ChunkSource
-    ) -> _FakePayload | list[ValidationFailure[Any]]:
-        if isinstance(raw, _FakePayload):
-            payload = raw
-        else:
-            adapter = TypeAdapter(_FakePayload)
-            payload = adapter.validate_json(raw)
-        failures = self.validate_data(payload.build(), source)
-        return failures if failures else payload
-
     def get_llm_config(self, chunk: Any, ctx: Any) -> None:
         return None
 
@@ -155,20 +155,46 @@ class _FakePhase:
 # ---------- Helpers ----------
 
 
+@pytest.fixture(autouse=True)
+def reset_commun_context():
+    """Dégèle `CommunContext` entre les tests.
+
+    Le worker lit `llm` et `target_language` sur ce singleton gelé ; chaque
+    test doit donc pouvoir le reconfigurer.
+    """
+    yield
+    type.__setattr__(CommunContext, "_frozen", False)
+    type.__setattr__(CommunContext, "_assigned_fields", set())
+
+
+def _freeze_context(llm: _FakeLLM) -> None:
+    """Gèle `CommunContext` avec le LLM fake ; les autres champs sont muets."""
+    CommunContext(
+        llm=llm,  # type: ignore[arg-type]
+        book=Mock(),
+        html_pages=[],
+        chapters=Mock(),
+        glossary=Mock(),
+        store_manager=Mock(),
+        target_language="fr",
+    )
+
+
 def _make_worker(phase: _FakePhase, llm: _FakeLLM) -> tuple[
-    UnifiedValidationWorker[dict[int, str], _FakePayload],
+    UnifiedValidationWorker,
     ValidationQueue[dict[int, str]],
     SaveQueue[Any, Any],
 ]:
+    # `UnifiedValidationWorker` n'est plus générique : c'est la spécialisation
+    # concrète `ValidationWorker[LineIndexed]`. `LineIndexed` étant un NewType
+    # sur `dict[int, str]`, les fakes restent valides au runtime.
+    _freeze_context(llm)
     vq: ValidationQueue[dict[int, str]] = ValidationQueue(maxsize=10)
     sq: SaveQueue[Any, Any] = SaveQueue(maxsize=10)
-    worker = UnifiedValidationWorker[dict[int, str], _FakePayload](
-        worker_id=0,
+    worker = UnifiedValidationWorker(
         validation_queue=vq,
         save_queue=sq,
         phase=phase,  # type: ignore[arg-type]
-        llm=llm,  # type: ignore[arg-type]
-        target_language="fr",
         stop_event=threading.Event(),
     )
     return worker, vq, sq
@@ -181,7 +207,11 @@ def _make_item(
 
     return ValidationItem[dict[int, str]](
         chunk=_FakeChunk(index=42),  # type: ignore[arg-type]
-        chunk_info=ChunkContext(phase_name="fake", chunk_index=42, previous_chunk=None),
+        chunk_info=ChunkContext(
+            phase_name="fake",  # type: ignore[arg-type]
+            chunk_index=42,
+            previous_chunk=None,
+        ),
         data=data,
         attempt=attempt,
     )
@@ -198,7 +228,9 @@ class TestUnifiedWorker:
 
         item = _make_item({0: "T0", 1: "T1"})
         vq.put(item)
-        worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        # `run()` compose `_process` puis `_save` ; on reproduit la paire.
+        data = worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        worker._save(item, data)  # pyright: ignore[reportPrivateUsage]
 
         assert worker.validated_count == 1
         assert worker.rejected_count == 0
@@ -217,7 +249,9 @@ class TestUnifiedWorker:
 
         item = _make_item({0: "T0"})
         vq.put(item)
-        worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        # `run()` compose `_process` puis `_save` ; on reproduit la paire.
+        data = worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        worker._save(item, data)  # pyright: ignore[reportPrivateUsage]
 
         assert worker.validated_count == 1
         assert worker.rejected_count == 0
@@ -238,7 +272,9 @@ class TestUnifiedWorker:
 
         item = _make_item({0: "T0"})
         vq.put(item)
-        worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        # `run()` compose `_process` puis `_save` ; on reproduit la paire.
+        data = worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        worker._save(item, data)  # pyright: ignore[reportPrivateUsage]
 
         assert worker.validated_count == 1
         assert worker.rejected_count == 0
@@ -279,6 +315,7 @@ class TestUnifiedWorker:
                                 "expected_pairs": 1,
                                 "actual_pairs": 0,
                             },
+                            relevant_indices=frozenset({0}),
                         )
                     ]
                 return []
@@ -299,7 +336,9 @@ class TestUnifiedWorker:
 
         item = _make_item({0: "T0"})
         vq.put(item)
-        worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        # `run()` compose `_process` puis `_save` ; on reproduit la paire.
+        data = worker._process(item)  # pyright: ignore[reportPrivateUsage]
+        worker._save(item, data)  # pyright: ignore[reportPrivateUsage]
 
         assert worker.validated_count == 1
         assert worker.rejected_count == 0

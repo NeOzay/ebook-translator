@@ -146,7 +146,7 @@ class ChunkContext(CommunContext):
     Contient les informations nécessaires pour traiter un chunk spécifique.
     """
 
-    phase: PhaseContext
+    phase_name: PhaseName
     """Nom de la phase en cours"""
 
     chunk_index: int

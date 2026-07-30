@@ -6,17 +6,19 @@ en encapsulant toute la logique métier nécessaire (extraction texte,
 export glossaire, calculs, etc.).
 """
 
+from __future__ import annotations
+
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
-from ebook_translator.validator.translation_context import ContexteTraduction
 
 from ..segmentation import Chunk, ChunkProtocol, TranslatedChunk
 
 if TYPE_CHECKING:
+    from template.phase.analyze_chapter_layered_models import AnalyseChapter
     from template.template_params import (
         AnalyzeChapterLayeredParams,
         AnalyzeChapterParams,
@@ -158,7 +160,7 @@ class TemplateRenderer:
         target_language: str,
         source_text: str,
         glossary: Glossary,
-        literary_context: ContexteTraduction | None = None,
+        literary_context: AnalyseChapter | None = None,
     ) -> tuple[str, str]:
         """
         Rend le template translate_base.jinja (Phase 1 - Traduction initiale).
@@ -181,9 +183,7 @@ class TemplateRenderer:
             "target_language": target_language,
             "source_text": source_text,
             "glossary": glossary.collect_entry(source_text, self._glossary_max_terms),
-            "literary_context": (
-                literary_context["analyse"] if literary_context else None
-            ),
+            "literary_context": literary_context,
             "genre": self._genre,
         }
         return self.render_prompt(PhaseTemplate.First_Pass_Template, **params)
@@ -194,7 +194,7 @@ class TemplateRenderer:
         store: Store,
         glossary: Glossary,
         target_language: str,
-        literary_context: ContexteTraduction | None = None,
+        literary_context: AnalyseChapter | None = None,
     ) -> tuple[str, str]:
         """
         Rend le template refine.jinja (Phase 2 - Affinage avec glossaire).
@@ -251,9 +251,7 @@ class TemplateRenderer:
             "initial_translation": initial_translation,
             "tail_context": tail,
             "glossary": glossary.collect_entry(original_text, self._glossary_max_terms),
-            "literary_context": (
-                literary_context["analyse"] if literary_context else None
-            ),
+            "literary_context": literary_context,
             "genre": self._genre,
         }
 

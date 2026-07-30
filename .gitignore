@@ -72,3 +72,6 @@ htmlcov/
 
 # EPUB de test décompressé (volumineux, non redistribuable)
 tests/Saint-Exupery-Le_Petit_Prince/
+
+# Rendus de prompts produits par examples/example_template.py (regénérables)
+template_outputs/

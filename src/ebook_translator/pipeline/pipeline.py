@@ -17,6 +17,7 @@ from ebook_translator.pipeline.executor import PhaseExecutor
 from ebook_translator.pipeline.phases.dummy_phase import DummyPhase
 from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.segmentation import Chapters
+from ebook_translator.segmentation.chapter import AnalysisLookup
 from ebook_translator.translation.epub_handler import (
     copy_epub_metadata,
     extract_html_items_in_spine_order,
@@ -136,6 +137,26 @@ class Pipeline:
 
         logger.info(f"✅ Phase dependencies validated: {list(executed_phases)}")
 
+    def _analysis_lookup(self) -> AnalysisLookup | None:
+        """Accès aux fiches Phase 0, à injecter dans `Chapters`.
+
+        Import local : `literary_analysis` importe `pipeline`, l'import au
+        niveau module refermerait le cycle.
+
+        Returns:
+            `LiteraryAnalysisPhase.latest_analysis_for` si la phase est dans
+            le pipeline, `None` sinon (les phases aval traduisent alors sans
+            contexte littéraire).
+        """
+        from ebook_translator.pipeline.phases.literary_analysis import (
+            LiteraryAnalysisPhase,
+        )
+
+        for phase in self.phases:
+            if isinstance(phase, LiteraryAnalysisPhase):
+                return phase.latest_analysis_for
+        return None
+
     def run(
         self,
         target_language: str,
@@ -207,14 +228,12 @@ class Pipeline:
                 store_manager=self.store_manager,
                 book=source_book,
                 html_pages=html_items,
-                chapters=Chapters(source_book),
+                chapters=Chapters(source_book, self._analysis_lookup()),
             )
 
             # ValidationWorkerPool (reconfiguré par chaque phase via switch_phase).
             self.validation_pool = ValidationWorkerPool(
                 num_workers=self.num_validation_workers,
-                llm=self.llm,
-                target_language=target_language,
                 phase=DummyPhase(),  # Sera switch par PhaseExecutor
             )
             self.validation_pool.start()
@@ -238,6 +257,7 @@ class Pipeline:
                 # Créer contexte de phase
                 # -------------------------------------------------------------
                 context = PhaseContext(
+                    name=phase_object.name,
                     validation_pool=self.validation_pool,
                     previous_phases=stats.copy(),
                 )

@@ -7,12 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast, override
-from warnings import deprecated
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast, override
 
-from pydantic import BaseModel, ValidationError
-
-from ebook_translator.checks import Check, ValidationPipeline
 from ebook_translator.checks.content_check import ChunkSource, ContentCheck
 from ebook_translator.llm.clients.client import ClientProviderProtocol
 from ebook_translator.llm.llm_config import JsonRequestConfig, LLMConfig
@@ -22,8 +18,7 @@ from ebook_translator.segmentation.chunk import Chunk, ChunkProtocol
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.stores.byte_store import ByteStore, FileByteStore
 from ebook_translator.stores.store import Store
-from ebook_translator.translation.parser import parse_llm_translation_output
-from ebook_translator.validation.failure import ValidationFailure, from_pydantic_error
+from ebook_translator.validation.failure import ValidationFailure
 from template.types import ConvertibleModel
 
 if TYPE_CHECKING:
@@ -46,32 +41,6 @@ def validate_data[DT](
     for check in content_checks:
         failures.extend(check.run(data, source))
     return failures
-
-
-def validate_payload[M: ConvertibleModel[Any]](
-    payload_type: type[M],
-    content_checks: Sequence[ContentCheck[Any, Any]],
-    raw: str | M,
-    source: ChunkSource,
-) -> M | list[ValidationFailure[Any]]:
-    """Pipeline schéma puis contenu (post-LLM).
-
-    Court-circuite sur erreur schéma : les `content_checks` ne tournent
-    jamais sur un payload structurellement KO.
-    """
-
-    if isinstance(raw, ConvertibleModel):
-        payload: M = cast(M, raw)
-    else:
-        try:
-            payload = payload_type.model_validate(raw)
-        except ValidationError as e:
-            return list(from_pydantic_error(e))
-
-    failures = validate_data(content_checks, payload.build(), source)
-    if failures:
-        return failures
-    return payload
 
 
 @dataclass(frozen=True)
@@ -121,7 +90,6 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
     """
 
     name: PhaseName
-    output_type: Literal["Text"] | type[BaseModel]
     execution_mode: ExecutionMode
     max_tokens: int
     overlap_ratio: float
@@ -136,19 +104,12 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
     def validate_data(
         self, data: DT, source: ChunkSource
     ) -> list[ValidationFailure[Any]]: ...
-    def validate_payload(
-        self, raw: str | M, source: ChunkSource
-    ) -> M | list[ValidationFailure[Any]]: ...
     def put_context(self, context: PhaseContext) -> None: ...
-    @classmethod
-    def validation_pipeline(cls) -> ValidationPipeline: ...
     def before_phase(self) -> None: ...
     def after_phase(self, stats: PhaseStats) -> None: ...
     def get_chunks(self) -> Sequence[ChunkType]: ...
     def get_store(self) -> Store: ...
     def get_worker_count(self) -> int: ...
-    @classmethod
-    def get_checks(cls) -> tuple[Check[Any], ...]: ...
     @classmethod
     def get_dependencies(cls) -> tuple[type[PhaseProtocol], ...]: ...
     def get_translation_cache(self, chunk: ChunkType) -> tuple[DT, set[int]] | None: ...
@@ -164,12 +125,6 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
         | JsonRequestConfig[ConvertibleModel[Any]]
         | None
     ): ...
-    @deprecated(
-        "Use is_chunk_cached + load_chunk_view instead for new phases with ChunkPersister"
-    )
-    def process_llm_response(
-        self, chunk: ChunkType, response: str, context: ChunkContext
-    ) -> dict[int, str]: ...
     def after_chunk(
         self, chunk: ChunkType, data: DT, context: ChunkContext
     ) -> None: ...
@@ -199,8 +154,8 @@ class PhaseBase[
             max_tokens = 1500
             overlap_ratio = 0.15
             execution_mode = ExecutionMode.PARALLEL
-            template_name = TemplateNames.Translate_Base
-            checks = [LineCountCheck(), FragmentCountCheck()]
+            payload_type = LineIndexedLLMResponse
+            content_checks = (LineCountCheck(), FragmentCountCheck())
 
 
             def render_prompt(cls, chunk: Chunk, context: ChunkContext) -> str:
@@ -240,13 +195,6 @@ class PhaseBase[
 
     execution_mode: ExecutionMode = field(init=False)
     """Mode d'exécution: PARALLEL ou SEQUENTIAL"""
-
-    checks: tuple[Check[Any], ...] = field(
-        init=False, default_factory=tuple[Check[Any], ...]
-    )
-    """Liste des checks de validation pour cette phase (legacy, étape 9 dépose)"""
-
-    # === Configuration nouvelle API (étape 5+) ===
 
     content_checks: tuple[ContentCheck[DT, Any], ...] = field(default=(), init=False)
     """Checks contenu post-parsing (nouveau Protocol). Chaque check porte
@@ -290,7 +238,6 @@ class PhaseBase[
             "max_tokens",
             "overlap_ratio",
             "execution_mode",
-            "checks",
         ]
         for _field in required_fields:
             if not hasattr(cls, _field):
@@ -411,13 +358,6 @@ class PhaseBase[
 
         return validate_data(self.content_checks, data, source)
 
-    def validate_payload(
-        self, raw: str | M, source: ChunkSource
-    ) -> M | list[ValidationFailure[Any]]:
-        """Chemin **post-LLM** : schéma puis contenu."""
-
-        return validate_payload(self.payload_type, self.content_checks, raw, source)
-
     def chunk_source(self, chunk: ChunkType) -> ChunkSource:
         """Adapte un chunk en `ChunkSource` consommable par `ContentCheck`.
 
@@ -471,24 +411,6 @@ class PhaseBase[
 
     def persist_chunk(self, chunk: ChunkType, data: DT) -> None:
         self.storage.persist(chunk, data)
-
-    def process_llm_response(
-        self, chunk: ChunkType, response: str, context: ChunkContext
-    ) -> dict[int, str]:
-        """
-        Traite la réponse brute du LLM pour ce chunk.
-
-        Par défaut, parse la réponse avec parse_llm_translation_output().
-        Peut être surchargé pour un traitement personnalisé.
-
-        Args:
-            chunk: Chunk traité
-            response: Réponse brute du LLM
-            context: Contexte du chunk
-        Returns:
-            Dictionnaire des traductions (mapping line_index -> translated_text)
-        """
-        return parse_llm_translation_output(response)
 
     def save_item_builder(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType]:
         return self.storage.save_item(chunk, data)
@@ -552,18 +474,6 @@ class PhaseBase[
         """
         return self.context.store_manager.get_store(self.store_key())
 
-    @classmethod
-    def validation_pipeline(cls) -> ValidationPipeline:
-        """
-        Pipeline de validation pour cette phase.
-
-        Construit automatiquement depuis cls.checks.
-
-        Returns:
-            ValidationPipeline configuré avec les checks de la phase
-        """
-        return ValidationPipeline(cls.checks)
-
     def get_worker_count(self) -> int:
         """
         Nombre de workers à utiliser (mode PARALLEL uniquement).
@@ -574,10 +484,6 @@ class PhaseBase[
         if self.execution_mode == ExecutionMode.SEQUENTIAL:
             return 1
         return self.max_workers
-
-    @classmethod
-    def get_checks(cls) -> tuple[Check[Any], ...]:
-        return cls.checks
 
     @classmethod
     @override

@@ -59,7 +59,6 @@ from .worker_retry import (
 if TYPE_CHECKING:
     from ebook_translator.checks.content_check import ChunkSource, ContentCheck
     from ebook_translator.pipeline.base import PhaseProtocol
-    from ebook_translator.pipeline.context import ChunkContext
     from ebook_translator.segmentation.chunk import ChunkProtocol
 
     from .failure import ValidationFailure
@@ -68,14 +67,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class _RejectOutcome(Exception):
     failures: list[ValidationFailure[Any]]
-
-
-@dataclass(frozen=True)
-class _RejectOutcomeFilter:
-    """Sentinelle de sortie anormale avec filtrage des failures déjà renoncées."""
-
-    failures: list[ValidationFailure[Any]]
-    indexes_to_remove: set[int]
 
 
 logger = get_logger(__name__)
@@ -189,9 +180,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         accumulated: list[ValidationFailure[Any]] = list(item.failures)
 
         for check in self.phase.content_checks:
-            outcome = self._correct_one_check(
-                check, data, chunk, item.chunk_info, source
-            )
+            outcome = self._correct_one_check(check, data, chunk, source)
             if isinstance(outcome, _RejectOutcome):
                 raise _RejectOutcome(outcome.failures + accumulated)
             data, check_failures = outcome
@@ -204,7 +193,6 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         check: ContentCheck[LineIndexed, Any],
         data: LineIndexed,
         chunk: ChunkProtocol,
-        chunk_info: ChunkContext,
         source: ChunkSource,
     ) -> tuple[LineIndexed, list[ValidationFailure[Any]]] | _RejectOutcome:
         """Boucle de retry sur un seul `check`.
@@ -252,7 +240,6 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
                     failure=failure,
                     entry=entry,
                     chunk=chunk,
-                    chunk_info=chunk_info,
                     source=source,
                     data=data,
                     attempt_index=n,
@@ -290,7 +277,6 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         failure: ValidationFailure[Any],
         entry: RetryEntry[Any, Any],
         chunk: ChunkProtocol,
-        chunk_info: ChunkContext,
         source: ChunkSource,
         data: LineIndexed,
         attempt_index: int,

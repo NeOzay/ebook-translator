@@ -59,7 +59,7 @@ class PhaseExecutor:
         start_time = time.time()
 
         logger.info(f"=== Starting Phase: {self.phase.name} ===")
-        check_names = [c.name for c in self.phase.get_checks()]
+        check_names = [type(c).__name__ for c in self.phase.content_checks]
         logger.info(
             f"Configuration: max_tokens={self.phase.max_tokens}, "
             f"overlap={self.phase.overlap_ratio}, mode={self.phase.execution_mode.value}, "
@@ -161,24 +161,26 @@ class PhaseExecutor:
             # 4. LLM query
             context_str = f"{self.phase.name}_chunk_{chunk.index:03d}"
             llm_config = self.phase.get_llm_config(chunk, chunk_context)
+            # 5. Obtenir le payload Pydantic, puis collapse vers la vue
+            # TypedDict. Le Pydantic est jeté ici car `M → DT` n'est
+            # typiquement pas réversible — la queue transporte uniquement DT.
             if isinstance(llm_config, JsonRequestConfig):
-                llm_output = self.context.llm.json_query(
+                # Voie Instructor : le client renvoie déjà une instance du
+                # `response_model`. Pas de sérialisation/reparse intermédiaire
+                # (un `model_validate` sur la chaîne JSON échouerait pour les
+                # modèles sans validateur `mode="before"` acceptant `str`).
+                payload = self.context.llm.json_query(
                     sys_prompt,
                     user_prompt,
                     log_name=context_str,
                     config=llm_config.config,
                     response_model=llm_config.response_model,
-                ).serialized_build()
+                )
             else:
                 llm_output = self.context.llm.query(
                     sys_prompt, user_prompt, log_name=context_str, config=llm_config
                 )
-
-            # 5. Parse via payload_type Pydantic (schéma + format) puis
-            # collapse vers la vue TypedDict. Le Pydantic est jeté ici
-            # car `M → DT` n'est typiquement pas réversible — la queue
-            # transporte uniquement DT.
-            payload = self.phase.payload_type.model_validate(llm_output)
+                payload = self.phase.payload_type.model_validate(llm_output)
             data = payload.build()
 
             # 6. Hook after_chunk

@@ -12,9 +12,7 @@ import pytest
 from bs4 import Tag
 from ebooklib import epub
 
-from ebook_translator.checks import ValidationContext
 from ebook_translator.htmlpage import TagKey
-from ebook_translator.llm.llm import LLM
 from ebook_translator.segmentation import Chunk
 from ebook_translator.segmentation.segmentator import Segmentator
 from ebook_translator.translation.epub_handler import extract_html_items_in_spine_order
@@ -74,31 +72,9 @@ def chunk() -> Chunk:
 
 
 @pytest.fixture
-def mock_llm():
-    """LLM mock pour tests."""
-    llm = Mock()
-    llm.render_prompt = Mock(return_value="mocked_prompt")
-    return llm
-
-
-@pytest.fixture
 def mock_chunk():
     """Chunk mock pour tests."""
     chunk = Mock(spec=Chunk)
     chunk.index = 0
     chunk.file_range = []
     return chunk
-
-
-@pytest.fixture
-def val_context(mock_chunk: Chunk, mock_llm: LLM):
-    """Contexte de validation mock."""
-    yield ValidationContext(
-        chunk=mock_chunk,
-        translated_texts={},
-        original_texts={},
-        llm=mock_llm,
-        target_language="fr",
-        max_retries=2,
-        chunk_info=Mock(),
-    )

@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol, override, runtime_checkable
 
-from pydantic import BaseModel, ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from ..logger import get_logger
 from ..segmentation.chunk import ChunkProtocol
@@ -59,16 +59,20 @@ class MemoChunk(ChunkProtocol, Protocol):
         ...
 
 
-class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
-    """Cache mémoïsé : un fichier par `outer_key`, dict `{inner_key: M-json}`.
+class MemoizedChunkPersister[TD: Any](ChunkPersister[MemoChunk, TD]):
+    """Cache mémoïsé : un fichier par `outer_key`, dict `{inner_key: TD-json}`.
 
-    Paramétré sur `M` : la même classe sert pour `ContexteTraduction`
-    (Phase 0), `LLMTermeGlossaire` (glossaire), etc. Seule contrainte
-    sur `M` : être un `BaseModel` Pydantic (sérialisable JSON).
+    Paramétré sur `TD` : la même classe sert pour `AnalyseChapter`
+    (Phase 0, un `BaseModel`) et `list[LLMTermeGlossary]` (glossaire, une
+    liste de `TypedDict`). La (dé)sérialisation passe par un
+    `TypeAdapter`, qui traite les deux cas — pour un `BaseModel`, le JSON
+    produit est identique à `model_dump_json()`, donc le format disque
+    des caches existants est préservé.
     """
 
-    def __init__(self, payload_type: type[M]) -> None:
+    def __init__(self, payload_type: type[TD]) -> None:
         self.payload_type = payload_type
+        self._adapter: TypeAdapter[TD] = TypeAdapter(payload_type)
 
     @override
     def is_chunk_cached(
@@ -84,10 +88,10 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
         return chunk.inner_key in wrapper
 
     @override
-    def persist(self, chunk: MemoChunk, data: M, store: ByteStore) -> None:
+    def persist(self, chunk: MemoChunk, data: TD, store: ByteStore) -> None:
         with store.lock(chunk.outer_key):
             wrapper = self._read_wrapper(store, chunk.outer_key)
-            wrapper[chunk.inner_key] = data.model_dump_json()
+            wrapper[chunk.inner_key] = self._adapter.dump_json(data).decode("utf-8")
             store.write(
                 chunk.outer_key,
                 json.dumps(wrapper, ensure_ascii=False, indent=2).encode("utf-8"),
@@ -99,13 +103,13 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
         chunk: MemoChunk,
         store: ByteStore,
         fallback: ByteStore | None = None,  # noqa: ARG002
-    ) -> tuple[M | None, set[Any]]:
+    ) -> tuple[TD | None, set[Any]]:
         wrapper = self._read_wrapper(store, chunk.outer_key)
         raw = wrapper.get(chunk.inner_key)
         if raw is None:
             return None, {chunk.inner_key}
         try:
-            return self.payload_type.model_validate_json(raw), set()
+            return self._adapter.validate_json(raw), set()
         except ValidationError as e:
             logger.warning(
                 f"MemoizedChunkPersister: entrée invalide "
@@ -113,7 +117,7 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
             )
             return None, {chunk.inner_key}
 
-    def all_for_outer(self, outer_key: str, store: ByteStore) -> dict[str, M]:
+    def all_for_outer(self, outer_key: str, store: ByteStore) -> dict[str, TD]:
         """Charge toutes les contributions valides d'un `outer_key`.
 
         Méthode utilitaire pour les phases qui agrègent les contributions
@@ -122,10 +126,10 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
         """
 
         wrapper = self._read_wrapper(store, outer_key)
-        result: dict[str, M] = {}
+        result: dict[str, TD] = {}
         for inner_key, raw in wrapper.items():
             try:
-                result[inner_key] = self.payload_type.model_validate_json(raw)
+                result[inner_key] = self._adapter.validate_json(raw)
             except ValidationError as e:
                 logger.warning(
                     f"MemoizedChunkPersister: entrée invalide "
@@ -147,6 +151,7 @@ class MemoizedChunkPersister[M: BaseModel](ChunkPersister[MemoChunk, M]):
             return {}
         if not isinstance(parsed, dict):
             return {}
+
         result: dict[str, str] = {}
         for k, v in parsed.items():  # pyright: ignore[reportUnknownVariableType]
             if isinstance(v, str):

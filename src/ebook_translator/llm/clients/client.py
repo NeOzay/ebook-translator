@@ -4,6 +4,7 @@ import os
 import pprint
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import StrEnum
 from logging import Logger
 from typing import (
@@ -318,9 +319,7 @@ class OpenAIClientBase[
                         )
                         continue
                     logger.info(str(k) + " = " + str(v))
-                self.write_prompt(
-                    logger=logger, parameters=kwargs
-                )  # pyright: ignore[reportArgumentType]
+                self.write_prompt(logger=logger, parameters=kwargs)
 
             def log_response(response: ChatCompletion):
                 # response = ChatCompletion brut, avant parsing pydantic
@@ -376,7 +375,12 @@ class OpenAIClientBase[
         logger.info(header.strip() + "\n")
 
     @staticmethod
-    def write_prompt(logger: logging.Logger, parameters: Data) -> None:
+    def write_prompt(logger: logging.Logger, parameters: Mapping[str, Any]) -> None:
+        """Journalise les messages envoyés au LLM.
+
+        `parameters` est volontairement typé `Mapping` et non `Data` : le hook
+        `completion:kwargs` d'instructor fournit un `dict[str, Any]` brut.
+        """
         messages: list[ChatCompletionMessageParam] = parameters.get("messages", [])
         logger.info("\n=== MESSAGES ===")
         for msg in messages:

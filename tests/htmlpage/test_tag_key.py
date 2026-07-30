@@ -91,7 +91,7 @@ class TestTagKey:
         assert "test.html" in repr_str
 
     def test_different_indices_same_tag(self):
-        """Vérifie que différents indices avec même tag sont égaux (identité du tag)."""
+        """Deux TagKey sur le même tag mais d'index différents ne sont pas égaux."""
         soup = BeautifulSoup("<p>Test</p>", "html.parser")
         tag = soup.find("p")
         assert tag
@@ -101,10 +101,10 @@ class TestTagKey:
         key1 = TagKey(index=0, tag=tag, page=page)
         key2 = TagKey(index=999, tag=tag, page=page)
 
-        # Doivent être égaux car même objet tag (identité)
-        assert key1 == key2
-        # Mais les index sont différents
-        assert key1.index != key2.index
+        assert key1 != key2
+        # ... mais le hash reste celui du tag : eq plus strict que hash, ce qui
+        # respecte le contrat (objets égaux => hash égaux).
+        assert hash(key1) == hash(key2)
 
     def test_tag_key_stores_page_reference(self):
         """Vérifie que TagKey conserve la référence à la page."""

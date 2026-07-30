@@ -54,6 +54,10 @@ class _FakeContext:
     source: _FakeSource
     current_data: dict[int, str]
 
+    # Lus par `_build_fragments` pour choisir le mode strict/flexible.
+    max_attempts: int = 2
+    attempt: int = 0
+
 
 # ---------- LINES_MISSING ----------
 
@@ -73,6 +77,7 @@ class TestBuildMissingLines:
             error_type=ErreursType.LINES_MISSING,
             msg="2 manquantes",
             ctx={"missing_indices": [1, 3]},
+            relevant_indices=frozenset({1, 3}),
         )
         params = entry.build(failure, self._ctx())  # type: ignore[arg-type]
         assert params["target_language"] == "fr"
@@ -93,6 +98,7 @@ class TestBuildMissingLines:
             error_type=ErreursType.LINES_MISSING,
             msg="10 manquantes",
             ctx={"missing_indices": many},
+            relevant_indices=frozenset(many),
         )
         params = entry.build(failure, ctx)  # type: ignore[arg-type]
         assert "+5 autres" in params["error_message"]
@@ -114,6 +120,7 @@ class TestBuildFragments:
             error_type=ErreursType.FRAGMENT_COUNT_MISMATCH,
             msg="ligne 5: 0 sep, 1 attendu",
             ctx={"line": 5, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({5}),
         )
         params = entry.build(failure, ctx)  # type: ignore[arg-type]
         assert params["target_language"] == "fr"
@@ -140,6 +147,7 @@ class TestBuildPunctuation:
             error_type=ErreursType.PUNCTUATION_MISMATCH,
             msg="ligne 2: 0 paire, 1 attendue",
             ctx={"line": 2, "expected_pairs": 1, "actual_pairs": 0},
+            relevant_indices=frozenset({2}),
         )
         params = entry.build(failure, ctx)  # type: ignore[arg-type]
         assert params["target_language"] == "fr"
@@ -165,6 +173,7 @@ class TestBuildSentence:
             error_type=ErreursType.SENTENCE_INVALID,
             msg="2 lignes invalides",
             ctx={"invalid_indices": [2, 4]},
+            relevant_indices=frozenset({2, 4}),
         )
         params = entry.build(failure, ctx)  # type: ignore[arg-type]
         assert params["target_language"] == "fr"
@@ -184,6 +193,7 @@ class TestBuildSentence:
             error_type=ErreursType.SENTENCE_INVALID,
             msg="invalides",
             ctx={"invalid_indices": [2, 4]},
+            relevant_indices=frozenset({2, 4}),
         )
         params = entry.build(failure, ctx)  # type: ignore[arg-type]
         # Seul l'indice présent dans current_data est rendu côté traduction

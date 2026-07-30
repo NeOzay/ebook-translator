@@ -1,7 +1,7 @@
 """
 Tests unitaires et d'intégration pour la classe Chunk.
 
-Tests unitaires : vérifient la logique interne (str, repr, mark_lines)
+Tests unitaires : vérifient la logique interne (str, repr, prepare_for_prompt)
   sans dépendances réelles (mocks simples comme clés de dictionnaire).
 
 Tests d'intégration : utilisent un chunk issu du vrai EPUB (fixture `chunk`)
@@ -16,7 +16,7 @@ from tests.conftest import make_TagKey_mock
 
 
 class TestChunkStr:
-    """Tests pour __str__ et mark_lines_to_numbered."""
+    """Tests pour __str__ et prepare_for_prompt."""
 
     def test_str_body_only(self):
         """Format LLM d'un chunk sans head ni tail."""
@@ -53,8 +53,8 @@ class TestChunkStr:
         # Pas de section vide superflue
         assert result.strip() == "<0/>Only text"
 
-    def test_mark_lines_to_numbered_selective(self):
-        """mark_lines_to_numbered numérote seulement les indices spécifiés."""
+    def test_prepare_for_prompt_selective(self):
+        """prepare_for_prompt numérote seulement les indices spécifiés."""
         chunk = Chunk(index=0)
         chunk.body = {
             Mock(): "First line",
@@ -62,21 +62,21 @@ class TestChunkStr:
             Mock(): "Third line",
         }
 
-        result = chunk.mark_lines_to_numbered([0, 2])
+        result = chunk.prepare_for_prompt([0, 2])
 
         assert "<0/>First line" in result
         assert "Second line" in result
         assert "<1/>Second line" not in result  # Pas numéroté
         assert "<2/>Third line" in result
 
-    def test_mark_lines_to_numbered_includes_head_tail(self):
-        """mark_lines_to_numbered inclut head et tail comme contexte."""
+    def test_prepare_for_prompt_includes_head_tail(self):
+        """prepare_for_prompt inclut head et tail comme contexte."""
         chunk = Chunk(index=0)
         chunk.head = {Mock(): "Head context"}
         chunk.body = {Mock(): "Line 0", Mock(): "Line 1"}
         chunk.tail = {Mock(): "Tail context"}
 
-        result = chunk.mark_lines_to_numbered([1])
+        result = chunk.prepare_for_prompt([1])
 
         assert "Head context" in result
         assert "Line 0" in result  # Pas numéroté, mais présent
@@ -84,12 +84,12 @@ class TestChunkStr:
         assert "<1/>Line 1" in result
         assert "Tail context" in result
 
-    def test_mark_lines_to_numbered_empty_indices(self):
+    def test_prepare_for_prompt_empty_indices(self):
         """Avec indices vides, aucune ligne n'est numérotée."""
         chunk = Chunk(index=0)
         chunk.body = {Mock(): "Line 0", Mock(): "Line 1"}
 
-        result = chunk.mark_lines_to_numbered([])
+        result = chunk.prepare_for_prompt([])
 
         assert "<0/>" not in result
         assert "Line 0" in result

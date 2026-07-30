@@ -25,6 +25,10 @@ class LLMLogger(logging.Logger):
     def set_exchange_file(self, path: Path | None) -> None:
         """Point channel 2 at a file, or disable it.
 
+        Le répertoire parent est créé si nécessaire : le répertoire de session
+        n'existe sur disque qu'une fois qu'un `LazyFileHandler` a émis, ce qui
+        n'est pas garanti avant le premier échange LLM.
+
         Args:
             path: Target file for LLM trace output. None closes the channel.
         """
@@ -32,6 +36,7 @@ class LLMLogger(logging.Logger):
             self._exchange_handler.close()
             self._exchange_handler = None
         if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
             handler = logging.FileHandler(path, mode="a", encoding="utf-8")
             handler.setFormatter(logging.Formatter("%(message)s"))
             self._exchange_handler = handler

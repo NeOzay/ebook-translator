@@ -19,9 +19,11 @@ class TestValidationFailureConstruction:
             error_type=ErreursType.LINES_MISSING,
             msg="2 lignes absentes",
             ctx={"missing_indices": [3, 7]},
+            relevant_indices=frozenset({3, 7}),
         )
         assert f.error_type is ErreursType.LINES_MISSING
         assert f.ctx["missing_indices"] == [3, 7]
+        assert f.relevant_indices == frozenset({3, 7})
         assert f.loc == ()
 
     def test_str_enum_coercion(self):
@@ -29,6 +31,7 @@ class TestValidationFailureConstruction:
             error_type="lines_missing",  # type: ignore[arg-type]
             msg="x",
             ctx={"missing_indices": []},
+            relevant_indices=frozenset(),
         )
         assert f.error_type is ErreursType.LINES_MISSING
         assert f.error_type == "lines_missing"
@@ -38,6 +41,7 @@ class TestValidationFailureConstruction:
             error_type=ErreursType.LINES_MISSING,
             msg="x",
             ctx={"missing_indices": []},
+            relevant_indices=frozenset(),
             loc=("body", 0, "line"),
         )
         assert f.loc == ("body", 0, "line")
@@ -47,6 +51,7 @@ class TestValidationFailureConstruction:
             error_type=ErreursType.LINES_MISSING,
             msg="x",
             ctx={"missing_indices": []},
+            relevant_indices=frozenset(),
         )
         with pytest.raises(ValidationError):
             f.error_type = ErreursType.SENTENCE_INVALID  # type: ignore[misc]
@@ -56,6 +61,7 @@ class TestValidationFailureConstruction:
             error_type=ErreursType.LINES_MISSING,
             msg="x",
             ctx={"missing_indices": [1]},
+            relevant_indices=frozenset({1}),
         )
         dumped = f.model_dump_json()
         assert '"lines_missing"' in dumped
@@ -100,6 +106,10 @@ class TestFromPydanticError:
         assert f.error_type is ErreursType.LINES_MISSING
         assert f.msg == "lignes absentes"
         assert f.ctx == {"missing_indices": [1, 2]}
+        # Erreur de schéma : aucun check à l'origine, donc aucune ligne
+        # ciblée — le retry rejoue le prompt de phase complet.
+        assert f.check_source is None
+        assert f.relevant_indices == frozenset()
 
     def test_unknown_error_type_raises(self):
         with pytest.raises(ValidationError) as exc_info:

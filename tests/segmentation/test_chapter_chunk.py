@@ -7,10 +7,30 @@ notamment la conversion type-safe via from_chunk().
 
 from unittest.mock import Mock
 
+import pytest
+
 from ebook_translator.htmlpage.tag_key import TagKey
 from ebook_translator.segmentation import Chunk
 from ebook_translator.segmentation.chapter_chunk import ChapterChunk, ChapterPartChunk
 from tests.conftest import make_TagKey_mock
+
+
+def make_chapter_mock(index: int = 0) -> ChapterChunk:
+    """Mock de ChapterChunk portant un index réel.
+
+    `index` est un champ de dataclass sans valeur par défaut : il n'existe pas
+    sur la classe, donc `Mock(spec=ChapterChunk)` ne le fournit pas. Or
+    `from_chunk` le lit pour calculer l'index global.
+
+    Args:
+        index: Index du chapitre parent
+
+    Returns:
+        Mock de ChapterChunk avec l'index spécifié
+    """
+    mock_chapter = Mock(spec=ChapterChunk)
+    mock_chapter.index = index
+    return mock_chapter
 
 
 class TestChapterPartChunk:
@@ -27,15 +47,25 @@ class TestChapterPartChunk:
         chunk.body = {body_key: "body_text"}
         chunk.tail = {tail_key: "tail_text"}
 
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock(index=2)
 
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=3)
 
-        assert part.index == 5
+        # Index global : chapitre 2, partie 5 => 205
+        assert part.index == 205
+        assert part.part == 5
         assert part.token_count == 100
         assert part.token_encoding == "cl100k_base"
         assert part.total_parts == 3
         assert part.chapter is mock_chapter
+
+    def test_from_chunk_rejects_part_index_over_99(self):
+        """Un index de partie >= 100 casserait l'encodage global, donc lève."""
+        chunk = Chunk(index=100, token_encoding="cl100k_base")
+        mock_chapter = make_chapter_mock(index=1)
+
+        with pytest.raises(ValueError, match="less than 100"):
+            _ = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=101)
 
     def test_from_chunk_copies_dictionaries_independently(self):
         """Vérifie que les dictionnaires sont copiés indépendamment (pas de références partagées)."""
@@ -48,7 +78,7 @@ class TestChapterPartChunk:
         chunk.body = {key2: "value2"}
         chunk.tail = {key3: "value3"}
 
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
 
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=1)
 
@@ -73,7 +103,7 @@ class TestChapterPartChunk:
         chunk = Chunk(index=0, token_count=0, token_encoding="cl100k_base")
         # head, body, tail sont vides par défaut
 
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=1)
 
         assert len(part.head) == 0
@@ -88,7 +118,7 @@ class TestChapterPartChunk:
         chunk = Chunk(index=0, token_encoding="cl100k_base")
         chunk.body = {tag_key1: "text1", tag_key2: "text2"}  # type: ignore[reportArgumentType]
 
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=1)
 
         assert tag_key1 in part.body
@@ -99,7 +129,7 @@ class TestChapterPartChunk:
     def test_is_first(self):
         """Vérifie que is_first() retourne True pour le premier chunk."""
         chunk = Chunk(index=0, token_encoding="cl100k_base")
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
 
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=3)
         assert part.is_first() is True
@@ -110,7 +140,7 @@ class TestChapterPartChunk:
 
     def test_is_last(self):
         """Vérifie que is_last() retourne True pour le dernier chunk."""
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
 
         chunk_last = Chunk(index=2, token_encoding="cl100k_base")
         part_last = ChapterPartChunk.from_chunk(chunk_last, mock_chapter, total_parts=3)
@@ -125,7 +155,7 @@ class TestChapterPartChunk:
     def test_from_chunk_return_type(self):
         """Vérifie que from_chunk() retourne bien un ChapterPartChunk."""
         chunk = Chunk(index=0, token_encoding="cl100k_base")
-        mock_chapter = Mock(spec=ChapterChunk)
+        mock_chapter = make_chapter_mock()
 
         part = ChapterPartChunk.from_chunk(chunk, mock_chapter, total_parts=1)
 

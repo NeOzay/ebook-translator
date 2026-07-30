@@ -1,7 +1,13 @@
 """
 Tests for LLM exchange logging via LLMLogger.
+
+`LLM.query` ouvre un fichier par échange et y branche le canal 2 du
+`LLMLogger` ; le contenu (en-tête, prompts, réponse) est écrit par le client
+via ce logger. Ces tests couvrent donc le nommage des fichiers et le câblage
+logger → fichier, pas le format d'en-tête, qui appartient au client.
 """
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -37,10 +43,26 @@ def _make_response(
 
 @pytest.fixture
 def mock_client():
-    """Mock du client compatible avec ClientProviderProtocol."""
+    """Mock du client compatible avec ClientProviderProtocol.
+
+    Comme le vrai client, il écrit l'échange dans le `logger` qu'on lui passe :
+    c'est ce trajet que les tests vérifient.
+    """
     client = MagicMock()
     client.parameters = {"model": "test-model"}
-    client.request.return_value = _make_response()
+
+    def _request(
+        system_prompt: str,
+        user_instruction: str,
+        config: object = None,
+        logger: logging.Logger | None = None,
+    ):
+        if logger:
+            logger.info(f"=== MESSAGES ===\n{system_prompt}\n{user_instruction}")
+            logger.info("=== RESPONSE ===\nMocked translation")
+        return _make_response()
+
+    client.request.side_effect = _request
     return client
 
 
@@ -65,9 +87,9 @@ def test_llm_creates_log_with_context(llm_instance):
 
     assert len(log_files) == 1, "Un fichier de log doit avoir été créé"
 
+    # Le contexte est porté par le nom du fichier ; le contenu est ce que le
+    # client a écrit via le logger fourni par LLM.query.
     log_content = log_files[0].read_text(encoding="utf-8")
-    assert "=== LLM REQUEST LOG ===" in log_content
-    assert "Context   : chunk_001" in log_content
     assert "Translate this" in log_content
     assert "Hello world" in log_content
     assert "Mocked translation" in log_content
@@ -97,7 +119,7 @@ def test_llm_creates_log_without_context(llm_instance):
     assert parts[1].isdigit(), f"Expected counter segment, got: {parts[1]}"
 
     log_content = new_file.read_text(encoding="utf-8")
-    assert "Context   : N/A" in log_content
+    assert "Mocked translation" in log_content
 
 
 def test_llm_multiple_queries_increment_counter(llm_instance):
@@ -118,13 +140,12 @@ def test_llm_multiple_queries_increment_counter(llm_instance):
 
 
 def test_llm_log_created_on_error(mock_client):
-    """Test que le fichier de log est créé même en cas d'erreur."""
+    """L'échec est propagé, et le fichier de log garde la trace de l'erreur."""
     mock_client.request.side_effect = Exception("Network error")
     llm_instance = LLM(client=mock_client)
 
-    result = llm_instance.query("Prompt", "Content", log_name="error_test")
-
-    assert "[ERREUR INCONNUE:" in result
+    with pytest.raises(Exception, match="Network error"):
+        _ = llm_instance.query("Prompt", "Content", log_name="error_test")
 
     session_dir = LogSession.get_session_dir()
     log_files = list(session_dir.glob("llm_error_test_*.log"))
@@ -132,7 +153,8 @@ def test_llm_log_created_on_error(mock_client):
     assert len(log_files) == 1, "Le fichier de log doit être créé même en cas d'erreur"
 
     log_content = log_files[0].read_text(encoding="utf-8")
-    assert "[ERREUR INCONNUE:" in log_content
+    assert "Network error" in log_content
+    assert "Échec définitif" in log_content
 
 
 def test_llm_context_formats(mock_client):
