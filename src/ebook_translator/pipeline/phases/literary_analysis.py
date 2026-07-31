@@ -174,13 +174,12 @@ class LiteraryAnalysisPhase(
         return JsonRequestConfig(config=self.llm, response_model=AnalyseChapter)
 
     @override
-    def after_chunk(
+    def on_save(
         self,
         chunk: ChapterPartChunk,
         data: AnalyseChapter,
-        context: ChunkContext,
     ) -> None:
         """Exporte la fiche en Markdown pour revue humaine."""
         AnalysisExporter.save_analysis_markdown(
-            data, self.get_store().cache_dir / f"{chunk.outer_key}.md"
+            data, self.get_store().cache_dir / f"{chunk.outer_key}-{chunk.inner_key}.md"
         )

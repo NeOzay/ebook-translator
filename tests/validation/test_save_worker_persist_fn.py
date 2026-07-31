@@ -92,18 +92,20 @@ class TestSaveItemPath:
     def test_on_save_callback_fires(self) -> None:
         worker, sq, stop, thread = _start_worker()
         try:
-            received: list[SaveItem] = []
-            sq.put(
-                _make_item(
-                    MagicMock(),
-                    on_save=lambda item: received.append(item),
-                )
-            )
+            received: list[tuple[Any, Any]] = []
+
+            def record(chunk: Any, data: Any) -> None:
+                received.append((chunk, data))
+
+            sq.put(_make_item(MagicMock(), on_save=record))
 
             _wait_until(lambda: worker.saved_count >= 1)
 
             assert worker.saved_count == 1
             assert len(received) == 1
+            chunk, data = received[0]
+            assert isinstance(chunk, _FakeChunk)
+            assert data == {0: "x"}
         finally:
             _shutdown(stop, thread)
 
@@ -111,7 +113,7 @@ class TestSaveItemPath:
         worker, sq, stop, thread = _start_worker()
         try:
 
-            def boom(_: SaveItem) -> None:
+            def boom(_chunk: Any, _data: Any) -> None:
                 raise ValueError("callback fail")
 
             sq.put(_make_item(MagicMock(), on_save=boom))

@@ -157,7 +157,7 @@ class SaveWorker:
 
         if item.on_save:
             try:
-                item.on_save(item)
+                item.on_save(item.chunk, item.data)
             except Exception as e:
                 # Callback non bloquant — sa défaillance ne casse pas le pipeline.
                 logger.warning(

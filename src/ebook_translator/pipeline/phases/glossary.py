@@ -136,11 +136,10 @@ class GlossaryPhase(PhaseBase[GlossaryChunk, list[LLMTermeGlossary], LLMGlossary
         return JsonRequestConfig(config=self.llm, response_model=LLMGlossaryModel)
 
     @override
-    def after_chunk(
+    def on_save(
         self,
         chunk: GlossaryChunk,
         data: list[LLMTermeGlossary],
-        context: ChunkContext,
     ) -> None:
         """Peuple le glossaire global et exporte le Markdown de revue."""
         self._populate_glossary(data, chunk.index)

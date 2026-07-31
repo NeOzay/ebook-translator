@@ -73,7 +73,7 @@ class SaveItem[ChunkType: ChunkProtocol = ChunkProtocol, DT: Any = Any]:
     data: DT
     persister: ChunkPersister[ChunkType, DT]
     byte_store: ByteStore
-    on_save: Callable[[SaveItem[ChunkType, DT]], None] | None = None
+    on_save: Callable[[ChunkType, DT], None] | None = None
 
     def __repr__(self) -> str:
         return (

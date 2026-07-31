@@ -8,6 +8,7 @@ d'exposer) son surface aux callers.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..persistence.chunk_persister import ChunkPersister
@@ -31,10 +32,12 @@ class PhaseStorage[ChunkType: ChunkProtocol, DT]:
         persister: ChunkPersister[ChunkType, DT],
         byte_store: ByteStore,
         byte_fallback_store: ByteStore | None = None,
+        on_save: Callable[[ChunkType, DT], None] | None = None,
     ) -> None:
         self.persister = persister
         self.byte_store = byte_store
         self.byte_fallback_store = byte_fallback_store
+        self.on_save = on_save
 
     def is_cached(self, chunk: ChunkType) -> bool:
         return self.persister.is_chunk_cached(
@@ -52,4 +55,6 @@ class PhaseStorage[ChunkType: ChunkProtocol, DT]:
     def save_item(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType, DT]:
         from ..validation import SaveItem
 
-        return SaveItem(chunk, data, self.persister, self.byte_store)
+        return SaveItem(
+            chunk, data, self.persister, self.byte_store, on_save=self.on_save
+        )

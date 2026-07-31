@@ -135,11 +135,13 @@ class PhaseExecutor:
                 chunk_index=chunk.index,
                 previous_chunk=self.previous_chunk,
             )
+            self.phase.before_chunk(chunk, chunk_context)
 
             self.previous_chunk = chunk
 
             if cached_result is not None and not missing:
                 # Chunk intégralement en cache → re-soumis pour validation.
+                self.phase.after_response(chunk, cached_result, chunk_context)
                 self.stats.chunks_from_cache += 1
                 self.context.validation_pool.submit(
                     ValidationItem(
@@ -152,8 +154,6 @@ class PhaseExecutor:
                     f"✓ Chunk {chunk.index} loaded from cache ({self.phase.name})"
                 )
                 return True
-
-            self.phase.before_chunk(chunk, chunk_context)
 
             # 3. Render prompt
             sys_prompt, user_prompt = self.phase.render_prompt(chunk, chunk_context)
@@ -183,8 +183,8 @@ class PhaseExecutor:
                 payload = self.phase.payload_type.model_validate(llm_output)
             data = payload.build()
 
-            # 6. Hook after_chunk
-            self.phase.after_chunk(chunk, data, chunk_context)
+            # 6. Hook after_response
+            self.phase.after_response(chunk, data, chunk_context)
 
             # 7. Submit to validation (DT seul, pas de Pydantic en queue).
             self.context.validation_pool.submit(

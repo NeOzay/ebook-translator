@@ -142,7 +142,7 @@ class ChunkContext(CommunContext):
     """
     Contexte d'un chunk individuel.
 
-    Passé aux hooks before_chunk(), after_chunk(), et render_prompt().
+    Passé aux hooks before_chunk(), after_response(), et render_prompt().
     Contient les informations nécessaires pour traiter un chunk spécifique.
     """
 

@@ -125,9 +125,10 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
         | JsonRequestConfig[ConvertibleModel[Any]]
         | None
     ): ...
-    def after_chunk(
+    def after_response(
         self, chunk: ChunkType, data: DT, context: ChunkContext
     ) -> None: ...
+    def on_save(self, chunk: ChunkType, data: DT) -> None: ...
     def save_item_builder(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType]: ...
 
 
@@ -216,9 +217,7 @@ class PhaseBase[
 
     # === Configuration optionnelle (valeurs par défaut) ===
 
-    depends_on: tuple[type[PhaseProtocol], ...] = field(
-        default_factory=tuple[type[PhaseProtocol], ...], init=False
-    )
+    depends_on: tuple[type[PhaseProtocol], ...] = field(default=(), init=False)
     """Liste des phases dont cette phase dépend"""
 
     max_workers: int = field(default=4)
@@ -399,8 +398,12 @@ class PhaseBase[
 
         if self.persister is None:
             raise NotImplementedError(f"Phase {self.name!r} sans persister configuré.")
+
         return PhaseStorage(
-            self.persister, self.get_byte_store(), self.get_byte_fallback_store()
+            self.persister,
+            self.get_byte_store(),
+            self.get_byte_fallback_store(),
+            on_save=self.on_save,
         )
 
     def is_chunk_cached(self, chunk: ChunkType) -> bool:
@@ -415,14 +418,14 @@ class PhaseBase[
     def save_item_builder(self, chunk: ChunkType, data: DT) -> SaveItem[ChunkType]:
         return self.storage.save_item(chunk, data)
 
-    def after_chunk(  # noqa: B027
+    def after_response(  # noqa: B027
         self,
         chunk: ChunkType,
         data: DT,
         context: ChunkContext,
     ) -> None:
         """
-        Hook appelé après le traitement d'un chunk.
+        Hook appelé après la génération de la réponse et avant la validation.
 
         Utilisation typique:
         - Apprentissage du glossaire
@@ -433,6 +436,24 @@ class PhaseBase[
             chunk: Chunk traité
             result: Traductions générées (mapping line_index -> translated_text)
             context: Contexte du chunk
+        """
+        pass
+
+    def on_save(self, chunk: ChunkType, data: DT) -> None:  # noqa: B027
+        """
+        Hook appelé après la validation, par le `SaveWorker`.
+
+        Contrairement à `after_response`, la donnée reçue ici a traversé les
+        `content_checks` et vient d'être persistée. Exécuté sur le thread de
+        sauvegarde : toute exception est loguée puis absorbée.
+
+        Utilisation typique:
+        - Export d'un rendu pour revue humaine
+        - Effets de bord ne devant pas voir de donnée non validée
+
+        Args:
+            chunk: Chunk traité
+            data: Vue `DT` validée et persistée
         """
         pass
 
