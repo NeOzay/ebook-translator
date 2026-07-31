@@ -112,6 +112,7 @@ class Pipeline:
         # Infrastructure (créée au démarrage)
         self.store_manager: StoreManager | None = None
         self.validation_pool: ValidationWorkerPool | None = None
+        self.glossary: Glossary | None = None
 
     def _validate_dependencies(self) -> None:
         """
@@ -133,6 +134,29 @@ class Pipeline:
             executed_phases.add(phase_class.name)
 
         logger.info(f"✅ Phase dependencies validated: {list(executed_phases)}")
+
+    def _glossary_export_path(self, glossary: Glossary) -> Path:
+        """Chemin d'export du glossaire enrichi par le run.
+
+        Le glossaire source (`Glossary.cache_path`, chargé au démarrage) est
+        traité en lecture seule : il peut avoir été révisé à la main, et une
+        réécriture par le pipeline écraserait ces corrections. Quand le nom
+        d'export par défaut désigne ce même fichier, on bascule sur un nom
+        dérivé plutôt que d'écraser.
+
+        Args:
+            glossary: Glossaire du run, dont `cache_path` porte la source.
+
+        Returns:
+            Chemin d'écriture, garanti distinct de la source.
+        """
+        export_path = self.epub_path.parent / f".{self.epub_path.stem}_glossary.json"
+
+        source = glossary.cache_path
+        if source is not None and source.resolve() == export_path.resolve():
+            export_path = export_path.with_suffix(".generated.json")
+
+        return export_path
 
     def _analysis_lookup(self) -> AnalysisLookup | None:
         """Accès aux fiches Phase 0, à injecter dans `Chapters`.
@@ -279,11 +303,9 @@ class Pipeline:
 
             # Sauvegarder glossaire
             if self.glossary:
-                cache_dir = (
-                    self.epub_path.parent / f".{self.epub_path.stem}_glossary.json"
-                )
-                self.glossary.save(cache_dir)
-                logger.info(f"  • Glossaire sauvegardé: {cache_dir}")
+                export_path = self._glossary_export_path(self.glossary)
+                self.glossary.save(export_path)
+                logger.info(f"  • Glossaire exporté: {export_path}")
 
             # =================================================================
             # RECONSTRUCTION EPUB
@@ -391,10 +413,17 @@ class Pipeline:
             self.store_manager.clear_phase(phase_name)
             logger.info(f"  • Cache '{phase_name}' vidé")
 
-        # Supprimer glossaire
-        glossary_path = self.cache_dir / "glossary.json"
-        if glossary_path.exists():
-            glossary_path.unlink()
-            logger.info("  • Glossaire supprimé")
+        # Supprimer le glossaire exporté. Le glossaire source éventuellement
+        # fourni au run n'est jamais touché : il n'appartient pas au cache.
+        source = self.glossary.cache_path if self.glossary else None
+        for glossary_path in (
+            self.epub_path.parent / f".{self.epub_path.stem}_glossary.json",
+            self.epub_path.parent / f".{self.epub_path.stem}_glossary.generated.json",
+        ):
+            if source is not None and source.resolve() == glossary_path.resolve():
+                continue
+            if glossary_path.exists():
+                glossary_path.unlink()
+                logger.info(f"  • Glossaire supprimé: {glossary_path}")
 
         logger.info("✅ Caches supprimés")
