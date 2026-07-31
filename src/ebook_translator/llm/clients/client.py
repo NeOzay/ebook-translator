@@ -103,6 +103,7 @@ class ClientProviderProtocol[U: UserKwargs = UserKwargs, D: FullKwargs = FullKwa
         response_model: type[M],
         config: LLMConfig[U, D] | None,
         logger: Logger | None,
+        max_retries: int = 1,
     ) -> tuple[M, LLMResponse]: ...
 
 
@@ -271,7 +272,7 @@ class OpenAIClientBase[
 
         except Exception as e:
             if logger:
-                logger.error(f"Error during OpenAI API request: {e}")
+                logger.error(f"Error during OpenAI API request: {e}", exc_info=e)
             raise e
 
     def json_request[M: BaseModel](
@@ -281,11 +282,10 @@ class OpenAIClientBase[
         response_model: type[M],
         config: LLMConfig[UserData, Data] | None = None,
         logger: Logger | None = None,
+        max_retries: int = 1,
     ) -> tuple[M, LLMResponse]:
         if self.instructor is None:
-            self.instructor = instructor.from_openai(
-                self.openai, mode=Mode.TOOLS_STRICT
-            )
+            self.instructor = instructor.from_openai(self.openai, mode=Mode.JSON)
 
         merged_config = self.merged_config(config) if config else self.parameters.copy()
 
@@ -328,8 +328,13 @@ class OpenAIClientBase[
 
             def log_error(error: Any):
                 # ValidationError pydantic — utile pour distinguer
-                # erreur structurelle vs erreur API
-                logger.error(f"Error during OpenAI API request: {error}")
+                # erreur structurelle vs erreur API. `exc_info` fournit la
+                # traceback : sans elle, le log ne pointe que sur ce hook et
+                # non sur le site réel de l'erreur.
+                logger.error(
+                    f"Error during OpenAI API request: {error}",
+                    exc_info=error if isinstance(error, BaseException) else None,
+                )
 
             hooks = Hooks()
 
@@ -340,10 +345,14 @@ class OpenAIClientBase[
         else:
             hooks = None
 
+        # `max_retries` d'instructor : l'erreur de validation Pydantic est
+        # réinjectée dans la conversation pour que le modèle corrige lui-même
+        # (JSON tronqué, contrainte de longueur dépassée, champ manquant).
         data, response = self.instructor.create_with_completion(
             response_model=response_model,
             messages=messages,
             hooks=hooks,
+            max_retries=max_retries,
             **cast(dict[str, Any], merged_config),
         )
         return data, self.parse(response)

@@ -95,7 +95,7 @@ def _load_cache(cache_file: Path) -> dict[str, str]:
             return data
 
         except OSError as e:
-            logger.error(f"Erreur lecture cache {cache_file.name}: {e}")
+            logger.error(f"Erreur lecture cache {cache_file.name}: {e}", exc_info=e)
             return {}
         except json.JSONDecodeError as e:
             logger.warning(f"Cache corrompu {cache_file.name}: {e}")
@@ -162,7 +162,9 @@ def _save_cache(cache_file: Path, translations_by_index: dict[str, str]) -> None
                         time.sleep(0.01)  # 10ms
 
         except OSError as e:
-            logger.error(f"❌ Erreur sauvegarde cache {cache_file.name}: {e}")
+            logger.error(
+                f"❌ Erreur sauvegarde cache {cache_file.name}: {e}", exc_info=e
+            )
             # Nettoyer le fichier temporaire si nécessaire
             if temp_file.exists():
                 with contextlib.suppress(Exception):

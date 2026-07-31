@@ -9,10 +9,12 @@ export glossaire, calculs, etc.).
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+import template as _template_package
 from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
 
 from ..segmentation import Chunk, ChunkProtocol, TranslatedChunk
@@ -35,6 +37,14 @@ if TYPE_CHECKING:
 
     from ..glossary import Glossary
     from ..stores import Store
+
+
+DEFAULT_PROMPT_DIR: str = str(Path(_template_package.__file__ or "").parent)
+"""Répertoire des templates Jinja2 livré avec le package `template`.
+
+Résolu depuis le package installé et non depuis le répertoire courant : un
+chemin relatif ne fonctionnerait que lancé depuis la racine du dépôt.
+"""
 
 
 class Template(StrEnum):
@@ -94,7 +104,7 @@ class TemplateRenderer:
 
     def __init__(
         self,
-        prompt_dir: str = "template",
+        prompt_dir: str = DEFAULT_PROMPT_DIR,
         glossary_max_terms: int = 25,
         genre: str = "fiction",
     ):

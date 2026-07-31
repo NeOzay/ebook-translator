@@ -13,7 +13,7 @@ from template.types import ConvertibleModel
 
 from ..logger import get_logger, get_session_log_path
 from .logger import LLMLogger
-from .template_renderers import TemplateRenderer
+from .template_renderers import DEFAULT_PROMPT_DIR, TemplateRenderer
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,7 @@ class LLM:
         # donné. Sans cela, la contravariance de `U` rejette tout client
         # concret (Deepseek, …) au profit du seul `UserKwargs` de base.
         client: ClientProviderProtocol[Any, Any],
-        prompt_dir: str = "template",
+        prompt_dir: str = DEFAULT_PROMPT_DIR,
         max_retries: int = 3,
         retry_delay: float = 1.0,
         glossary_max_terms: int = 25,
@@ -151,11 +151,11 @@ class LLM:
 
             except APIError as e:
                 last_error = e
-                self.llm_logger.error(f"❌ Erreur API: {e}")
+                self.llm_logger.error(f"❌ Erreur API: {e}", exc_info=e)
 
             except OpenAIError as e:
                 last_error = e
-                self.llm_logger.error(f"❌ Erreur OpenAI générique: {e}")
+                self.llm_logger.error(f"❌ Erreur OpenAI générique: {e}", exc_info=e)
 
             except Exception as e:
                 last_error = e
@@ -188,7 +188,12 @@ class LLM:
             client = self.client
 
         json, _ = client.json_request(
-            system_prompt, content, response_model, config, self.llm_logger
+            system_prompt,
+            content,
+            response_model,
+            config,
+            self.llm_logger,
+            self.max_retries,
         )
         return json
 

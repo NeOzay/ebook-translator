@@ -30,6 +30,7 @@ from ..htmlpage import BilingualFormat
 from ..llm import LLM
 from ..llm.clients.client import ClientProviderProtocol
 from ..llm.llm_config import FullKwargs, LLMConfig, UserKwargs
+from ..llm.template_renderers import DEFAULT_PROMPT_DIR
 from ..pipeline.phases import (
     GlossaryPhase,
     InitialTranslationPhase,
@@ -70,7 +71,7 @@ class LLMBuilder:
     # que de passer des `None` permet à basedpyright de vérifier l'appel.
     def __init__(self) -> None:
         self._client: ClientProviderProtocol[Any, Any] | None = None
-        self._prompt_dir: str = "template"
+        self._prompt_dir: str = DEFAULT_PROMPT_DIR
         self._max_retries: int = 3
         self._retry_delay: float = 1.0
         self._glossary_max_terms: int = 25
@@ -89,7 +90,7 @@ class LLMBuilder:
         return self
 
     def prompt_dir(self, directory: str) -> Self:
-        """Répertoire des templates Jinja2 (défaut: 'template').
+        """Répertoire des templates Jinja2 (défaut: ceux du package `template`).
 
         Args:
             directory: Chemin vers le répertoire de templates.

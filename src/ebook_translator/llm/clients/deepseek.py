@@ -151,13 +151,14 @@ class Deepseek(
         response_model: type[M],
         config: LLMConfigDS | None = None,
         logger: Logger | None = None,
+        max_retries: int = 1,
     ) -> tuple[M, LLMResponse]:
         config = self._resolve_config(config) if config is not None else {}
         _set_thinking_config(
             config, False
         )  # DeepSeek ne gère pas le thinking mode avec les Tools, donc on le désactive systématiquement pour les requêtes JSON
         return super().json_request(
-            system_prompt, user_instruction, response_model, config, logger
+            system_prompt, user_instruction, response_model, config, logger, max_retries
         )
 
 
