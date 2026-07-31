@@ -64,14 +64,14 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 - `content_checks`: tuple of `ContentCheck` run after schema validation
 - `persister`: `ChunkPersister` determining the cache layout
 - `depends_on`: phases whose output is required as input
-- Hooks: `before_phase/chunk`, `after_phase/chunk`
+- Hooks: `before_phase`, `before_chunk`, `after_response` (executor thread, before content checks), `on_save` (SaveWorker thread, after validation and write), `after_phase`
 
 **Within each phase**, `PhaseExecutor` ([pipeline/executor.py](src/ebook_translator/pipeline/executor.py)):
 1. `Segmentator` splits HTML items into chunks (head/body/tail)
 2. Cached chunks are re-submitted for validation without an LLM call
 3. Otherwise: `render_prompt()` → LLM (text or Instructor path) → `payload_type.model_validate()` → `build()` → `DT`
 4. Chunks are submitted to `ValidationWorkerPool`
-5. `UnifiedValidationWorker` threads apply `content_checks` and request targeted corrections
+5. `ValidationWorker` threads apply `content_checks` and request targeted corrections
 6. `SaveWorker` writes validated data through the phase's `ChunkPersister`
 
 ## Key Modules
@@ -82,7 +82,7 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 | `pipeline/phases/` | Phase implementations | `literary_analysis.py`, `glossary.py`, `initial_translation.py`, `refinement.py` |
 | `segmentation/` | Chunking + chapter detection | `segmentator.py`, `chunk.py`, `chapter.py`, `chapter_detector.py` |
 | `llm/` | LLM client, providers, templates, retry registry | `llm.py`, `clients/`, `template_renderers.py`, `retry_registry.py` |
-| `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `unified_worker.py`, `save_worker.py`, `worker_retry.py` |
+| `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `worker_base.py`, `unified_worker.py`, `schema_only_worker.py`, `save_worker.py`, `worker_retry.py` |
 | `checks/` | Validation rules | `content_check.py`, `content/` |
 | `persistence/` | Cache layout | `chunk_persister.py`, `line_indexed_persister.py`, `memoized_chunk_persister.py` |
 | `stores/` | Byte-level cache | `byte_store.py`, `store.py` |
@@ -121,6 +121,7 @@ Downstream phases read it through `latest_analysis_for` injected into `Chapters`
 Validation happens in two stages: the **schema** (`payload_type`, applied by the executor) then the **content** (`content_checks`, applied by the worker).
 
 `ValidationWorkerPool` ([validation/validation_worker_pool.py](src/ebook_translator/validation/validation_worker_pool.py)):
+- The worker class is picked **per phase** on `phase.content_checks`: `UnifiedValidationWorker` when checks exist (data must be line-indexed), `SchemaOnlyValidationWorker` otherwise (Phase 0, glossary — data passes through untouched). Both share the `ValidationWorker` base ([validation/worker_base.py](src/ebook_translator/validation/worker_base.py))
 - N `UnifiedValidationWorker` threads: apply `content_checks` check-by-check, request targeted LLM corrections on failure
 - 1 `SaveWorker` thread (I/O-bound): writes through the phase's `ChunkPersister` in FIFO order
 - If a failure survives `max_attempts`, its `relevant_indices` are dropped and the chunk is saved partial — a chunk with holes beats a rejected chunk
@@ -174,5 +175,6 @@ Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Type annotations, docstrings, tests |
 | [docs/SETUP.md](docs/SETUP.md) | Installation, API keys, dev environment |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features (not yet implemented) |
+| [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known debt, deliberately deferred, with what it would take to clear it |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Version history (0.12.0 onwards) |
 | [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md) | Version history 0.2.0 → 0.11.0, kept as-is |

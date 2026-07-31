@@ -160,7 +160,7 @@ Within each phase, `PhaseExecutor` segments the content, calls the LLM, validate
 - `overlap_ratio` below 1.0 is a percentage, at or above 1.0 a multiple of `max_tokens`
 
 **ValidationWorkerPool** ([validation/](src/ebook_translator/validation/)):
-- N `UnifiedValidationWorker` threads + 1 `SaveWorker`
+- N `ValidationWorker` threads + 1 `SaveWorker`; the worker class is picked per phase (`UnifiedValidationWorker` with content checks, `SchemaOnlyValidationWorker` without)
 - Validation/save decoupling keeps workers off the disk I/O path
 - Failed checks trigger targeted LLM corrections; unrecoverable lines are dropped rather than rejecting the whole chunk
 
@@ -229,6 +229,7 @@ For more details, see the complete documentation in [docs/](docs/) or [CLAUDE.md
 | **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history (0.12.0 onwards) |
 | **[docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md)** | Version history 0.2.0 → 0.11.0 |
 | **[docs/ROADMAP.md](docs/ROADMAP.md)** | Planned features |
+| **[docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md)** | Known debt, deliberately deferred |
 
 ## Security
 

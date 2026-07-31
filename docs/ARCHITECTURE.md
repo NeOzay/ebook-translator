@@ -81,7 +81,16 @@ Base générique `PhaseBase[ChunkType, DT, M]`. Une phase déclare :
 | `persister` | `ChunkPersister` déterminant la forme du cache |
 | `depends_on` | Phases dont les sorties sont nécessaires en entrée |
 
-Méthodes principales : `render_prompt()` (abstraite) → `(system, user)`, `get_llm_config()` → `LLMConfig | JsonRequestConfig`, `get_chunks()`, `get_translation_cache()`, `save_item_builder()`, et les hooks `before_phase()` / `before_chunk()` / `after_chunk()` / `after_phase()`.
+Méthodes principales : `render_prompt()` (abstraite) → `(system, user)`, `get_llm_config()` → `LLMConfig | JsonRequestConfig`, `get_chunks()`, `get_translation_cache()`, `save_item_builder()`, et les hooks `before_phase()` / `before_chunk()` / `after_response()` / `on_save()` / `after_phase()`.
+
+Deux hooks encadrent la validation, et le choix entre les deux n'est pas anodin :
+
+| Hook | Thread | Donnée reçue | Échec |
+|------|--------|--------------|-------|
+| `after_response(chunk, data, context)` | executor | sortie LLM validée par le schéma, **avant** les `content_checks` | remonte, le chunk échoue |
+| `on_save(chunk, data)` | `SaveWorker` | donnée validée **et** persistée | logué en warning, absorbé |
+
+`after_response` est synchrone : ce qu'il modifie est visible du chunk suivant. `on_save` est asynchrone — l'executor peut rendre le prompt du chunk N+1 avant que le `SaveWorker` ait traité le chunk N. Un effet de bord que la phase doit voir immédiatement va dans `after_response` ; un export de revue va dans `on_save`.
 
 `PhaseProtocol` est l'interface structurelle que consomment l'executor et les workers, sans dépendre de `PhaseBase`.
 
@@ -223,20 +232,34 @@ Voir [TEMPLATES.md](TEMPLATES.md).
 **Fichier** : [validation/validation_worker_pool.py](../src/ebook_translator/validation/validation_worker_pool.py)
 
 ```
-ValidationQueue → N × UnifiedValidationWorker (CPU + appels LLM de correction)
+ValidationQueue → N × ValidationWorker (CPU + appels LLM de correction)
                 → SaveQueue → 1 × SaveWorker (I/O) → ByteStore
 ```
 
-- `switch_phase(phase)` : reconfigure les workers pour la phase courante
+- `switch_phase(phase)` : reconfigure les workers pour la phase courante, ou les recycle si elle demande un autre type de worker
 - `submit(ValidationItem)`, `wait_completion()`, `get_statistics()`
+
+Le type de worker est choisi **par phase**, sur `phase.content_checks` : c'est le pool, et non le worker, qui sait quelle forme de donnée transite.
+
+### ValidationWorker
+
+**Fichier** : [validation/worker_base.py](../src/ebook_translator/validation/worker_base.py)
+
+Socle commun : boucle de consommation de la `ValidationQueue`, passage au `SaveWorker` via `phase.save_item_builder()`, comptage et log. Les sous-classes ne fournissent que `_process()`, seul endroit qui connaît la forme de `DT`. Un `_process()` peut lever `RejectOutcome` : l'item part alors en rejet, sans sauvegarde.
 
 ### UnifiedValidationWorker
 
 **Fichier** : [validation/unified_worker.py](../src/ebook_translator/validation/unified_worker.py)
 
-Un **seul** worker pour toutes les phases : aucune surcharge par phase, le routage des corrections passe entièrement par `RETRY_REGISTRY` et par les métadonnées portées par chaque `ContentCheck`.
+Worker des phases **avec** `content_checks` — la donnée doit être un mapping line-indexed. Un seul worker pour toutes ces phases : aucune surcharge par phase, le routage des corrections passe entièrement par `RETRY_REGISTRY` et par les métadonnées portées par chaque `ContentCheck`.
 
 Traitement **check par check** : les `phase.content_checks` sont parcourus dans l'ordre de déclaration, chacun épuisant son budget de retries sur ses propres échecs avant de passer la main. Aucune ré-évaluation des checks précédents. Si un échec survit à `max_attempts`, les indices concernés sont **droppés** et le chunk est sauvegardé partiel — un chunk avec trous vaut mieux qu'un chunk rejeté.
+
+### SchemaOnlyValidationWorker
+
+**Fichier** : [validation/schema_only_worker.py](../src/ebook_translator/validation/schema_only_worker.py)
+
+Worker des phases **sans** `content_checks` (Phase 0, glossaire) : leur schéma Pydantic les valide entièrement côté executor. Passe-plat — la donnée traverse sans copie ni inspection, ce qui permet à `DT` d'être une `list` ou un `BaseModel` plutôt qu'un mapping line-indexed.
 
 ### SaveWorker
 

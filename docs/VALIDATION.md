@@ -5,28 +5,45 @@ La validation se fait en **deux temps**, portés par deux composants distincts :
 1. **Le schéma** — `phase.payload_type` (modèle Pydantic) valide la forme de la sortie LLM. C'est l'executor qui l'applique, avant toute mise en queue.
 2. **Le contenu** — `phase.content_checks` valide la fidélité à la source (lignes présentes, fragments préservés, ponctuation équilibrée…). C'est le worker de validation qui les applique, et qui déclenche les corrections.
 
-Une phase peut n'avoir que le premier : Phase 0 et la phase glossaire déclarent `content_checks = ()`, leur schéma Pydantic suffisant.
+Une phase peut n'avoir que le premier : Phase 0 et la phase glossaire déclarent `content_checks = ()`, leur schéma Pydantic suffisant. Ces phases sont servies par un autre worker (voir [Routage des workers](#routage-des-workers)).
 
 ## Architecture multi-thread
 
 ```
-ValidationQueue → N × UnifiedValidationWorker (checks + appels LLM de correction)
+ValidationQueue → N × ValidationWorker (checks + appels LLM de correction)
                         ↓ (si succès)
                      SaveQueue → 1 × SaveWorker (I/O) → ChunkPersister → ByteStore
 ```
 
 **Fichiers clés** :
 - Pool : [validation/validation_worker_pool.py](../src/ebook_translator/validation/validation_worker_pool.py)
-- Worker : [validation/unified_worker.py](../src/ebook_translator/validation/unified_worker.py)
+- Socle worker : [validation/worker_base.py](../src/ebook_translator/validation/worker_base.py)
+- Worker avec checks : [validation/unified_worker.py](../src/ebook_translator/validation/unified_worker.py)
+- Worker schéma seul : [validation/schema_only_worker.py](../src/ebook_translator/validation/schema_only_worker.py)
 - Helpers de retry : [validation/worker_retry.py](../src/ebook_translator/validation/worker_retry.py)
 - Save : [validation/save_worker.py](../src/ebook_translator/validation/save_worker.py)
 - Queues et items : [validation/validation_queue.py](../src/ebook_translator/validation/validation_queue.py)
+
+## Routage des workers
+
+Le pool choisit la classe de worker **par phase**, sur `phase.content_checks` :
+
+| `content_checks` | Worker | Donnée attendue |
+|------------------|--------|-----------------|
+| non vide | `UnifiedValidationWorker` | mapping line-indexed (`LineIndexed`) |
+| vide | `SchemaOnlyValidationWorker` | quelconque — jamais inspectée |
+
+C'est une décision **en amont**, pas un test dans le worker. `UnifiedValidationWorker` copie la donnée dans un `LineIndexed` et raisonne en `relevant_indices` : sur une `list[LLMTermeGlossary]` ou un `AnalyseChapter`, cette copie produirait une structure aplatie et casserait la persistance. `SchemaOnlyValidationWorker` relaie `item.data` telle quelle au `SaveWorker`.
+
+Le socle commun (`ValidationWorker`, [worker_base.py](../src/ebook_translator/validation/worker_base.py)) porte la boucle de consommation, la mise en `SaveQueue` et le comptage ; les sous-classes n'implémentent que `_process()`.
+
+`switch_phase()` recycle les workers — threads arrêtés, instances reconstruites, threads relancés — quand la phase suivante demande l'autre classe. Sinon elle se contente de réaffecter `worker.phase`. Le `SaveWorker` n'est jamais interrompu : il draine encore la `SaveQueue` de la phase précédente.
 
 ## ValidationWorkerPool
 
 Interface utilisée par `PhaseExecutor` :
 
-- `switch_phase(phase)` : reconfigure les workers pour la phase courante
+- `switch_phase(phase)` : reconfigure les workers pour la phase courante, ou les recycle si elle demande un autre type de worker
 - `submit(ValidationItem)` : soumet un chunk à valider
 - `wait_completion()` : bloque jusqu'à vidage des queues
 - `get_statistics()` : `ValidationPoolStats` (validés, rejetés, en attente, total soumis)
@@ -35,7 +52,7 @@ Le pool est construit une seule fois par run, avec une `DummyPhase` en attendant
 
 ## UnifiedValidationWorker
 
-Un **seul** worker sert toutes les phases : aucune sous-classe par phase. Le routage des corrections passe entièrement par `RETRY_REGISTRY` et par les métadonnées portées par chaque `ContentCheck`.
+Un **seul** worker sert toutes les phases à `content_checks` : aucune sous-classe par phase. Le routage des corrections passe entièrement par `RETRY_REGISTRY` et par les métadonnées portées par chaque `ContentCheck`.
 
 ### Cycle check par check
 

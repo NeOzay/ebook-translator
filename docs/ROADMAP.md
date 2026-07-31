@@ -2,6 +2,8 @@
 
 Ce document consolide toutes les améliorations futures planifiées (Phase 2 - non implémentées) issues de l'historique des versions.
 
+Pour la dette **constatée dans le code** — ce qui existe et pose problème, par opposition à ce qui n'existe pas encore — voir [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md).
+
 > **Statut** : Toutes les fonctionnalités listées ci-dessous sont **NON IMPLÉMENTÉES**. Elles représentent des idées d'amélioration envisagées pour les versions futures.
 
 ## Par priorité

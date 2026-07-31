@@ -48,7 +48,7 @@ Parcourt le spine EPUB séquentiellement et reconstruit des `ChapterInfo`. Suppo
 
 **Fichier** : [exporter/analysis_exporter.py](../src/ebook_translator/exporter/analysis_exporter.py)
 
-`after_chunk()` exporte chaque fiche en Markdown lisible dans le répertoire de cache de la phase (`<cache>/literary_analysis/<chapitre>.md`), pour revue humaine.
+`on_save()` exporte chaque fiche en Markdown lisible dans le répertoire de cache de la phase (`<cache>/literary_analysis/<outer_key>-<inner_key>.md`), pour revue humaine. Le hook est appelé par le `SaveWorker`, donc uniquement sur une fiche validée et écrite ; l'`inner_key` dans le nom évite qu'un bloc écrase le précédent au sein d'un même chapitre.
 
 Les libellés d'export sont validés **à l'import du module** contre `model_fields` et `get_args(SignalCloture)` (`_checked_labels`, `_checked_signal_labels`) : un champ renommé dans le schéma casse immédiatement, plutôt que de produire un export silencieusement incomplet.
 

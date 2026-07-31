@@ -10,7 +10,107 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule* | *3 effets de bord, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
+
+---
+
+## Non publié
+
+### ⚡ Breaking Changes
+
+#### 1. `PhaseBase.after_chunk()` devient `after_response()`, et `on_save()` apparaît
+
+Le hook unique post-chunk est scindé en deux, selon le moment et le thread :
+
+| Hook | Thread | Donnée reçue | Échec |
+|------|--------|--------------|-------|
+| `after_response(chunk, data, context)` | executor | validée par le schéma, **avant** les `content_checks` | remonte, le chunk échoue |
+| `on_save(chunk, data)` | `SaveWorker` | validée **et** persistée | logué en warning, absorbé |
+
+`on_save` traverse `PhaseStorage` → `SaveItem`, dont le callback change de
+signature : `(SaveItem) -> None` devient `(chunk, data) -> None`.
+
+Migration : un hook d'export ou de revue va dans `on_save` ; un effet de bord que
+le chunk suivant doit voir reste dans `after_response`.
+
+`after_response` est désormais appelé **aussi sur le chemin cache** : un run
+entièrement en cache déclenche les mêmes hooks qu'un run complet.
+
+#### 2. Le worker de validation est choisi par phase
+
+`ValidationWorkerPool` sélectionne la classe de worker sur `phase.content_checks`
+au lieu d'instancier `UnifiedValidationWorker` pour tout le monde :
+
+| `content_checks` | Worker | Donnée attendue |
+|------------------|--------|-----------------|
+| non vide | `UnifiedValidationWorker` | mapping line-indexed |
+| vide | `SchemaOnlyValidationWorker` (nouveau) | quelconque — jamais inspectée |
+
+`UnifiedValidationWorker` copiait `item.data` dans un `LineIndexed` pour toutes
+les phases ; sur une `list[LLMTermeGlossary]` ou un `AnalyseChapter`, cette copie
+produisait une structure aplatie. Le socle commun est extrait dans
+`validation/worker_base.py` (`ValidationWorker`, `RejectOutcome` — ex
+`_RejectOutcome`).
+
+`switch_phase()` recycle les workers quand la phase suivante demande l'autre
+classe. Le `SaveWorker` n'est jamais interrompu : il draine encore la queue de la
+phase précédente.
+
+#### 3. Le glossaire source n'est plus écrasé
+
+Le pipeline écrivait le glossaire enrichi dans `<epub_dir>/.<stem>_glossary.json`,
+c'est-à-dire dans le fichier même passé à `run(glossary=…)` — corrections
+manuelles comprises. `Pipeline._glossary_export_path()` bascule sur
+`.<stem>_glossary.generated.json` quand le nom d'export désigne la source.
+Sans glossaire source fourni, le nom par défaut est inchangé.
+
+### 🔧 Modifications
+
+- `Mode.TOOLS_STRICT` → `Mode.JSON` pour la voie Instructor : `TOOLS_STRICT`
+  n'applique pas les contraintes de structure chez DeepSeek et produisait des
+  JSON invalides. La validité du contenu reste portée par Pydantic.
+- `max_retries` propagé jusqu'à `instructor.create_with_completion()` :
+  l'erreur de validation Pydantic est réinjectée dans la conversation pour que
+  le modèle se corrige.
+- `LLM(prompt_dir=…)` et `LLMBuilder` prennent par défaut
+  `DEFAULT_PROMPT_DIR`, résolu depuis le package `template` installé. L'ancien
+  `"template"` relatif ne fonctionnait que lancé depuis la racine du dépôt.
+- Logs : `exc_info` sur les `logger.error` des chemins LLM et cache ; le format
+  par défaut porte `fichier:ligne (fonction)`.
+- Phase 0 : les fiches Markdown sont nommées `<outer_key>-<inner_key>.md`, un
+  bloc n'écrase plus le précédent au sein d'un chapitre.
+
+### 🐛 Corrections
+
+- `Pipeline.clear_caches()` supprimait `<cache_dir>/glossary.json`, chemin que
+  rien n'écrit — le nettoyage du glossaire ne faisait rien. Il vise les noms
+  d'export réels, en épargnant la source.
+- `Pipeline.glossary` n'existait qu'après `run()` : `clear_caches()` appelé
+  avant levait `AttributeError`.
+- `ValidationWorkerPool` réarmait l'événement d'arrêt après le `join`. Un worker
+  dépassant le délai — plausible pendant un appel LLM de correction — repartait
+  consommer la queue avec l'ancienne phase. Chaque génération de workers a
+  désormais son propre événement.
+
+### 📊 Compteurs
+
+`pytest` **385 passés** · `basedpyright src/ebook_translator` **0 erreur** ·
+couverture 72,30 % (seuil 80 % non tenu, cf.
+[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md)).
+
+### ⚠️ Effets de bord
+
+Deux conséquences assumées, détaillées dans
+[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) :
+
+- **Glossaire peuplé depuis un hook asynchrone** — `GlossaryPhase` a migré
+  `_populate_glossary()` dans `on_save`. Le peuplement n'est plus garanti
+  visible du chunk suivant, et une exception y est absorbée par le `SaveWorker`
+  (entrée 6).
+- **`LLM.max_retries` pilote deux mécanismes** — la boucle de retry réseau de
+  `query()` et les corrections de schéma d'instructor dans `json_query()`
+  partagent le même réglage (entrée 7).
 
 ---
 
