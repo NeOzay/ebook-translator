@@ -31,11 +31,7 @@ comportement attendu : on préfère un chunk avec trous à un chunk rejeté.
 
 from __future__ import annotations
 
-import queue
-import threading
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from itertools import count
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -44,12 +40,12 @@ from ebook_translator.llm.llm import LLM
 from ebook_translator.pipeline.context import CommunContext
 from ebook_translator.validation.diagnostics import ErreursType
 from template.phase.translation_models import LineIndexed
-from template.types import ConvertibleModel
 
 from ..llm.retry_registry import RETRY_REGISTRY, RetryEntry
 from ..logger import get_logger
 from .failure import from_pydantic_error
-from .validation_queue import SaveQueue, ValidationItem, ValidationQueue
+from .validation_queue import ValidationItem
+from .worker_base import RejectOutcome, ValidationWorker
 from .worker_retry import (
     WorkerRetryContext,
     is_instance_resolved,
@@ -58,91 +54,21 @@ from .worker_retry import (
 
 if TYPE_CHECKING:
     from ebook_translator.checks.content_check import ChunkSource, ContentCheck
-    from ebook_translator.pipeline.base import PhaseProtocol
     from ebook_translator.segmentation.chunk import ChunkProtocol
 
     from .failure import ValidationFailure
 
 
-@dataclass(frozen=True)
-class _RejectOutcome(Exception):
-    failures: list[ValidationFailure[Any]]
-
-
 logger = get_logger(__name__)
-
-counter = count(0)
-
-
-@dataclass
-class ValidationWorker[DT: Any, M: ConvertibleModel[Any] = ConvertibleModel[DT]](ABC):
-    validation_queue: ValidationQueue[DT]
-    save_queue: SaveQueue[ChunkProtocol, DT]
-    phase: PhaseProtocol[ChunkProtocol, DT, M]
-    stop_event: threading.Event
-
-    worker_id: int = field(init=False, default_factory=lambda: next(counter))
-    validated_count: int = field(init=False, default=0)
-    rejected_count: int = field(init=False, default=0)
-
-    @abstractmethod
-    def _process(self, item: ValidationItem[DT]) -> DT: ...
-
-    def run(self) -> None:
-        """Boucle de consommation. Sortie sur `stop_event.set()`."""
-
-        logger.info(f"[{type(self).__name__}-{self.worker_id}] Démarré")
-        while not self.stop_event.is_set():
-            try:
-                item = self.validation_queue.get(timeout=0.5)
-            except queue.Empty:
-                continue
-            if item is None:
-                continue
-
-            try:
-                data = self._process(item)
-                self._save(item, data)
-            except _RejectOutcome as rej:
-                self._reject(item, rej.failures)
-            except Exception as e:
-                logger.exception(
-                    f"[{type(self).__name__}-{self.worker_id}] Erreur traitement: {e}"
-                )
-                self.validation_queue.mark_rejected()
-                self.rejected_count += 1
-
-        logger.info(
-            f"[{type(self).__name__}-{self.worker_id}] Arrêté "
-            f"(validated={self.validated_count}, rejected={self.rejected_count})"
-        )
-
-    def _save(self, item: ValidationItem[DT], data: DT) -> None:
-        save_item = self.phase.save_item_builder(item.chunk, data)
-        self.save_queue.put(save_item)
-        self.validation_queue.mark_validated()
-        self.validated_count += 1
-        logger.debug(
-            f"[{type(self).__name__}-{self.worker_id}] ✅ Chunk {item.chunk.index} validé"
-        )
-
-    def _reject(
-        self,
-        item: ValidationItem[DT],
-        failures: list[ValidationFailure[Any]],
-    ) -> None:
-        self.validation_queue.mark_rejected()
-        self.rejected_count += 1
-        summary = "\n".join(f"  • {f.error_type}: {f.msg}" for f in failures)
-        logger.error(
-            f"[{type(self).__name__}-{self.worker_id}] ❌ Chunk {item.chunk.index} "
-            f"rejeté:\n{summary}"
-        )
 
 
 @dataclass
 class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
-    """Worker thread unique consommant `ValidationQueue[DT]`.
+    """Worker thread unique consommant `ValidationQueue[LineIndexed]`.
+
+    Réservé aux phases déclarant des `content_checks` : la donnée doit être
+    un mapping line-indexed. Les phases validées par leur seul schéma sont
+    routées par `ValidationWorkerPool` vers `SchemaOnlyValidationWorker`.
 
     `DT` est la vue TypedDict transitant en queue. `M` est le modèle
     Pydantic utilisé **uniquement** pour parser la sortie LLM en retry
@@ -171,7 +97,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
 
     def _process(self, item: ValidationItem[LineIndexed]) -> LineIndexed:
         """Pipeline check-by-check (cf. docstring module).
-        Raise: `_RejectOutcome` si échec non récupérable (schéma KO sur retry).
+        Raise: `RejectOutcome` si échec non récupérable (schéma KO sur retry).
         """
 
         chunk = item.chunk
@@ -181,8 +107,8 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
 
         for check in self.phase.content_checks:
             outcome = self._correct_one_check(check, data, chunk, source)
-            if isinstance(outcome, _RejectOutcome):
-                raise _RejectOutcome(outcome.failures + accumulated)
+            if isinstance(outcome, RejectOutcome):
+                raise RejectOutcome(outcome.failures + accumulated)
             data, check_failures = outcome
             accumulated.extend(check_failures)
 
@@ -194,11 +120,11 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         data: LineIndexed,
         chunk: ChunkProtocol,
         source: ChunkSource,
-    ) -> tuple[LineIndexed, list[ValidationFailure[Any]]] | _RejectOutcome:
+    ) -> tuple[LineIndexed, list[ValidationFailure[Any]]] | RejectOutcome:
         """Boucle de retry sur un seul `check`.
 
         Retourne `(data_mis_à_jour, failures_consommées)` en cas de
-        succès ou de drop ; `_RejectOutcome` si schéma KO sur retry ou
+        succès ou de drop ; `RejectOutcome` si schéma KO sur retry ou
         error_type orphelin du registre.
         """
 
@@ -232,7 +158,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
                     f"[UnifiedWorker-{self.worker_id}] "
                     f"error_type={failure.error_type!r} sans entrée registre"
                 )
-                return _RejectOutcome(consumed)
+                return RejectOutcome(consumed)
 
             instance_resolved = False
             for n in range(check.max_attempts):
@@ -245,7 +171,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
                     attempt_index=n,
                     max_attempts=check.max_attempts,
                 )
-                if isinstance(retry_outcome, _RejectOutcome):
+                if isinstance(retry_outcome, RejectOutcome):
                     return retry_outcome
                 data = retry_outcome  # nouveau dict mergé
 
@@ -281,10 +207,10 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         data: LineIndexed,
         attempt_index: int,
         max_attempts: int,
-    ) -> LineIndexed | _RejectOutcome:
+    ) -> LineIndexed | RejectOutcome:
         """Une tentative LLM : render → query → parse schéma → merge.
 
-        Retourne le `data` mergé (succès schéma) ou `_RejectOutcome`
+        Retourne le `data` mergé (succès schéma) ou `RejectOutcome`
         (schéma KO non récupérable côté worker).
         """
 
@@ -322,7 +248,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
                 f"retry {failure.error_type} #{attempt_index + 1} : "
                 f"schéma KO ({len(schema_failures)} err.)"
             )
-            return _RejectOutcome(schema_failures)
+            return RejectOutcome(schema_failures)
 
         new_data: LineIndexed = new_payload.build()
         return merge_data(data, new_data, entry.mode)

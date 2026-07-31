@@ -18,12 +18,14 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .save_worker import SaveWorker
+    from .schema_only_worker import SchemaOnlyValidationWorker
     from .unified_worker import UnifiedValidationWorker
     from .validation_queue import SaveItem, SaveQueue, ValidationItem, ValidationQueue
     from .validation_worker_pool import ValidationWorkerPool
 
 _LAZY: dict[str, str] = {
     "SaveWorker": ".save_worker",
+    "SchemaOnlyValidationWorker": ".schema_only_worker",
     "UnifiedValidationWorker": ".unified_worker",
     "SaveItem": ".validation_queue",
     "SaveQueue": ".validation_queue",
@@ -36,6 +38,7 @@ __all__ = [
     "SaveItem",
     "SaveQueue",
     "SaveWorker",
+    "SchemaOnlyValidationWorker",
     "UnifiedValidationWorker",
     "ValidationItem",
     "ValidationQueue",
