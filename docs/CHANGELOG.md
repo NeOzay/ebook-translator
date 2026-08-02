@@ -10,7 +10,7 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule* | *3 effets de bord, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire* | *3 effets de bord, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
@@ -18,6 +18,42 @@
 ## Non publié
 
 ### ⚡ Breaking Changes
+
+#### 0. La phase glossaire produit un tableau délimité, plus du JSON
+
+`LLMGlossaryModel` ne décrit plus `{"colonnes": [...], "entrees": [[...]]}` : le
+LLM répond une ligne par terme, quatre colonnes séparées par `|`, terminée par
+`[=[END]=]`.
+
+```
+Alice|personnage|f|Alice
+White Rabbit|creature|m|Lapin Blanc
+[=[END]=]
+```
+
+À structure égale, l'enveloppe JSON coûtait deux fois plus de tokens **de
+sortie** par entrée — les plus chers et les seuls non cacheables. Mesuré à
+`cl100k_base` sur un chunk de 30 entrées :
+
+| | avant | après | delta |
+|---|---:|---:|---:|
+| Entrée par appel (prompt système + schéma injecté) | 1335 | 1024 | −23 % |
+| Sortie par appel (30 entrées) | 800 | 394 | −51 % |
+
+Conséquences :
+
+- `GlossaryPhase.get_llm_config()` disparaît : la phase passe par `LLM.query()`
+  et non plus par Instructor. `LLMGlossaryModel` parse la chaîne brute dans un
+  validateur `mode="before"`, comme `LineIndexedLLMResponse`.
+- Le champ `colonnes` est supprimé du modèle — l'ordre est porté par le format.
+  `GLOSSARY_COLUMNS` reste exposé pour la documentation du prompt.
+- **Le format de cache est inchangé** (JSON, via `MemoizedChunkPersister`) : les
+  caches de glossaire existants restent lisibles.
+- Une ligne dont la cardinalité n'est pas 4, ou dont `type`/`sexe` sort des
+  valeurs autorisées, est écartée avec un `WARNING` au lieu de déclencher une
+  correction ; les puces en tête de ligne sont nettoyées. Seules la génération
+  tronquée et la réponse dont aucune ligne n'est exploitable font échouer le
+  chunk.
 
 #### 1. `PhaseBase.after_chunk()` devient `after_response()`, et `on_save()` apparaît
 

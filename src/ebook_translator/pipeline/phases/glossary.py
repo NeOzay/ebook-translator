@@ -1,17 +1,22 @@
 """Phase glossaire : extraction des termes récurrents et de leur traduction.
 
-Validation **entièrement schéma** : `LLMGlossaryModel` est passé au LLM via
-Instructor (`JsonRequestConfig`), qui garantit la structure côté API. Il n'y a
-donc pas de `content_checks` : le parsing JSON et la conversion du format
-compact sont absorbés par Pydantic.
+Voie **texte** : le LLM répond en tableau délimité (`terme|type|sexe|
+proposition`, terminé par `[=[END]=]`), que `LLMGlossaryModel` parse dans son
+validateur `mode="before"`. Ce format coûte environ deux fois moins de tokens
+de sortie que l'enveloppe JSON équivalente, et la sortie du glossaire est
+volumineuse — une trentaine d'entrées par chunk.
+
+Validation **entièrement schéma** : il n'y a pas de `content_checks`. Les
+lignes malformées sont écartées au parsing plutôt que corrigées par un appel
+supplémentaire, qui coûterait les tokens que ce format économise (voir
+`template.phase.glossary_models`).
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, override
+from typing import override
 
 from ebook_translator.exporter import GlossaryExporter
-from ebook_translator.llm.llm_config import JsonRequestConfig
 from ebook_translator.logger import get_logger
 from ebook_translator.persistence.memoized_chunk_persister import (
     MemoizedChunkPersister,
@@ -20,7 +25,6 @@ from ebook_translator.pipeline import ChunkContext, ExecutionMode, PhaseBase, Ph
 from ebook_translator.segmentation.chunk import Chunk
 from ebook_translator.segmentation.segmentator import Segmentator
 from template.phase.glossary_models import LLMGlossaryModel, LLMTermeGlossary
-from template.types import ConvertibleModel
 
 logger = get_logger(__name__)
 
@@ -127,13 +131,6 @@ class GlossaryPhase(PhaseBase[GlossaryChunk, list[LLMTermeGlossary], LLMGlossary
             target_language=context.target_language,
             glossary=context.glossary,
         )
-
-    @override
-    def get_llm_config(
-        self, chunk: GlossaryChunk, context: ChunkContext
-    ) -> JsonRequestConfig[ConvertibleModel[Any]]:
-        """Voie Instructor : la structure est portée par le schéma Pydantic."""
-        return JsonRequestConfig(config=self.llm, response_model=LLMGlossaryModel)
 
     @override
     def on_save(

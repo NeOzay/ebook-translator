@@ -97,7 +97,9 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 - Fragment separator within a line: `</>` (must be preserved exactly)
 - End marker: `[=[END]=]`
 
-Phases with structured output (Phase 0, glossary) do not use this format: they go through Instructor on their own Pydantic schema.
+The glossary phase has its own textual format, tabular: one line per term, four columns separated by `|`, closed by the same `[=[END]=]` marker — see `LLMGlossaryModel` ([template/phase/glossary_models.py](src/template/phase/glossary_models.py)). It parses the raw string in a `mode="before"` validator; malformed lines are dropped with a `WARNING` rather than retried.
+
+Phase 0 is the only phase with structured output: it goes through Instructor on its own Pydantic schema.
 
 **Persistence** — three layers:
 - `ByteStore` ([stores/byte_store.py](src/ebook_translator/stores/byte_store.py)): raw bytes, per-file locks + atomic rename. `FileByteStore` is the disk implementation.

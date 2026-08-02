@@ -85,4 +85,20 @@ Les templates de traduction demandent systématiquement :
 - séparateurs `</>` préservés en nombre et position exacts
 - terminaison par `[=[END]=]`
 
-Ce format n'a qu'une **source de vérité** : le modèle `LineIndexedLLMResponse` ([template/phase/translation_models.py](../src/template/phase/translation_models.py)), qui le valide au parse. Les phases à sortie structurée (Phase 0, glossaire) n'utilisent pas ce format : elles passent par Instructor sur leur propre schéma Pydantic.
+Ce format n'a qu'une **source de vérité** : le modèle `LineIndexedLLMResponse` ([template/phase/translation_models.py](../src/template/phase/translation_models.py)), qui le valide au parse.
+
+### Sortie de la phase glossaire
+
+La phase glossaire a son propre format textuel, tabulaire : une ligne par terme, quatre colonnes séparées par `|`, terminée par le même `[=[END]=]`.
+
+```
+Alice|personnage|f|Alice
+White Rabbit|creature|m|Lapin Blanc
+[=[END]=]
+```
+
+Source de vérité : `LLMGlossaryModel` ([template/phase/glossary_models.py](../src/template/phase/glossary_models.py)), qui parse la chaîne brute dans un validateur `mode="before"`. À structure égale, l'enveloppe JSON qu'il remplace coûtait deux fois plus de tokens **de sortie** par entrée (22,4 contre 12,4), et faisait injecter en entrée le schéma JSON du modèle à chaque appel.
+
+Une ligne dont la cardinalité n'est pas 4, ou dont `type`/`sexe` sort des valeurs autorisées, est **écartée avec un `WARNING`** plutôt que corrigée par un appel supplémentaire : le glossaire est un agrégat pondéré sur tout l'ouvrage, où perdre un terme est sans conséquence. Les puces et numérotations en tête de ligne sont nettoyées. Seules la génération tronquée (`[=[END]=]` absent) et la réponse dont aucune ligne n'est exploitable font échouer le chunk.
+
+Phase 0 reste la seule phase à sortie structurée : elle passe par Instructor sur son schéma Pydantic `AnalyseChapter`.

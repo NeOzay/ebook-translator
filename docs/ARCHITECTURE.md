@@ -143,7 +143,8 @@ Voir [LITERARY_ANALYSIS.md](LITERARY_ANALYSIS.md).
 
 - Chunk : `GlossaryChunk`, 2000 tokens, overlap 0.5, séquentielle, 1 worker
 - `payload_type` = `LLMGlossaryModel`, `data_type` = `list[LLMTermeGlossary]`
-- `content_checks = ()` — schéma seul
+- Voie **texte** (pas Instructor) : sortie tabulaire `terme|type|sexe|proposition` terminée par `[=[END]=]`, parsée par le validateur `mode="before"` du modèle. Environ deux fois moins de tokens de sortie que l'enveloppe JSON équivalente
+- `content_checks = ()` — schéma seul ; les lignes malformées sont écartées au parsing avec un `WARNING` plutôt que corrigées par un appel supplémentaire
 - Persistance mémoïsée sous le namespace `"glossary"` : les termes valent pour tout l'ouvrage
 
 ### Phase 1 — Traduction initiale
