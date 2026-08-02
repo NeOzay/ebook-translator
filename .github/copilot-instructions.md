@@ -167,7 +167,7 @@ def test_validation_with_mock_llm():
 ```bash
 uv run basedpyright src/                    # Type checking (strict)
 uv run pytest --cov=src/ebook_translator  # Tests + coverage ≥80%
-uv run pre-commit run --all-files      # Black, isort, ruff
+uv run pre-commit run --all-files      # ruff format, ruff check, basedpyright
 ```
 
 ### Commit Messages
@@ -304,7 +304,7 @@ DEEPSEEK_URL=https://api.deepseek.com  # Optional (default)
 
 - basedpyright: `typeCheckingMode = "strict"` (0 errors tolerated)
 - Pytest: `--cov-fail-under=80` (coverage enforcement)
-- Black: `line-length = 88`
+- Ruff: `line-length = 88`
 - Python: `>=3.12` (uses modern syntax: `|` unions, `match` statements)
 
 ## Known Limitations

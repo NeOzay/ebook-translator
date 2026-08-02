@@ -65,14 +65,14 @@ def test_user_reported_case():
     translation_text = str(translation_tag)
 
     # Doit contenir "Vestimentaire <em>" (espace avant <em>)
-    assert (
-        "Vestimentaire <em>" in translation_text
-    ), f"Espace manquant avant <em>. Got: {translation_text}"
+    assert "Vestimentaire <em>" in translation_text, (
+        f"Espace manquant avant <em>. Got: {translation_text}"
+    )
 
     # Doit contenir "</em> pour" (espace après </em>)
-    assert (
-        "</em> pour" in translation_text
-    ), f"Espace manquant après </em>. Got: {translation_text}"
+    assert "</em> pour" in translation_text, (
+        f"Espace manquant après </em>. Got: {translation_text}"
+    )
 
     # 4. Vérifier le texte complet reconstitué
     # Extraire le texte complet de la balise traduite (sans les tags HTML internes)

@@ -180,7 +180,9 @@ def _freeze_context(llm: _FakeLLM) -> None:
     )
 
 
-def _make_worker(phase: _FakePhase, llm: _FakeLLM) -> tuple[
+def _make_worker(
+    phase: _FakePhase, llm: _FakeLLM
+) -> tuple[
     UnifiedValidationWorker,
     ValidationQueue[dict[int, str]],
     SaveQueue[Any, Any],

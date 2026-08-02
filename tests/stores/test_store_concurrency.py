@@ -47,10 +47,8 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
         """Thread qui lit le cache en boucle."""
         while not stop_event.is_set():
             try:
-                cache_file = (
-                    store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
-                        source_file
-                    )
+                cache_file = store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
+                    source_file
                 )
                 _ = _load_cache(cache_file)  # pyright: ignore[reportPrivateUsage]
 
@@ -71,10 +69,8 @@ def test_concurrent_read_write(tmp_path: Path) -> None:
         counter = 0
         while not stop_event.is_set():
             try:
-                cache_file = (
-                    store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
-                        source_file
-                    )
+                cache_file = store._get_cache_file(  # pyright: ignore[reportPrivateUsage]
+                    source_file
                 )
 
                 # Écrire des données
@@ -306,9 +302,9 @@ def test_file_lock_isolation(tmp_path: Path) -> None:
 
     # Vérifier que les deux threads ont bien pu s'exécuter en parallèle
     # (durée totale < somme des délais + marge)
-    assert (
-        duration < 0.2
-    ), f"Les locks ne sont pas isolés par fichier (durée: {duration:.3f}s)"
+    assert duration < 0.2, (
+        f"Les locks ne sont pas isolés par fichier (durée: {duration:.3f}s)"
+    )
 
 
 @pytest.mark.slow

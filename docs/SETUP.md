@@ -30,7 +30,7 @@ cp .env.example .env
 uv run pre-commit install
 ```
 
-Les hooks exécutent automatiquement : black, ruff, basedpyright.
+Les hooks exécutent automatiquement : ruff format, ruff check, basedpyright.
 
 ## Vérification de l'installation
 

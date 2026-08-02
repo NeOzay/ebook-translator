@@ -834,7 +834,7 @@ def test_with_fixtures(sample_chunk, mock_llm):
 
 ```bash
 # Formater le code
-uv run black src/ tests/
+uv run ruff format src/ tests/
 
 # Linting (les règles I de ruff trient aussi les imports)
 uv run ruff check src/ tests/
@@ -846,9 +846,9 @@ uv run pre-commit run --all-files
 
 ### Conventions
 
-- **Ligne max** : 88 caractères (black default)
+- **Ligne max** : 88 caractères (`line-length` de ruff)
 - **Imports** : Triés par les règles `I` de ruff (stdlib, third-party, local)
-- **Quotes** : Doubles quotes `"` préférées (black default)
+- **Quotes** : Doubles quotes `"` (`quote-style = "double"`)
 - **Indentation** : 4 espaces (jamais tabs)
 
 ---

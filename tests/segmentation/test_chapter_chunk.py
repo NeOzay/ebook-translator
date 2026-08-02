@@ -181,9 +181,9 @@ class TestChapterChunkIntegration:
     def test_chapter_chunk_has_body(self, all_chapters: list[ChapterChunk]):
         """ChapterChunk a un body non vide (texte extrait du fichier HTML)."""
         for chapter in all_chapters:
-            assert (
-                chapter.get_body_size() > 0
-            ), f"Chapitre '{chapter.name}' a un body vide"
+            assert chapter.get_body_size() > 0, (
+                f"Chapitre '{chapter.name}' a un body vide"
+            )
 
     def test_chapter_chunk_token_count_positive(self, all_chapters: list[ChapterChunk]):
         """ChapterChunk a un token_count positif."""

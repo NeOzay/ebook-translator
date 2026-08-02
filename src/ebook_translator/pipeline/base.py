@@ -138,9 +138,7 @@ class PhaseBase[
     DT: Any = Any,
     M: ConvertibleModel[  # Ne pas redéfinir dans les sous-classes, Type du payload LLM déduit avec DT
         Any
-    ] = ConvertibleModel[
-        DT
-    ],
+    ] = ConvertibleModel[DT],
 ](ABC, PhaseProtocol[ChunkType, DT, M]):
     """
     Classe de base abstraite pour toutes les phases.
@@ -298,9 +296,7 @@ class PhaseBase[
         """
         pass
 
-    def before_chunk(
-        self, chunk: ChunkType, context: ChunkContext
-    ) -> None:  # noqa: B027
+    def before_chunk(self, chunk: ChunkType, context: ChunkContext) -> None:  # noqa: B027
         """
         Hook appelé avant le traitement d'un chunk.
 

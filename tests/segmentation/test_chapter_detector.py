@@ -96,9 +96,9 @@ class TestAnalyzeWithContext:
         detector = SequentialChapterDetector([])
         for filename in ["cover", "toc", "copyright", "colophon"]:
             analysis = detector._analyze_with_context(filename, 0)  # type: ignore[reportPrivateUsage]
-            assert (
-                analysis.file_type == _FileType.SKIP
-            ), f"{filename!r} devrait être SKIP"
+            assert analysis.file_type == _FileType.SKIP, (
+                f"{filename!r} devrait être SKIP"
+            )
 
     def test_front_matter_ignored_by_default(self):
         """Front matter ignoré par défaut (include_front_matter=False)."""

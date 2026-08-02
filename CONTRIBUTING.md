@@ -142,16 +142,12 @@ def validate_translation(
 
 **Outils automatiques configurés :**
 
-- **Black** : Formatage automatique (88 caractères/ligne)
-- **Isort** : Tri et organisation des imports
-- **Ruff** : Linting moderne (remplace flake8/pylint)
+- **Ruff format** : Formatage automatique (88 caractères/ligne, remplace black)
+- **Ruff check** : Linting moderne (remplace flake8/pylint) et tri des imports (règles `I`)
 
 ```bash
 # Formater automatiquement le code
-uv run black src/ tests/
-
-# Trier les imports
-uv run isort src/ tests/
+uv run ruff format src/ tests/
 
 # Linting
 uv run ruff check src/ tests/
@@ -389,7 +385,7 @@ feat: Ajout d'un système de retry à deux niveaux avec utilisation du mode reas
 1. ✅ Tous les tests passent (`uv run pytest`)
 2. ✅ basedpyright mode strict sans erreurs (`uv run basedpyright src/`)
 3. ✅ Pre-commit hooks passent (`uv run pre-commit run --all-files`)
-4. ✅ Code formaté (black + isort)
+4. ✅ Code formaté (ruff format)
 5. ✅ Coverage ≥ 80% pour nouveau code
 6. ✅ Documentation à jour (docstrings, CHANGELOG.md si applicable)
 
@@ -474,8 +470,7 @@ uv run pytest --cov=src/ebook_translator        # Avec coverage
 uv run basedpyright src/                             # Mode strict
 
 # Formatage et linting
-uv run black src/ tests/                        # Formatage
-uv run isort src/ tests/                        # Tri imports
+uv run ruff format src/ tests/                  # Formatage
 uv run ruff check src/ tests/                   # Linting
 uv run ruff check --fix src/ tests/             # Auto-fix
 
@@ -491,7 +486,7 @@ Créer `.vscode/settings.json` :
 ```json
 {
   "python.defaultInterpreterPath": ".venv/bin/python",
-  "python.formatting.provider": "black",
+  "python.formatting.provider": "none",
   "python.linting.enabled": true,
   "python.linting.ruffEnabled": true,
   "python.analysis.typeCheckingMode": "strict",
@@ -514,8 +509,8 @@ Créer `.vscode/settings.json` :
 - [ ] Tous les retours de fonction sont typés
 - [ ] Variables complexes explicitement typées
 - [ ] basedpyright strict sans erreurs (`uv run basedpyright src/`)
-- [ ] Code formaté avec black (`uv run black src/ tests/`)
-- [ ] Imports triés avec isort (`uv run isort src/ tests/`)
+- [ ] Code formaté avec ruff (`uv run ruff format src/ tests/`)
+- [ ] Imports triés par ruff (`uv run ruff check --fix src/ tests/`)
 - [ ] Ruff linting OK (`uv run ruff check src/ tests/`)
 
 ### Documentation

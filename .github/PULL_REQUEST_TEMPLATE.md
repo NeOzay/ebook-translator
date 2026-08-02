@@ -77,8 +77,8 @@ uv run pytest --cov=src/ebook_translator --cov-report=term-missing
 
 ### Style et formatage
 
-- [ ] Code formaté avec black (`uv run black src/ tests/`)
-- [ ] Imports triés avec isort (`uv run isort src/ tests/`)
+- [ ] Code formaté avec ruff (`uv run ruff format src/ tests/`)
+- [ ] Imports triés par ruff (`uv run ruff check --fix src/ tests/`)
 - [ ] Ruff linting OK (`uv run ruff check src/ tests/`)
 - [ ] Pre-commit hooks OK (`uv run pre-commit run --all-files`)
 

@@ -161,14 +161,10 @@ def extract_toc_map(toc: list[Any]) -> dict[str, str]:
         elif isinstance(entry, tuple):  # (epub.Section, children)
             section, children = entry  # pyright: ignore[reportUnknownVariableType]
             if isinstance(section, epub.Link):
-                href = section.href.split("#")[0].split("/")[
-                    -1
-                ]  # pyright: ignore[reportUnknownMemberType]
+                href = section.href.split("#")[0].split("/")[-1]  # pyright: ignore[reportUnknownMemberType]
                 for ext in (".html", ".xhtml"):
                     href = href.replace(ext, "")
-                result[href.lower()] = (
-                    section.title
-                )  # pyright: ignore[reportUnknownMemberType]
+                result[href.lower()] = section.title  # pyright: ignore[reportUnknownMemberType]
             ch: list[Any] = list(children)  # pyright: ignore[reportUnknownArgumentType]
             result.update(extract_toc_map(ch))
     return result

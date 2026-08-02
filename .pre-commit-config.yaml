@@ -6,9 +6,9 @@ repos:
   # Outils Python via uv (versions synchronisées avec pyproject.toml)
   - repo: local
     hooks:
-      - id: black
-        name: Black - Formatage du code
-        entry: uv run black
+      - id: ruff-format
+        name: Ruff - Formatage du code
+        entry: uv run ruff format
         language: system
         types: [python]
 

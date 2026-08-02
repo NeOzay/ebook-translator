@@ -33,10 +33,10 @@ uv run pytest --no-cov
 # HTML coverage report (written to htmlcov/)
 uv run pytest --cov-report=html
 
-# Format + lint (isort is gone: ruff's I-rules handle import sorting)
-uv run black src/ tests/ && uv run ruff check --fix src/ tests/
+# Format + lint (ruff does both: `format` replaces black, the I-rules sort imports)
+uv run ruff format src/ tests/ && uv run ruff check --fix src/ tests/
 
-# All quality checks at once (runs black, ruff, basedpyright)
+# All quality checks at once (runs ruff format, ruff check, basedpyright)
 uv run pre-commit run --all-files
 ```
 
