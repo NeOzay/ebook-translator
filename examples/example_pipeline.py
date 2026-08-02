@@ -22,11 +22,9 @@ def main():
     """Exemple complet d'utilisation du pipeline via builder."""
 
     # source_epub = Path("books/pg1952-images-3.epub")
-    source_epub = Path(
-        "books/Chillin' in Another World With Level 2 Super Cheat Powers - Volume 02 [J-Novel Club][Premium].epub"
-    )
+    source_epub = Path("./books/The Yellow Wallpaper.epub")
 
-    output_epub = Path(f"books/out/[FR] {source_epub.name}")
+    output_epub = Path(f"books/out/[FR] {source_epub.name} 2")
     glossary = Glossary()
     # Lancer traduction
     try:
@@ -41,7 +39,7 @@ def main():
                     Deepseek(
                         DeepseekModels.FLASH,
                         thinking=False,
-                        config={"temperature": 0.5},
+                        config={"temperature": 0.5, "max_tokens": 15000},
                     )
                 )
                 .glossary_max_terms(25)
