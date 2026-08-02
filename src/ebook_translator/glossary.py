@@ -19,11 +19,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self, TypedDict, cast
 
+from template.phase.glossary_models import GlossaryEntrySexe, GlossaryEntryType
+
 if TYPE_CHECKING:
     from template.phase.glossary_models import (
         GlossaryEntry,
-        GlossaryEntrySexe,
-        GlossaryEntryType,
         GlossaryMultipleValueEntry,
         LLMTermeGlossary,
     )

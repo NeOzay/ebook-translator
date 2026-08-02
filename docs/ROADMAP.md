@@ -23,6 +23,8 @@ Pour la dette **constatée dans le code** — ce qui existe et pose problème, p
 
 - [ ] Système de métadonnées contextuelles (personnages, lieux, relations)
 - [ ] Glossaire automatique des noms propres et termes techniques
+- [ ] Export du glossaire final en fin de `GlossaryPhase` (hook `after_phase`) :
+      occurrences par terme, regroupées par catégorie
 - [ ] Cache sémantique (détecter phrases similaires → réutiliser traductions)
 - [ ] Résumé du chapitre précédent pour continuité narrative
 
