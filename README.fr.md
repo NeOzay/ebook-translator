@@ -112,9 +112,10 @@ Voir [examples/](examples/) — en particulier [example_pipeline.py](examples/ex
 
 | Variable | Obligatoire | Description |
 |----------|-------------|-------------|
-| `API_KEY` | ✅ Oui | Clé API utilisée par le client, chargée depuis `.env` |
+| `API_KEY` | ✅ Oui | Clé API de repli, utilisée par tous les clients, chargée depuis `.env` |
+| `MISTRAL_API_KEY` | ⬜ Non | Lue en priorité par le provider Mistral, avant `API_KEY` |
 
-`API_KEY` est la seule variable lue par le code ([llm/clients/client.py](src/ebook_translator/llm/clients/client.py)). Une clé passée explicitement au client (`Deepseek(..., api_key=...)`) est prioritaire. L'URL de base n'est pas configurable par l'environnement : c'est un attribut de classe du client (`Deepseek.base_url`).
+La résolution de la clé se fait dans `get_api_key` ([llm/clients/base.py](src/ebook_translator/llm/clients/base.py)) : un provider peut déclarer une variable dédiée via `_api_key_env` (c'est le cas de Mistral), `API_KEY` servant de repli commun. Une clé passée explicitement au client (`Deepseek(..., api_key=...)`) est prioritaire sur les deux. Pour les providers compatibles OpenAI, l'URL de base n'est pas configurable par l'environnement : c'est un attribut de classe (`Deepseek.base_url`).
 
 ## Développement
 

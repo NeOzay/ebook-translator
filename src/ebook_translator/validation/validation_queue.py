@@ -7,8 +7,11 @@ La conversion schéma se fait à deux endroits stables :
 
 - côté **executor** (post-LLM) : `payload_type.model_validate(raw)` puis
   `payload.build()` → DT injecté dans la queue.
-- côté **worker** (post-LLM retry) : `payload_type.model_validate_json(raw)`
+- côté **worker** (post-LLM retry) : `payload_type.model_validate(raw)`
   puis `build()` → DT mergé.
+
+Les deux passent par `model_validate` sur la **chaîne brute** : le parsing du
+format `<N/>… [=[END]=]` vit dans un validateur `mode="before"` du modèle.
 
 `SaveItem[ChunkType, DT]` reste self-contained (cf. Bloc A) : embarque
 son propre persister + byte_store.

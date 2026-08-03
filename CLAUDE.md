@@ -81,7 +81,7 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 | `pipeline/` | Orchestration | `pipeline.py`, `base.py`, `executor.py`, `builder.py`, `context.py`, `store_manager.py`, `phase_storage.py` |
 | `pipeline/phases/` | Phase implementations | `literary_analysis.py`, `glossary.py`, `initial_translation.py`, `refinement.py` |
 | `segmentation/` | Chunking + chapter detection | `segmentator.py`, `chunk.py`, `chapter.py`, `chapter_detector.py` |
-| `llm/` | LLM client, providers, templates, retry registry | `llm.py`, `clients/`, `template_renderers.py`, `retry_registry.py` |
+| `llm/` | LLM client, providers, templates, retry registry | `llm.py`, `clients/` (`protocol.py`, `base.py`, `client.py`, `deepseek.py`, `mistral.py`), `errors.py`, `template_renderers.py`, `retry_registry.py` |
 | `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `worker_base.py`, `unified_worker.py`, `schema_only_worker.py`, `save_worker.py`, `worker_retry.py` |
 | `checks/` | Validation rules | `content_check.py`, `content/` |
 | `persistence/` | Cache layout | `chunk_persister.py`, `line_indexed_persister.py`, `memoized_chunk_persister.py` |
@@ -160,9 +160,10 @@ See [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) for detailed standards 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `API_KEY` | Yes | API key read by the client provider |
+| `API_KEY` | Yes | Fallback API key, read by every provider |
+| `MISTRAL_API_KEY` | No | Read first by the Mistral provider, before `API_KEY` |
 
-`API_KEY` is the only variable the code reads ([llm/clients/client.py](src/ebook_translator/llm/clients/client.py)). A key passed explicitly to the client (`Deepseek(..., api_key=...)`) wins. The base URL is a class attribute of the provider (`Deepseek.base_url`), not an environment variable.
+Key resolution lives in `get_api_key` ([llm/clients/base.py](src/ebook_translator/llm/clients/base.py)): a provider may declare a dedicated variable through `_api_key_env` (Mistral does), and `API_KEY` is the common fallback. A key passed explicitly to the client (`Deepseek(..., api_key=...)`) wins over both. For OpenAI-compatible providers the base URL is a class attribute (`Deepseek.base_url`), not an environment variable.
 
 Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.md).
 

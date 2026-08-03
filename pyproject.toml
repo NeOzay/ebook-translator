@@ -20,8 +20,15 @@ classifiers = [
 dependencies = [
   "bs4>=0.0.2,<0.0.3",
   "ebooklib>=0.19,<0.20",
-  "instructor>=1.15.1",
+  # >=1.15.4 requis : jusqu'en 1.15.3 inclus, `instructor.providers` importait
+  # `from_mistral` de façon eager, lequel fait `from mistralai import Mistral` —
+  # chemin supprimé par mistralai 2.0. Avec mistralai installé, `import instructor`
+  # échouait donc purement et simplement.
+  "instructor>=1.15.4",
   "jinja2==3.1.6",
+  # Le provider Mistral n'utilise pas instructor (incompatible avec mistralai 2.x) :
+  # il passe par `chat.complete` + `response_format_from_pydantic_model`.
+  "mistralai>=2.8.0,<3.0.0",
   "openai>=2.1.0,<3.0.0",
   "pydantic>=2.12.5",
   "python-dotenv>=1.0.0,<2.0.0",

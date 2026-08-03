@@ -10,6 +10,7 @@ Scénarios couverts (LLM mocké, phase et payload Pydantic minimaux) :
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+from pydantic import model_validator
 
 from ebook_translator.checks.content_check import ChunkSource
 from ebook_translator.pipeline.context import CommunContext
@@ -35,9 +37,26 @@ from template.types import ConvertibleModel
 
 
 class _FakePayload(ConvertibleModel[dict[int, str]]):
-    """Pydantic minimal — porte un `dict[int, str]` arbitraire."""
+    """Pydantic minimal — porte un `dict[int, str]` arbitraire.
+
+    Comme `LineIndexedLLMResponse`, il parse la **chaîne brute** du LLM dans
+    un validateur `mode="before"` : le worker appelle `model_validate` sur le
+    texte, pas `model_validate_json`. Un fake qui n'accepterait que du JSON
+    validerait un chemin que la production n'emprunte jamais.
+    """
 
     data: dict[int, str]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _parse_raw(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        parsed: dict[int, str] = {}
+        for line in value.splitlines():
+            if m := re.match(r"^<(\d+)/>(.*)$", line, re.DOTALL):
+                parsed[int(m.group(1))] = m.group(2)
+        return {"data": parsed}
 
     def _build_impl(self) -> dict[int, str]:
         return dict(self.data)
@@ -245,7 +264,7 @@ class TestUnifiedWorker:
         )
         # T1 fournit ligne 0 ; ligne 1 manque ; LLM retry renvoie ligne 1.
         llm = _FakeLLM(
-            responses=['{"data": {"1": "T1"}}'],
+            responses=["<1/>T1"],
         )
         worker, vq, sq = _make_worker(phase, llm)
 
@@ -269,7 +288,7 @@ class TestUnifiedWorker:
         phase = _FakePhase(
             content_checks=(_FakeCheck(max_attempts=1, expected_indices=(0, 1)),)
         )
-        llm = _FakeLLM(responses=['{"data": {}}'])
+        llm = _FakeLLM(responses=[""])
         worker, vq, sq = _make_worker(phase, llm)
 
         item = _make_item({0: "T0"})
@@ -328,10 +347,10 @@ class TestUnifiedWorker:
         llm = _FakeLLM(
             responses=[
                 # Retry LINES_MISSING : fournit la ligne 1
-                '{"data": {"1": "T1"}}',
+                "<1/>T1",
                 # Retry FRAGMENT_COUNT_MISMATCH : corrige (peu importe quoi
                 # tant que validate passe ensuite)
-                '{"data": {"0": "T0_fixed</>frag"}}',
+                "<0/>T0_fixed</>frag",
             ]
         )
         worker, vq, _ = _make_worker(phase, llm)

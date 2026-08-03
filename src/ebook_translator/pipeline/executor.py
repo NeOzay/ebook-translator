@@ -70,7 +70,9 @@ class PhaseExecutor:
         self.phase.before_phase()
 
         # 2. Segmentation
-        chunks = self.phase.get_chunks()
+        # `list()` : le contrat annonce une Sequence, mais un override qui renvoie
+        # un générateur serait consommé par le `isinstance` ci-dessous.
+        chunks = list(self.phase.get_chunks())
         if any(not isinstance(c, self.phase.chunk_type) for c in chunks):
             raise TypeError(
                 f"Chunks returned by get_chunks() of {self.phase.name} phase must be of type "

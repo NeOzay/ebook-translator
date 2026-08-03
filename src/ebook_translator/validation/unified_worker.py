@@ -72,7 +72,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
 
     `DT` est la vue TypedDict transitant en queue. `M` est le modèle
     Pydantic utilisé **uniquement** pour parser la sortie LLM en retry
-    (`phase.payload_type.model_validate_json`) — pas porté par
+    (`phase.payload_type.model_validate`) — pas porté par
     `ValidationItem` car `M → DT` n'est pas réversible en général.
 
     Aucune surcharge par phase : le routage retry passe entièrement par
@@ -240,7 +240,7 @@ class UnifiedValidationWorker(ValidationWorker[LineIndexed]):
         )
 
         try:
-            new_payload = self.phase.payload_type.model_validate_json(raw)
+            new_payload = self.phase.payload_type.model_validate(raw)
         except ValidationError as e:
             schema_failures = list(from_pydantic_error(e))
             logger.error(

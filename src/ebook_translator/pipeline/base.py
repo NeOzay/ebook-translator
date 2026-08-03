@@ -256,7 +256,7 @@ class PhaseBase[
         """
         if self.chunk_type == Chunk:
             return cast(
-                list[ChunkType],
+                Sequence[ChunkType],
                 Segmentator(
                     epub_source=self.context.html_pages,
                     max_tokens=self.max_tokens,

@@ -8,7 +8,7 @@ vérifiée dans le code — pas des idées d'amélioration : pour celles-ci, voi
 Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
-> Dernière vérification : 2026-07-31 (audit du diff de travail).
+> Dernière vérification : 2026-08-03 (premier run bout en bout réel, chantier `mistral-adapter`).
 
 ---
 
@@ -217,8 +217,82 @@ l'appelant décide.
 
 ---
 
-## 8. Points mineurs, laissés sciemment
+## 8. La Phase 2 ne s'exécute jamais
 
+**Constat** — `LineIndexedPersister.is_chunk_cached`
+([persistence/line_indexed_persister.py](../src/ebook_translator/persistence/line_indexed_persister.py))
+consulte le store de la phase **puis son fallback** :
+
+```python
+payload = self._load_file(store, file_name) or self._load_file(fallback, file_name)
+```
+
+Pour la Phase 2, ce fallback est le store de **Phase 1**
+(`RefinementPhase.get_byte_fallback_store`). La traduction initiale existant pour
+toutes les lignes, **chaque chunk de refinement est déclaré « déjà en cache »** —
+l'executor ne l'envoie jamais au LLM, et le `SaveWorker` recopie la donnée lue
+par fallback dans le store de Phase 2.
+
+**Vérifié sur un run réel** (`The Yellow Wallpaper`, 28 chunks) : après
+suppression complète du répertoire `refinement/`, le run rapporte
+`Chunks: 27/28 · Cache hits: 27 · Traduits: 0`, et le cache reconstruit est
+**identique à 266/266 lignes** à celui de la Phase 1. Aucun raffinement n'a
+jamais eu lieu, quel que soit le provider.
+
+Le seul chunk qui tente un vrai raffinement est celui que le fallback ne couvre
+pas entièrement (une ligne abandonnée en Phase 1) — et il échoue, cf. entrée 9.
+
+**Le comportement est couvert par un test** :
+`test_fallback_covers_missing_when_main_empty`
+([tests/persistence/test_line_indexed_persister.py](../tests/persistence/test_line_indexed_persister.py))
+attend explicitement `True`. Le test fige le bug plutôt qu'il ne le détecte.
+
+**Pour solder** — retirer le fallback de `is_chunk_cached` : il a un rôle
+légitime dans `load_for_chunk` (fournir la traduction initiale des indices pas
+encore raffinés), aucun dans la décision « cette phase a-t-elle déjà produit ce
+chunk ? ». Retourner les deux tests concernés. Attention : le correctif rend la
+Phase 2 réellement coûteuse en appels LLM, ce qu'elle aurait toujours dû être.
+
+*Identifié par `mistral-adapter`, validation bout en bout du 2026-08-03.*
+
+---
+
+## 9. Une ligne manquante en Phase 1 fait perdre tout un chunk en Phase 2
+
+**Constat** — la Phase 1 sauve délibérément des chunks **partiels** : après
+épuisement des tentatives, les `relevant_indices` en échec sont abandonnés et le
+reste est écrit (« un chunk avec des trous vaut mieux qu'un chunk rejeté »,
+cf. [VALIDATION.md](VALIDATION.md)).
+
+`render_refine` ([llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py))
+applique la politique inverse : il lève dès que `TranslatedChunk.has_missing`,
+donc **une seule ligne absente fait échouer le chunk de Phase 2 en entier**.
+Observé sur un run réel : la ligne 241 manquante a fait perdre le raffinement
+des lignes 233→242.
+
+La stratégie de dégradation d'une phase n'est pas honorée par la suivante.
+
+**Aggravant** — un échec de schéma dans `PhaseExecutor._process_chunk` est
+capté par un `except Exception` large qui journalise et retourne `False` : le
+chunk est perdu **sans aucune tentative de reprise**, alors que
+`SCHEMA_RETRY_STRATEGY` / `SCHEMA_MAX_ATTEMPTS`
+([llm/retry_registry.py](../src/ebook_translator/llm/retry_registry.py)) existent
+et ne servent que le chemin worker.
+
+**Pour solder** — faire raffiner à la Phase 2 les seules lignes disponibles
+(en traitant les trous comme du contexte non modifiable), et brancher un budget
+de tentatives sur l'échec de schéma côté executor.
+
+*Identifié par `mistral-adapter`, validation bout en bout du 2026-08-03.*
+
+---
+
+## 10. Points mineurs, laissés sciemment
+
+- `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
+  est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le
+  `validated_count` du worker n'est pas remonté. Le récapitulatif affiche donc
+  toujours `Validés: 0`, y compris quand la validation a travaillé.
 - `frozen_static.is_frozen()` n'a aucun appelant en production. Conservé :
   accesseur public cohérent d'un module utilitaire, couvert par les tests.
 - `LiteraryAnalysisPhase.head_tail_balance` vaut `0` (entier) là où

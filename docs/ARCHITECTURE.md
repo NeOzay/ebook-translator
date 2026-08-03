@@ -210,11 +210,25 @@ Découpe les `EpubHtml` en `Chunk` (head/body/tail). Paramètres : `max_tokens` 
 Façade au-dessus d'un client provider (`ClientProviderProtocol`) :
 
 - `query(system_prompt, content, log_name, config)` → texte
-- `json_query(..., response_model)` → instance Pydantic via Instructor
+- `json_query(..., response_model)` → instance Pydantic (sortie structurée)
 - Retry réseau avec backoff exponentiel
 - Un fichier de log par échange (`LazyFileHandler`)
 
-Les clients concrets vivent dans [llm/clients/](../src/ebook_translator/llm/clients/) : `OpenAIClientBase` porte le transport et le logging, `Deepseek` la table des modèles (`deepseek-v4-flash`, `deepseek-v4-pro`) et la configuration du thinking mode.
+Le backoff est piloté par les exceptions du SDK `openai` **et** par leurs équivalents normalisés de [llm/errors.py](../src/ebook_translator/llm/errors.py) (`LLMTimeoutError`, `LLMRateLimitError`, `LLMAPIError`), que lèvent les providers bâtis sur un autre SDK.
+
+#### Les clients
+
+[llm/clients/](../src/ebook_translator/llm/clients/) est organisé en trois niveaux :
+
+| Fichier | Rôle |
+|---------|------|
+| `protocol.py` | `ClientProviderProtocol` — le contrat, `@runtime_checkable` (`LLM` s'en sert pour distinguer une config d'un client de substitution) |
+| `base.py` | `LLMClientBase` — socle agnostique : presets et fusion de configuration, journalisation des échanges, `request()`. Quatre points d'extension : `_build_sdk_client`, `_send`, `parse`, `json_request`, plus `_finalize_params` pour un dernier ajustement avant envoi |
+| `client.py` | `OpenAIClientBase` — transport OpenAI-compatible ; `json_request` passe par Instructor (`Mode.JSON`) |
+| `deepseek.py` | `Deepseek` — modèles `deepseek-v4-flash` / `deepseek-v4-pro`, configuration du thinking mode |
+| `mistral.py` | `Mistral` — SDK officiel `mistralai`, modèles `mistral-{small,medium,large}-latest` |
+
+Le provider Mistral n'utilise **pas** Instructor : la bibliothèque résout encore sa classe cliente via `from mistralai import Mistral`, chemin supprimé par `mistralai` 2.0 au profit de `mistralai.client`. Sa sortie structurée s'appuie sur `chat.complete` + `response_format_from_pydantic_model`, avec une boucle de correction équivalente au `max_retries` d'Instructor. Il renseigne aussi `prompt_cache_key` — dérivée par défaut de l'empreinte du prompt système, identique d'un chunk à l'autre au sein d'une phase, ce qui fait facturer les tokens réutilisés à 10 % du prix d'entrée.
 
 ### TemplateRenderer
 

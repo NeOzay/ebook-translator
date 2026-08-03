@@ -6,6 +6,12 @@ from typing import Any
 from openai import APIError, APITimeoutError, OpenAIError, RateLimitError
 
 from ebook_translator.llm.clients.client import ClientProviderProtocol
+from ebook_translator.llm.errors import (
+    LLMAPIError,
+    LLMClientError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from ebook_translator.llm.llm_config import (
     LLMConfig,
 )
@@ -119,7 +125,10 @@ class LLM:
 
                 return response_text
 
-            except APITimeoutError as e:
+            # Chaque clause associe l'exception du SDK openai à son équivalent
+            # normalisé (`llm/errors.py`), que lèvent les providers bâtis sur un
+            # autre SDK — le comportement de retry est ainsi le même pour tous.
+            except (APITimeoutError, LLMTimeoutError) as e:
                 last_error = e
                 if attempt < self.max_retries - 1:
                     delay = self.retry_delay * (2**attempt)
@@ -134,7 +143,7 @@ class LLM:
                         f"❌ Timeout API après {self.max_retries} tentatives: {e}"
                     )
 
-            except RateLimitError as e:
+            except (RateLimitError, LLMRateLimitError) as e:
                 last_error = e
                 if attempt < self.max_retries - 1:
                     delay = self.retry_delay * (3**attempt)
@@ -149,13 +158,15 @@ class LLM:
                         f"❌ Limite de débit après {self.max_retries} tentatives: {e}"
                     )
 
-            except APIError as e:
+            except (APIError, LLMAPIError) as e:
                 last_error = e
                 self.llm_logger.error(f"❌ Erreur API: {e}", exc_info=e)
 
-            except OpenAIError as e:
+            except (OpenAIError, LLMClientError) as e:
                 last_error = e
-                self.llm_logger.error(f"❌ Erreur OpenAI générique: {e}", exc_info=e)
+                self.llm_logger.error(
+                    f"❌ Erreur client LLM générique: {e}", exc_info=e
+                )
 
             except Exception as e:
                 last_error = e
