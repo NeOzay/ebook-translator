@@ -74,3 +74,6 @@ tests/Saint-Exupery-Le_Petit_Prince/
 
 # Rendus de prompts produits par examples/example_template.py (regénérables)
 template_outputs/
+
+# Runs du banc d'essais (volumineux, regénérables — voir docs/BENCH.md)
+bench/runs/

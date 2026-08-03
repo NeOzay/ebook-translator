@@ -33,6 +33,9 @@ uv run pytest --no-cov
 # HTML coverage report (written to htmlcov/)
 uv run pytest --cov-report=html
 
+# Comparative pipeline bench: runs N variants, writes bench/runs/<run_id>/
+uv run python -m ebook_translator.bench bench/config_exemple.py
+
 # Format + lint (ruff does both: `format` replaces black, the I-rules sort imports)
 uv run ruff format src/ tests/ && uv run ruff check --fix src/ tests/
 
@@ -87,6 +90,7 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 | `persistence/` | Cache layout | `chunk_persister.py`, `line_indexed_persister.py`, `memoized_chunk_persister.py` |
 | `stores/` | Byte-level cache | `byte_store.py`, `store.py` |
 | `exporter/` | Markdown export | `analysis_exporter.py`, `glossary_exporter.py` |
+| `bench/` | Comparative bench | `suite.py`, `runner.py`, `worker.py`, `workspace.py`, `collect.py`, `report.py` |
 | `htmlpage/` | HTML parsing and text replacement | `page.py`, `replacement.py`, `bilingual.py` |
 | `translation/` | EPUB I/O | `epub_handler.py`, `language.py` |
 
@@ -176,6 +180,7 @@ Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Validation pipeline, checks, retry registry |
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | Template architecture, variables, format |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Type annotations, docstrings, tests |
+| [docs/BENCH.md](docs/BENCH.md) | Comparative pipeline bench, shared phases, blind arbitration |
 | [docs/SETUP.md](docs/SETUP.md) | Installation, API keys, dev environment |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features (not yet implemented) |
 | [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known debt, deliberately deferred, with what it would take to clear it |

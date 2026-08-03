@@ -145,6 +145,11 @@ class TestApiKeyResolution:
     def test_exits_when_no_key_is_available(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # `get_api_key` appelle `load_dotenv()`, qui restaurerait `API_KEY` depuis
+        # un `.env` réel juste après la suppression ci-dessous.
+        monkeypatch.setattr(
+            "ebook_translator.llm.clients.base.load_dotenv", lambda: True
+        )
         monkeypatch.delenv("API_KEY", raising=False)
         with pytest.raises(SystemExit):
             _ = get_api_key("ABSENT_VAR")

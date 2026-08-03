@@ -12,6 +12,7 @@ from ebooklib.epub import EpubBook, EpubHtml
 from ebook_translator.frozen_static import FrozenStatic, link_to
 from ebook_translator.glossary import Glossary
 from ebook_translator.llm.llm import LLM
+from ebook_translator.llm.usage import PhaseUsage
 from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.store_manager import StoreManager
 from ebook_translator.segmentation.chapter import Chapters
@@ -55,6 +56,14 @@ class PhaseStats:
     duration_seconds: float = 0.0
     """Durée totale d'exécution en secondes"""
 
+    usage: PhaseUsage = field(default_factory=PhaseUsage)
+    """Tokens et appels LLM imputés à la phase (voir `llm/usage.py`).
+
+    Renseigné en fin de phase par `PhaseExecutor` : les chunks servis par le
+    cache ne déclenchent aucune requête, une phase entièrement en cache a donc
+    `usage.llm_calls == 0`.
+    """
+
     def rejection_rate(self) -> float:
         """Calcule le taux de rejet."""
         if self.chunks_processed == 0:
@@ -75,6 +84,8 @@ class PhaseStats:
             f"translated={self.chunks_translated}, "
             f"validated={self.chunks_validated}, "
             f"rejected={self.chunks_rejected}, "
+            f"llm_calls={self.usage.llm_calls}, "
+            f"tokens={self.usage.total_tokens}, "
             f"duration={self.duration_seconds:.1f}s)"
         )
 

@@ -66,7 +66,12 @@ class PhaseExecutor:
             f"checks={check_names}"
         )
 
-        # 1. Hook before_phase
+        # 1. Hook before_phase. Le meter est armé avant, pour qu'une requête
+        # émise depuis le hook soit imputée à la phase et non à `<hors-phase>`.
+        usage_meter = self.context.llm.usage
+        usage_meter.current_phase = self.phase.name
+        usage_baseline = usage_meter.for_phase(self.phase.name)
+
         self.phase.before_phase()
 
         # 2. Segmentation
@@ -100,6 +105,8 @@ class PhaseExecutor:
 
         # 6. Hook after_phase
         self.stats.duration_seconds = time.time() - start_time
+        self.stats.usage = usage_meter.delta_since(usage_baseline, self.phase.name)
+        usage_meter.current_phase = None
         self.phase.after_phase(self.stats)
 
         logger.info(

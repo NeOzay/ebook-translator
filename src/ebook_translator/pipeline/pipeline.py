@@ -371,6 +371,11 @@ class Pipeline:
                 logger.info(f"  • Traduits: {phase_stats.chunks_translated}")
                 logger.info(f"  • Validés: {phase_stats.chunks_validated}")
                 logger.info(f"  • Rejetés: {phase_stats.chunks_rejected}")
+                logger.info(
+                    f"  • Appels LLM: {phase_stats.usage.llm_calls} "
+                    f"({phase_stats.usage.prompt_tokens} in / "
+                    f"{phase_stats.usage.completion_tokens} out tokens)"
+                )
                 logger.info(f"  • Durée: {phase_stats.duration_seconds:.1f}s")
 
             # Glossaire

@@ -20,6 +20,7 @@ from template.types import ConvertibleModel
 from ..logger import get_logger, get_session_log_path
 from .logger import LLMLogger
 from .template_renderers import DEFAULT_PROMPT_DIR, TemplateRenderer
+from .usage import UsageMeter
 
 logger = get_logger(__name__)
 
@@ -51,6 +52,10 @@ class LLM:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self._exchange_counter = 0
+
+        # Comptabilité des tokens : alimentée à chaque réponse aboutie, lue en
+        # fin de phase par `PhaseExecutor` pour remplir `PhaseStats`.
+        self.usage = UsageMeter()
 
         self.llm_logger = LLMLogger(logger)
 
@@ -111,6 +116,7 @@ class LLM:
                     logger=self.llm_logger,
                 )
 
+                self.usage.record(result)
                 response_text = result.content if result.content else "Result Empty"
 
                 if attempt > 0:
@@ -198,7 +204,7 @@ class LLM:
         else:
             client = self.client
 
-        json, _ = client.json_request(
+        json, response = client.json_request(
             system_prompt,
             content,
             response_model,
@@ -206,6 +212,7 @@ class LLM:
             self.llm_logger,
             self.max_retries,
         )
+        self.usage.record(response)
         return json
 
     def _make_log_path(self, context: str | None) -> Path:
