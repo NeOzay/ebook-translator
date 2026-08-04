@@ -42,7 +42,8 @@ Issues = "https://github.com/NeOzay/ebook-translator/issues"
 Repository = "https://github.com/NeOzay/ebook-translator"
 
 [project.scripts]
-ebook-translator = "ebook_translator.__main__:main"
+ebook-audit = "ebook_translator.audit.__main__:main"
+ebook-bench = "ebook_translator.bench.__main__:main"
 
 [dependency-groups]
 dev = [

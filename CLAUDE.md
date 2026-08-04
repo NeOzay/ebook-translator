@@ -34,7 +34,11 @@ uv run pytest --no-cov
 uv run pytest --cov-report=html
 
 # Comparative pipeline bench: runs N variants, writes bench/runs/<run_id>/
-uv run python -m ebook_translator.bench bench/config_exemple.py
+# (`python -m ebook_translator.bench` is equivalent, and needs no install)
+uv run ebook-bench bench/config_exemple.py
+
+# Per-phase audit against its spec: reads a cache, no LLM call, writes audit/runs/<id>/
+uv run ebook-audit "bench/runs/<run_id>/work/<variant>/cache" --phase glossary
 
 # Format + lint (ruff does both: `format` replaces black, the I-rules sort imports)
 uv run ruff format src/ tests/ && uv run ruff check --fix src/ tests/
@@ -91,6 +95,7 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 | `stores/` | Byte-level cache | `byte_store.py`, `store.py` |
 | `exporter/` | Markdown export | `analysis_exporter.py`, `glossary_exporter.py` |
 | `bench/` | Comparative bench | `suite.py`, `runner.py`, `worker.py`, `workspace.py`, `collect.py`, `report.py` |
+| `audit/` | Per-phase audit against a spec | `auditor.py`, `findings.py`, `source.py`, `glossary_auditor.py`, `report.py`, `specs/` |
 | `htmlpage/` | HTML parsing and text replacement | `page.py`, `replacement.py`, `bilingual.py` |
 | `translation/` | EPUB I/O | `epub_handler.py`, `language.py` |
 
@@ -181,6 +186,7 @@ Copy `.env.example` → `.env` and set your key. See [docs/SETUP.md](docs/SETUP.
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | Template architecture, variables, format |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Type annotations, docstrings, tests |
 | [docs/BENCH.md](docs/BENCH.md) | Comparative pipeline bench, shared phases, blind arbitration |
+| [docs/AUDIT.md](docs/AUDIT.md) | Per-phase audit against its spec, metrics without thresholds |
 | [docs/SETUP.md](docs/SETUP.md) | Installation, API keys, dev environment |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned features (not yet implemented) |
 | [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known debt, deliberately deferred, with what it would take to clear it |

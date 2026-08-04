@@ -5,7 +5,7 @@ composition des phases, segmentation — et faire arbitrer le résultat en aveug
 agent Claude.
 
 ```bash
-uv run python -m ebook_translator.bench bench/config_exemple.py
+uv run ebook-bench bench/config_exemple.py
 # puis, dans Claude Code :
 /bench-judge
 ```
@@ -103,11 +103,18 @@ corpus. Leur nombre reste reporté dans `README.md`.
 ## Ligne de commande
 
 ```bash
-uv run python -m ebook_translator.bench <config.py> [options]
+uv run ebook-bench <config.py> [options]
 
   --runs-dir DIR   Répertoire des runs (défaut : bench/runs)
   --run-id ID      Identifiant du run (horodaté par défaut)
   --only a,b       N'exécuter que ces variantes
+```
+
+`ebook-bench` est déclaré en `[project.scripts]`. La forme longue reste équivalente et
+fonctionne sans installation du paquet :
+
+```bash
+uv run python -m ebook_translator.bench <config.py>
 ```
 
 Code de sortie 1 si une variante a échoué — le run se poursuit malgré tout, les autres

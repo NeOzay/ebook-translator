@@ -77,3 +77,4 @@ template_outputs/
 
 # Runs du banc d'essais (volumineux, regénérables — voir docs/BENCH.md)
 bench/runs/
+audit/runs/

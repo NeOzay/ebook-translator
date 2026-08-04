@@ -16,6 +16,7 @@ Utilisé à la fois pour :
 import json
 import math
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self, TypedDict, cast
 
@@ -98,6 +99,56 @@ def _get_confidence_level(score: float) -> Literal["low", "medium", "high"]:
         return "medium"
     else:
         return "low"
+
+
+DEFAULT_MIN_REINJECTION_WEIGHT = 3
+"""Poids en deçà duquel un terme n'est pas réinjecté dans le prompt du glossaire.
+
+Seuil de `collect_entry_with_conflicts`, donc de `glossary_existing_block.jinja` :
+un terme plus léger que cela reste invisible au LLM, qui le réémet forcément.
+"""
+
+
+def confidence_level(weights: Sequence[int]) -> Literal["low", "medium", "high"]:
+    """Niveau de confiance d'une distribution de propositions.
+
+    Args:
+        weights: Effectifs des propositions concurrentes d'un même terme.
+
+    Returns:
+        `low`, `medium` ou `high`.
+
+    Example:
+        >>> confidence_level([5])
+        'high'
+    """
+    return _get_confidence_level(_compute_confidence(list(weights)))
+
+
+def converged_weight(search_limit: int = 100) -> int:
+    """Poids unanime minimal pour qu'un terme atteigne la confiance haute.
+
+    Un terme n'est retiré de la sortie attendue (`Termes validés — NE PAS
+    inclure`) qu'une fois `high`. Le facteur de masse `total / (total + 2)`
+    borne donc par le bas le nombre d'émissions nécessaires, même sans le
+    moindre désaccord : un livre plus court que ce seuil ne peut faire
+    converger aucun terme.
+
+    Args:
+        search_limit: Poids au-delà duquel la recherche abandonne.
+
+    Returns:
+        Le premier poids unanime classé `high`, ou `search_limit` si aucun
+        ne l'atteint.
+
+    Example:
+        >>> converged_weight()
+        5
+    """
+    for poids in range(1, search_limit + 1):
+        if confidence_level([poids]) == "high":
+            return poids
+    return search_limit
 
 
 class GlossaryStatistics(TypedDict):
@@ -359,7 +410,10 @@ class Glossary:
         return result
 
     def collect_entry_with_conflicts(
-        self, text: str, confidence_accumulate: float = 0.7, min_weight: int = 3
+        self,
+        text: str,
+        confidence_accumulate: float = 0.7,
+        min_weight: int = DEFAULT_MIN_REINJECTION_WEIGHT,
     ) -> list[GlossaryMultipleValueEntry]:
         text = text.lower()
         result: list[GlossaryMultipleValueEntry] = []

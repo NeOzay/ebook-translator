@@ -101,6 +101,53 @@ manuelles comprises. `Pipeline._glossary_export_path()` bascule sur
 `.<stem>_glossary.generated.json` quand le nom d'export désigne la source.
 Sans glossaire source fourni, le nom par défaut est inchangé.
 
+### ✨ Nouveautés
+
+#### Audit d'une phase contre son cahier des charges
+
+Nouveau package `ebook_translator.audit` et commande
+`python -m ebook_translator.audit <cache_dir> --phase glossary`. Là où
+`ebook_translator.bench` compare N variantes entre elles, l'audit confronte **une**
+sortie de phase à ce qu'elle devait être — deux variantes également mauvaises se
+départagent quand même sur un banc comparatif.
+
+L'audit ne lit que le disque : n'importe quel cache de pipeline
+(`.<stem>_cache/` ou `bench/runs/<id>/work/<v>/cache/`), aucun appel LLM, rejouable
+sans coût. Il écrit `audit/runs/<horodatage>-<phase>/` avec le rapport, les
+métriques, le cahier des charges recopié et un manifeste ; `/phase-audit` délègue
+ensuite l'instruction à l'agent `phase-auditor`.
+
+**Aucun seuil GO/NO-GO n'est appliqué** : « 48 termes » n'est ni bon ni mauvais dans
+l'absolu, cela dépend du livre. La référence est en prose
+(`audit/specs/<phase>.md`), les chiffres décrivent, l'agent juge. Corollaire assumé :
+les catégories heuristiques portent des faux positifs, que l'agent doit trier.
+
+Un seul auditeur pour l'instant, la phase glossaire, sur un socle générique
+(`PhaseAuditor`, `AuditFindings`, `AuditSource`). Sept catégories d'écart :
+`nom-commun-article`, `sans-marque-nom-propre`, `ancrage-faible`, `redondance`,
+`traduction-instable`, `classement-instable`, `candidat-manque`. Sur *The Yellow
+Wallpaper* : 48 termes uniques pour 6219 mots, dont **41 (85 %) touchés par au moins
+une observation**, et 28 termes à article de tête sans marque de nom propre.
+
+Trois garde-fous, tirés du premier audit réel :
+
+- une catégorie **mesurée sans cas** reste au rapport avec un effectif de `0` — la
+  faire disparaître la rendait indiscernable d'une catégorie non mesurable, listée
+  elle en « Limites de mesure » ;
+- les catégories n'étant **pas disjointes**, la somme de leurs effectifs (78) dépasse
+  le nombre de termes (48) : la métrique « Termes touchés par au moins une
+  observation » donne l'ampleur réelle, et chaque catégorie nomme ses cas au-delà des
+  12 exemples détaillés ;
+- `redondance` ne compte plus **que** les réémissions postérieures à la convergence.
+  Réémettre un terme non stabilisé est le mécanisme d'accumulation de poids, et
+  `glossary_existing_block.jinja` le réclame explicitement. Les seuils viennent de
+  `glossary.converged_weight()` (5 émissions unanimes) et
+  `DEFAULT_MIN_REINJECTION_WEIGHT` (3), pas d'une constante recopiée. Un livre de
+  moins de 5 chunks ne fait converger aucun terme : le rapport le signale, et la
+  stabilisation n'y est simplement pas mesurable.
+
+Voir [AUDIT.md](AUDIT.md).
+
 ### 🔧 Modifications
 
 - `Mode.TOOLS_STRICT` → `Mode.JSON` pour la voie Instructor : `TOOLS_STRICT`

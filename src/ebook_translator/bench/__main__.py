@@ -1,7 +1,7 @@
 """
 Ligne de commande du banc d'essais.
 
-    uv run python -m ebook_translator.bench bench/config_exemple.py
+    uv run ebook-bench bench/config_exemple.py
 
 Exécute la suite déclarée par le script, puis écrit le rapport comparatif dans
 `bench/runs/<run_id>/`. L'arbitrage se fait ensuite avec `/bench-judge`.
@@ -15,9 +15,13 @@ from pathlib import Path
 from ebook_translator.bench.collect import collect_corpus, variant_caches
 from ebook_translator.bench.report import write_report
 from ebook_translator.bench.runner import DEFAULT_RUNS_DIR, SeedFailedError, run_suite
+from ebook_translator.cli import program_name
 from ebook_translator.logger import get_logger
 
 logger = get_logger(__name__)
+
+MODULE_INVOCATION = "python -m ebook_translator.bench"
+"""Forme longue, à afficher quand la commande est lancée par `-m`."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         Code de sortie : 0 si toutes les variantes ont abouti, 1 sinon.
     """
     parser = argparse.ArgumentParser(
-        prog="python -m ebook_translator.bench",
+        prog=program_name(MODULE_INVOCATION),
         description="Compare plusieurs configurations de pipeline sur un même livre.",
     )
     _ = parser.add_argument(
