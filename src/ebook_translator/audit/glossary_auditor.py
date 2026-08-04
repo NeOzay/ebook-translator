@@ -400,6 +400,25 @@ class _SourceIndex:
             return 0
         return self.lowered.count(noyau)
 
+    def preceded_by_article(self, term: str) -> bool:
+        """Indique si la source emploie ce terme derrière un article.
+
+        Complète l'article porté par la clé émise, qui ne survit pas à la forme
+        canonique demandée par le prompt : `cellar` sans déterminant reste le
+        nom commun que la source écrit `the cellar`.
+
+        Args:
+            term: Terme source, en minuscules.
+
+        Returns:
+            True si `the <terme>`, `a <terme>` ou `an <terme>` figure dans la
+            source. Faux si l'index est indisponible.
+        """
+        noyau = _strip_article(_normalize(term))
+        if not self.available or not noyau:
+            return False
+        return any(f"{article}{noyau}" in self.lowered for article in LEADING_ARTICLES)
+
     def looks_like_proper_noun(self, term: str) -> bool:
         """Indique si un terme porte la marque d'un nom propre.
 
@@ -415,6 +434,24 @@ class _SourceIndex:
             self.mid_sentence_capitalized.get(mot, 0) > 0
             for mot in _WORD_RE.findall(_strip_article(_normalize(term)))
         )
+
+
+def _reads_as_common_noun(term: str, index: _SourceIndex) -> bool:
+    """Indique si un terme se lit comme un nom commun articulé.
+
+    Deux signaux valent l'un pour l'autre : l'article que le LLM a laissé dans
+    la clé, et celui que la source emploie devant le terme. Le premier disparaît
+    dès que le prompt impose une forme canonique ; le second survit. Les garder
+    tous deux maintient la mesure comparable de part et d'autre de ce changement.
+
+    Args:
+        term: Terme source, en minuscules.
+        index: Index du texte source.
+
+    Returns:
+        True si l'un des deux signaux est présent.
+    """
+    return term.startswith(LEADING_ARTICLES) or index.preceded_by_article(term)
 
 
 def _strip_article(term: str) -> str:
@@ -484,13 +521,17 @@ def _metrics(
             "émissions",
             detail="En deçà, le terme n'est pas montré au LLM au chunk suivant.",
         ),
-        Metric(
-            "Termes convergés",
-            len(converges),
-            "termes",
-            detail="Termes en confiance haute au terme du run.",
-        ),
     ]
+
+    if _convergence_reachable(par_chunk):
+        metrics.append(
+            Metric(
+                "Termes convergés",
+                len(converges),
+                "termes",
+                detail="Termes en confiance haute au terme du run.",
+            )
+        )
 
     if index.available:
         pour_mille = (
@@ -517,6 +558,24 @@ def _metrics(
     )
 
     return tuple(metrics)
+
+
+def _convergence_reachable(
+    par_chunk: Mapping[str, Sequence[LLMTermeGlossary]],
+) -> bool:
+    """Indique si un terme peut atteindre la confiance haute sur ce run.
+
+    Un terme n'est émis qu'une fois par chunk : un livre plus court que le poids
+    de convergence ne peut en stabiliser aucun, quoi que fasse le modèle. Ce
+    qui en dépend n'est alors pas mesuré à zéro, il est inobservable.
+
+    Args:
+        par_chunk: Termes émis, par chunk.
+
+    Returns:
+        True si le nombre de chunks atteint le poids de convergence.
+    """
+    return len(par_chunk) >= converged_weight()
 
 
 def _has_converged(usage: _TermUsage) -> bool:
@@ -575,8 +634,9 @@ def _observations(
 
     Les catégories d'effectif nul sont conservées : elles disent que le signal a
     été cherché et non trouvé, ce qu'une absence ne dit pas. Seules les
-    catégories réellement non mesurables — celles qui exigent le texte source —
-    sont omises, et les notes du rapport les listent alors.
+    catégories réellement non mesurables sont omises, et les notes du rapport
+    les listent alors : celles qui exigent le texte source, et la réémission
+    prématurée quand aucun terme ne peut converger sur ce run.
 
     Args:
         usages: Usage par terme.
@@ -589,8 +649,11 @@ def _observations(
     observations: list[Observation] = [
         _unstable_translation(usages),
         _unstable_classification(usages),
-        _premature_reemissions(par_chunk),
+        _surface_variants(usages),
     ]
+
+    if _convergence_reachable(par_chunk):
+        observations.append(_premature_reemissions(par_chunk))
 
     if index.available:
         observations.extend(
@@ -642,6 +705,121 @@ def _unstable_translation(usages: Mapping[str, _TermUsage]) -> Observation:
         samples=top_samples(echantillons, MAX_SAMPLES),
         subjects=tuple(usage.term for usage in concernes),
     )
+
+
+def _surface_variants(usages: Mapping[str, _TermUsage]) -> Observation:
+    """Clés distinctes qui désignent vraisemblablement le même élément.
+
+    Chaque clé peut être individuellement cohérente : aucune autre catégorie ne
+    voit `the yellow wallpaper`, `the wallpaper` et `yellow wallpaper` comme un
+    seul motif dont le poids a été divisé par trois. C'est pourtant ainsi qu'un
+    élément central échoue à converger.
+
+    Trois relations rapprochent deux clés : un même noyau une fois l'article
+    retiré, un noyau contenu dans l'autre à la frontière du mot, une même
+    proposition dominante. La troisième attrape `the piazza` et `the porch`,
+    tous deux rendus par « la véranda » — signe de deux entrées pour un lieu.
+
+    Args:
+        usages: Usage par terme.
+
+    Returns:
+        L'observation correspondante.
+    """
+    groupes = _variant_groups(usages)
+    echantillons = [
+        Sample(
+            subject=groupe[0],
+            evidence=" / ".join(
+                f"`{terme}` (poids {usages[terme].emissions})" for terme in groupe
+            ),
+            context=f"{len(groupe)} clés pour un élément",
+        )
+        for groupe in groupes
+    ]
+    membres = tuple(terme for groupe in groupes for terme in groupe)
+    return Observation(
+        category="variantes-de-surface",
+        title="Plusieurs clés pour un même élément",
+        description=(
+            "Le poids d'un élément se répartit sur des clés concurrentes au lieu "
+            "de s'accumuler sur une seule, ce qui retarde d'autant sa "
+            "convergence. Deux entités réellement distinctes peuvent partager un "
+            "noyau (`the front design` et `the back pattern`) — vérifier sur "
+            "pièces avant de conclure."
+        ),
+        count=len(membres),
+        samples=top_samples(echantillons, MAX_SAMPLES),
+        subjects=membres,
+    )
+
+
+def _variant_groups(usages: Mapping[str, _TermUsage]) -> list[tuple[str, ...]]:
+    """Regroupe les clés qui paraissent désigner le même élément.
+
+    Args:
+        usages: Usage par terme.
+
+    Returns:
+        Les groupes d'au moins deux clés, la plus lourde en tête, triés par
+        taille décroissante.
+    """
+    termes = sorted(usages)
+    noyaux = {terme: _strip_article(_normalize(terme)) for terme in termes}
+    dominantes = {
+        terme: _dominant(usage.translations) for terme, usage in usages.items()
+    }
+    parent = {terme: terme for terme in termes}
+
+    def racine(terme: str) -> str:
+        while parent[terme] != terme:
+            parent[terme] = parent[parent[terme]]
+            terme = parent[terme]
+        return terme
+
+    def unir(gauche: str, droite: str) -> None:
+        a, b = racine(gauche), racine(droite)
+        if a != b:
+            parent[b] = a
+
+    for i, gauche in enumerate(termes):
+        for droite in termes[i + 1 :]:
+            if _same_element(noyaux[gauche], noyaux[droite]) or (
+                dominantes[gauche] and dominantes[gauche] == dominantes[droite]
+            ):
+                unir(gauche, droite)
+
+    groupes: dict[str, list[str]] = {}
+    for terme in termes:
+        groupes.setdefault(racine(terme), []).append(terme)
+
+    retenus = [
+        tuple(sorted(membres, key=lambda t: (-usages[t].emissions, t)))
+        for membres in groupes.values()
+        if len(membres) > 1
+    ]
+    return sorted(retenus, key=lambda g: (-len(g), g[0]))
+
+
+def _same_element(gauche: str, droite: str) -> bool:
+    """Indique si deux noyaux désignent vraisemblablement le même élément.
+
+    Args:
+        gauche: Noyau d'un terme, article retiré.
+        droite: Noyau d'un autre terme.
+
+    Returns:
+        True si les noyaux sont identiques, ou si l'un contient l'autre à la
+        frontière du mot.
+    """
+    if not gauche or not droite:
+        return False
+    if gauche == droite:
+        return True
+    court, long = sorted((gauche, droite), key=len)
+    if court not in long:
+        return False
+    return re.search(rf"(?:^|\s){re.escape(court)}(?:\s|$)", long) is not None
 
 
 def _unstable_classification(usages: Mapping[str, _TermUsage]) -> Observation:
@@ -756,7 +934,7 @@ def _leading_article(
         (
             u
             for u in usages.values()
-            if u.term.startswith(LEADING_ARTICLES)
+            if _reads_as_common_noun(u.term, index)
             and not index.looks_like_proper_noun(u.term)
         ),
         key=lambda u: u.term,
@@ -771,11 +949,13 @@ def _leading_article(
     ]
     return Observation(
         category="nom-commun-article",
-        title="Nom commun générique introduit par un article",
+        title="Nom commun générique employé derrière un article",
         description=(
-            "`the bay`, `the cellar`, `the garden` : un article de tête sans "
-            "aucune capitale en milieu de phrase désigne presque toujours un nom "
-            "commun, qu'aucune traduction n'a besoin de stabiliser. Un lieu nommé "
+            "`the bay`, `the cellar`, `the garden` : un terme que la source fait "
+            "précéder d'un article, sans aucune capitale en milieu de phrase, "
+            "désigne presque toujours un nom commun, qu'aucune traduction n'a "
+            "besoin de stabiliser. L'article est cherché dans le texte, pas dans "
+            "la clé émise, que le prompt demande sans déterminant. Un lieu nommé "
             "peut faire exception (`the Thames`) — vérifier sur pièces."
         ),
         count=len(concernes),
@@ -801,7 +981,7 @@ def _no_proper_noun_evidence(
             u
             for u in usages.values()
             if not index.looks_like_proper_noun(u.term)
-            and not u.term.startswith(LEADING_ARTICLES)
+            and not _reads_as_common_noun(u.term, index)
         ),
         key=lambda u: u.term,
     )
@@ -966,15 +1146,21 @@ def _notes(
     ]
 
     seuil = converged_weight()
-    if par_chunk and len(par_chunk) < seuil:
+    if par_chunk and not _convergence_reachable(par_chunk):
         notes.append(
             f"**Livre trop court pour la convergence** : {len(par_chunk)} chunks "
             f"pour un poids de convergence de {seuil}. Un terme ne pouvant être "
             "émis qu'une fois par chunk, aucun ne peut atteindre la confiance "
             "haute sur ce run. Tous restent donc « à arbitrer », et le prompt "
             "leur demande d'être réémis à chaque chunk : la réémission observée "
-            "ici est prescrite, pas fautive. Les tendances de sur-extraction "
-            "restent lisibles ; la stabilisation, non."
+            "ici est prescrite, pas fautive. La catégorie `redondance` et la "
+            "métrique « Termes convergés » sont omises pour cette raison — "
+            "elles seraient lues comme des zéros mesurés. Un terme est réexposé "
+            "au LLM dès le chunk suivant, mais ses traductions candidates ne lui "
+            f"sont soumises qu'à partir du poids "
+            f"{DEFAULT_MIN_REINJECTION_WEIGHT} : en deçà, il ne voit que la "
+            "forme du terme. Les tendances de sur-extraction restent lisibles ; "
+            "la stabilisation, non."
         )
     elif usages and not any(_has_converged(u) for u in usages.values()):
         notes.append(

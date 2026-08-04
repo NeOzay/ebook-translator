@@ -102,10 +102,12 @@ def _get_confidence_level(score: float) -> Literal["low", "medium", "high"]:
 
 
 DEFAULT_MIN_REINJECTION_WEIGHT = 3
-"""Poids en deçà duquel un terme n'est pas réinjecté dans le prompt du glossaire.
+"""Poids à partir duquel un terme est réinjecté avec ses propositions.
 
-Seuil de `collect_entry_with_conflicts`, donc de `glossary_existing_block.jinja` :
-un terme plus léger que cela reste invisible au LLM, qui le réémet forcément.
+Seuil de partage de `glossary_existing_block.jinja`. Tous les termes présents
+dans le bloc sont montrés au LLM ; en deçà de ce poids, seule leur forme l'est,
+sans les traductions candidates — assez pour que le modèle réutilise la même clé
+plutôt qu'une variante, pas assez pour l'ancrer sur une proposition isolée.
 """
 
 
@@ -151,6 +153,35 @@ def converged_weight(search_limit: int = 100) -> int:
     return search_limit
 
 
+def _bump_casing(casing: dict[str, dict[str, int]], key: str, surface: str) -> None:
+    """Enregistre une graphie observée pour une proposition.
+
+    Args:
+        casing: Graphies mémorisées du terme, par proposition minuscule.
+        key: Proposition en minuscules, clé de décompte.
+        surface: Proposition telle que le LLM l'a écrite.
+    """
+    graphies = casing.setdefault(key, {})
+    graphies[surface] = graphies.get(surface, 0) + 1
+
+
+def _preferred_casing(casing: dict[str, dict[str, int]], key: str) -> str:
+    """Graphie à restituer pour une proposition.
+
+    Args:
+        casing: Graphies mémorisées du terme, par proposition minuscule.
+        key: Proposition en minuscules.
+
+    Returns:
+        La graphie la plus fréquemment observée, ou la clé minuscule si aucune
+        n'a été mémorisée — cas d'un cache écrit avant que la casse soit suivie.
+    """
+    graphies = casing.get(key)
+    if not graphies:
+        return key
+    return max(graphies, key=lambda forme: (graphies[forme], forme))
+
+
 class GlossaryStatistics(TypedDict):
     total_terms: int
     user_terms: int
@@ -162,6 +193,7 @@ class Glossary:
         translations: dict[str, int]
         term_types: dict[GlossaryEntryType, int]
         sexes: dict[GlossaryEntrySexe, int]
+        translation_casing: dict[str, dict[str, int]]
 
     @staticmethod
     def _new_entry() -> Glossary._Entry:
@@ -169,6 +201,7 @@ class Glossary:
             "translations": defaultdict(int),
             "term_types": defaultdict(int),
             "sexes": defaultdict(int),
+            "translation_casing": defaultdict(lambda: defaultdict(int)),
         }
 
     """
@@ -232,15 +265,19 @@ class Glossary:
             return
 
         source_term = term["terme"].lower()
-        translated_term = term["proposition_traduction"].lower()
+        proposition = term["proposition_traduction"]
+        translated_term = proposition.lower()
         term_type = cast(GlossaryEntryType, term["type"].lower())
         sexe = cast(GlossaryEntrySexe, term["sexe"].lower())
 
         entry = self._glossary[source_term]
-        # Incrémenter le compteur
+        # Incrémenter le compteur. Le décompte porte sur la forme minuscule :
+        # `Jean` et `jean` sont la même proposition et doivent cumuler leur
+        # poids. La graphie, elle, est retenue à part pour être restituée.
         entry["translations"][translated_term] += 1
         entry["term_types"][term_type] += 1
         entry["sexes"][sexe] += 1
+        _bump_casing(entry["translation_casing"], translated_term, proposition)
 
         self._entries_cache.pop(source_term, None)
 
@@ -295,7 +332,7 @@ class Glossary:
 
         entry: GlossaryEntry = {
             "terme": source_term,
-            "traduction": translation,
+            "traduction": _preferred_casing(term["translation_casing"], translation),
             "type": term_type,
             "sexe": sexe,
             "weight": weight,
@@ -323,7 +360,12 @@ class Glossary:
 
         return {
             "terme": source_term,
-            "traductions": _get_possible_translations(term["translations"], confidence),
+            "traductions": [
+                (_preferred_casing(term["translation_casing"], proposition), poids)
+                for proposition, poids in _get_possible_translations(
+                    term["translations"], confidence
+                )
+            ],
             "types": _get_possible_translations(term["term_types"], confidence),
             "sexes": _get_possible_translations(term["sexes"], confidence),
             "weight": weight,
@@ -352,7 +394,7 @@ class Glossary:
         """
         term: GlossaryEntry = {
             "terme": terme.lower(),
-            "traduction": translation.lower(),
+            "traduction": translation,
             "type": terme_type,
             "sexe": sexe,
             "confidence": "high",
@@ -413,8 +455,24 @@ class Glossary:
         self,
         text: str,
         confidence_accumulate: float = 0.7,
-        min_weight: int = DEFAULT_MIN_REINJECTION_WEIGHT,
     ) -> list[GlossaryMultipleValueEntry]:
+        """Collecte tous les termes déjà appris que le bloc courant emploie.
+
+        Aucun filtre de poids : un terme trop léger pour être arbitré doit
+        quand même être montré, sans quoi il reste invisible au LLM, qui le
+        réémet sous une forme voisine et divise d'autant son poids. Le tri par
+        poids revient à `glossary_existing_block.jinja`, qui montre les
+        propositions au-delà de `DEFAULT_MIN_REINJECTION_WEIGHT` et la seule
+        forme du terme en deçà.
+
+        Args:
+            text: Texte du bloc courant.
+            confidence_accumulate: Couverture visée par les propositions listées.
+
+        Returns:
+            Une entrée par terme appris présent dans le bloc, entrées `user`
+            exclues.
+        """
         text = text.lower()
         result: list[GlossaryMultipleValueEntry] = []
         for terme in self._glossary:
@@ -425,7 +483,7 @@ class Glossary:
             if count == 0:
                 continue
             entry = self.get_translations_until_confidence(terme, confidence_accumulate)
-            if entry and entry["weight"] >= min_weight:
+            if entry:
                 result.append(entry)
 
         return result
@@ -616,6 +674,14 @@ class Glossary:
             for sexe, count in entry.get("sexes", {}).items():
                 decayed = max(1, math.ceil(count * decay))
                 self._glossary[source]["sexes"][sexe] += decayed
+            # Les graphies ne subissent pas le decay : elles ne pondèrent rien,
+            # elles départagent l'écriture d'une proposition déjà pondérée.
+            for proposition, graphies in entry.get("translation_casing", {}).items():
+                for surface, count in graphies.items():
+                    cible = self._glossary[source]["translation_casing"].setdefault(
+                        proposition, {}
+                    )
+                    cible[surface] = cible.get(surface, 0) + count
 
         # Entrées user : fusion sans decay (la traduction validée reste valide)
         for terme, entry in data.get("user", {}).items():

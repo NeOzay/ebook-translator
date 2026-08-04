@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import template as _template_package
+from ebook_translator.glossary import DEFAULT_MIN_REINJECTION_WEIGHT
 from ebook_translator.segmentation.chapter_chunk import ChapterPartChunk
 
 from ..segmentation import Chunk, ChunkProtocol, TranslatedChunk
@@ -699,5 +700,6 @@ class TemplateRenderer:
             "existing_glossary": (
                 glossary.collect_entry_with_conflicts(block_text) if glossary else None
             ),
+            "min_reinjection_weight": DEFAULT_MIN_REINJECTION_WEIGHT,
         }
         return self.render_prompt(PhaseTemplate.Glossary, **params)

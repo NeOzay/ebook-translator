@@ -146,12 +146,17 @@ class TestMetriques:
     def test_livre_trop_court_signale_en_limite(
         self, auditer: Callable[..., AuditFindings]
     ) -> None:
-        """Sous le poids de convergence, la réémission est prescrite, pas fautive."""
+        """Sous le poids de convergence, la réémission est prescrite, pas fautive.
+
+        Ce qui en dépend n'est pas mesuré à zéro : il est inobservable, donc omis
+        du rapport au profit d'une limite de mesure.
+        """
         findings = auditer({"0_a": [terme("john", "john")]})
 
         assert any("trop court pour la convergence" in n for n in findings.notes)
         assert _metric(findings, "Poids de convergence") == converged_weight()
-        assert _metric(findings, "Termes convergés") == 0
+        assert all(m.label != "Termes convergés" for m in findings.metrics)
+        assert _observation(findings, "redondance") is None
 
     def test_composition_par_type(self, auditer: Callable[..., AuditFindings]) -> None:
         findings = auditer(
@@ -278,6 +283,77 @@ class TestCatalogueErreurs:
         findings = GlossaryAuditor().run(source)
 
         assert _count(findings, "nom-commun-article") == 0
+
+    def test_nom_commun_signale_meme_sans_article_dans_la_cle(
+        self, auditer: Callable[..., AuditFindings]
+    ) -> None:
+        """Le prompt demande une clé sans déterminant : l'article se cherche dans
+        la source, sinon le détecteur devient aveugle au premier prompt corrigé."""
+        findings = auditer({"0_a": [terme("cellar", "la cave", type_="lieu")]})
+
+        observation = _observation(findings, "nom-commun-article")
+        assert observation is not None
+        assert observation.samples[0].subject == "cellar"
+
+    def test_terme_jamais_precede_d_article_reste_hors_categorie(
+        self, auditer: Callable[..., AuditFindings]
+    ) -> None:
+        """La partition avec `sans-marque-nom-propre` doit rester exclusive."""
+        findings = auditer({"0_a": [terme("dawn", "l'aube")]})
+
+        assert _count(findings, "nom-commun-article") == 0
+        sans_marque = _observation(findings, "sans-marque-nom-propre")
+        assert sans_marque is not None
+        assert any(s.subject == "dawn" for s in sans_marque.samples)
+
+    def test_variantes_de_surface_regroupees(
+        self, auditer: Callable[..., AuditFindings]
+    ) -> None:
+        """Trois clés pour un motif : chacune est cohérente, le poids est divisé."""
+        findings = auditer(
+            {
+                "0_a": [
+                    terme("the yellow wallpaper", "le papier peint jaune"),
+                    terme("the wallpaper", "le papier peint"),
+                    terme("yellow wallpaper", "le papier jaune"),
+                ]
+            }
+        )
+
+        observation = _observation(findings, "variantes-de-surface")
+        assert observation is not None
+        assert observation.count == 3
+        assert len(observation.samples) == 1
+        assert "yellow wallpaper" in observation.samples[0].evidence
+
+    def test_cles_distinctes_non_regroupees(
+        self, auditer: Callable[..., AuditFindings]
+    ) -> None:
+        findings = auditer(
+            {
+                "0_a": [
+                    terme("john", "john", type_="personnage"),
+                    terme("jennie", "jennie", type_="personnage"),
+                ]
+            }
+        )
+
+        assert _count(findings, "variantes-de-surface") == 0
+
+    def test_proposition_partagee_regroupe_deux_cles(
+        self, auditer: Callable[..., AuditFindings]
+    ) -> None:
+        """`the piazza` et `the porch` rendus tous deux « la véranda » : un lieu."""
+        findings = auditer(
+            {
+                "0_a": [
+                    terme("the piazza", "la véranda", type_="lieu"),
+                    terme("the porch", "la véranda", type_="lieu"),
+                ]
+            }
+        )
+
+        assert _count(findings, "variantes-de-surface") == 2
 
     def test_terme_non_recurrent_signale(
         self, auditer: Callable[..., AuditFindings]

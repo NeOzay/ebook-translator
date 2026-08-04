@@ -10,12 +10,63 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire* | *3 effets de bord, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire* | *3 effets de bord, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
 
 ## Non publié
+
+### ✨ Sélection du glossaire et mesure par phase
+
+#### La phase glossaire sélectionne au lieu de balayer
+
+`glossary_system.jinja` remplace sa puce de couverture par catégories — « le
+glossaire doit couvrir : personnages, lieux, créatures… » — par des conditions
+d'admission cumulatives, une liste d'exclusion et une dérogation pour les noms
+propres. L'ancienne consigne disait *comment ranger* un terme, jamais *s'il
+fallait le retenir*.
+
+Les conditions portent sur le **bloc courant** et sur le glossaire réinjecté :
+chaque appel LLM est isolé, un critère qui parle du livre entier est
+invérifiable. La colonne `terme` porte désormais une forme canonique sans
+déterminant.
+
+Sur *The Yellow Wallpaper*, 48 termes deviennent 19 (DeepSeek) et 14 (Mistral)
+sans qu'aucune entité nommée disparaisse. `the yellow wallpaper`, émis sous
+trois clés de poids 1, devient une clé unique de poids 4.
+
+#### La réinjection montre tous les termes du bloc
+
+`collect_entry_with_conflicts` ne filtre plus par poids. Le seuil
+`DEFAULT_MIN_REINJECTION_WEIGHT` décide maintenant du **détail montré**, pas de
+la visibilité : au-delà, le terme et ses propositions pondérées ; en deçà, sa
+seule forme. Un terme trop léger restait invisible au LLM, qui le réémettait
+sous une variante divisant encore son poids.
+
+`GlossaryParams` porte le seuil ; le partage en trois groupes se fait dans
+`glossary_existing_block.jinja`.
+
+#### Le glossaire ne minuscule plus les propositions de traduction
+
+`Glossary.learn` continue de compter sur la forme minuscule — `Jean` et `jean`
+sont la même proposition et doivent cumuler leur poids — mais mémorise les
+graphies observées et restitue la dominante. Les phases 1 et 2 recevaient
+jusqu'ici un glossaire d'anthroponymes en bas de casse.
+
+Cache rétrocompatible : un glossaire écrit sans `translation_casing` se relit et
+rend la forme minuscule, comme avant.
+
+#### L'audit voit les clés concurrentes
+
+Nouvelle catégorie `variantes-de-surface` : des clés distinctes qui désignent le
+même élément, chacune individuellement cohérente, donc invisible à toute autre
+catégorie. `nom-commun-article` retient l'article de la clé **ou** celui de la
+source, faute de quoi la forme canonique le rendrait aveugle.
+
+`redondance` et « Termes convergés » passent en limite de mesure quand le livre
+compte moins de chunks que le poids de convergence : aucun terme ne pouvant
+alors converger, leur zéro n'était pas un constat.
 
 ### ⚡ Breaking Changes
 
