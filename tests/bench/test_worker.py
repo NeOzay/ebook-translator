@@ -8,6 +8,8 @@ import pytest
 from ebook_translator.bench.results import RESULT_FILENAME, VariantResult
 from ebook_translator.bench.suite import RunEnv
 from ebook_translator.bench.worker import _check_env_honored, execute, main
+from ebook_translator.bench.workspace import variant_logs_dir
+from ebook_translator.logger import get_session_log_path
 
 
 def make_env(tmp_path: Path) -> RunEnv:
@@ -85,3 +87,19 @@ class TestMain:
         assert code == 1
         result = VariantResult.read(work_root / "a" / RESULT_FILENAME)
         assert result.status == "error"
+
+    def test_redirige_les_logs_dans_le_workspace(
+        self, tmp_path: Path, write_config: Callable[..., Path]
+    ):
+        config = write_config()
+        work_root = tmp_path / "work"
+
+        _ = main(
+            ["--config", str(config), "--variant", "a", "--work-root", str(work_root)]
+        )
+
+        # La fabrique lève : la trace de l'échec doit rester avec la variante,
+        # pas partir dans le `logs/run_<horodatage>/` du répertoire courant.
+        logs = variant_logs_dir(work_root, "a")
+        assert get_session_log_path("llm_0001.log").parent == logs
+        assert list(logs.glob("*.log")), "aucun log écrit dans le workspace"

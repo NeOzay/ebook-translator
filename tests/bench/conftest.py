@@ -1,9 +1,28 @@
 """Fixtures communes aux tests du banc d'essais."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 import pytest
+
+from ebook_translator.logger import _FILE_HANDLERS, LogSession
+
+
+@pytest.fixture(autouse=True)
+def restaure_la_session_de_logs() -> Generator[None]:
+    """Annule les redirections de logs faites par le harness ou le worker.
+
+    `run_suite` et `worker.main` re-ciblent les loggers du processus vers le
+    run qu'ils créent. Sans restauration, un test enverrait les logs des
+    suivants dans son `tmp_path`, effacé entre-temps.
+    """
+    session = LogSession._session_dir  # pyright: ignore[reportPrivateUsage]
+    fichiers = [(handler, handler.filename) for handler in _FILE_HANDLERS]
+    yield
+    LogSession._session_dir = session  # pyright: ignore[reportPrivateUsage]
+    for handler, filename in fichiers:
+        handler.set_directory(filename.parent)
+
 
 CONFIG_TEMPLATE = """
 from pathlib import Path

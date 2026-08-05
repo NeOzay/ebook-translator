@@ -22,9 +22,15 @@ from datetime import datetime
 from pathlib import Path
 
 from ebook_translator.bench.results import RESULT_FILENAME, VariantResult
-from ebook_translator.bench.suite import SEED_ID, BenchSuite, Variant, load_suite
+from ebook_translator.bench.suite import (
+    LOGS_DIRNAME,
+    SEED_ID,
+    BenchSuite,
+    Variant,
+    load_suite,
+)
 from ebook_translator.bench.workspace import prepare_workspace, seed_shared_phases
-from ebook_translator.logger import get_logger
+from ebook_translator.logger import LogSession, get_logger
 
 logger = get_logger(__name__)
 
@@ -122,6 +128,10 @@ def run_suite(
     work_root = root / WORK_DIRNAME
     work_root.mkdir(parents=True, exist_ok=True)
     _ = shutil.copy2(config, root / CONFIG_COPY_NAME)
+
+    # Rattache la trace du harness au run — et, du même coup, celle de la
+    # collecte et du rapport, qui s'exécutent ensuite dans ce processus.
+    LogSession.redirect(root / LOGS_DIRNAME)
 
     logger.info(f"🏁 Banc d'essais {run_id} — {len(selection)} variante(s)")
 

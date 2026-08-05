@@ -51,6 +51,9 @@ from ebook_translator.pipeline.builder import PipelineBuilder
 SEED_ID = "seed"
 """Identifiant réservé au run d'amorçage : aucune variante ne peut le porter."""
 
+LOGS_DIRNAME = "logs"
+"""Nom du répertoire des logs, dans un workspace de variante comme dans un run."""
+
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 """Un identifiant sert de nom de répertoire : minuscules, chiffres, `-` et `_`."""
 
@@ -77,6 +80,16 @@ class RunEnv:
     output: Path
     cache_dir: Path
     workspace: Path
+
+    @property
+    def logs_dir(self) -> Path:
+        """Répertoire des logs de la variante.
+
+        Le sous-processus s'y redirige avant d'exécuter le pipeline : la trace
+        d'une variante reste ainsi dans son workspace, avec son cache et son
+        résultat.
+        """
+        return self.workspace / LOGS_DIRNAME
 
 
 type PipelineFactory = Callable[[RunEnv], PipelineBuilder]
