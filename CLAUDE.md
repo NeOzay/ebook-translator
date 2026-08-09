@@ -20,8 +20,8 @@ uv sync --group dev
 uv run basedpyright src/
 
 # Run all tests. NOTE: coverage is always on (pyproject `addopts`) with a
-# --cov-fail-under=80 gate. Coverage currently sits at ~72%, so this command
-# exits 1 even when every test passes — read the test summary, not the exit code.
+# --cov-fail-under=80 gate. Coverage sits at ~84%, so the gate passes and the
+# exit code is meaningful again — a non-zero exit means a real failure.
 uv run pytest
 
 # Run a specific test file or function
@@ -88,7 +88,7 @@ Each phase extends `PhaseBase` ([pipeline/base.py](src/ebook_translator/pipeline
 | `pipeline/` | Orchestration | `pipeline.py`, `base.py`, `executor.py`, `builder.py`, `context.py`, `store_manager.py`, `phase_storage.py` |
 | `pipeline/phases/` | Phase implementations | `literary_analysis.py`, `glossary.py`, `initial_translation.py`, `refinement.py` |
 | `segmentation/` | Chunking + chapter detection | `segmentator.py`, `chunk.py`, `chapter.py`, `chapter_detector.py` |
-| `llm/` | LLM client, providers, templates, retry registry | `llm.py`, `clients/` (`protocol.py`, `base.py`, `client.py`, `deepseek.py`, `mistral.py`), `errors.py`, `template_renderers.py`, `retry_registry.py` |
+| `llm/` | LLM client, providers, templates, retry registry, rate limiting | `llm.py`, `clients/` (`protocol.py`, `base.py`, `client.py`, `deepseek.py`, `mistral.py`), `errors.py`, `rate_limit.py`, `template_renderers.py`, `retry_registry.py` |
 | `validation/` | Multi-thread validation/save | `validation_worker_pool.py`, `worker_base.py`, `unified_worker.py`, `schema_only_worker.py`, `save_worker.py`, `worker_retry.py` |
 | `checks/` | Validation rules | `content_check.py`, `content/` |
 | `persistence/` | Cache layout | `chunk_persister.py`, `line_indexed_persister.py`, `memoized_chunk_persister.py` |
@@ -121,6 +121,8 @@ Phase 0 is the only phase with structured output: it goes through Instructor on 
 
 Confidence is `dominance × mass`, with `mass = w / (w + 2)`. Two thresholds follow, both derived rather than hard-coded: `DEFAULT_MIN_REINJECTION_WEIGHT` (3) decides whether the glossary phase prompt shows a term's proposals or only its surface form, and `converged_weight()` (5) is the unanimous weight needed for high confidence. A book shorter than 5 glossary chunks therefore converges nothing — re-emitting an unconverged term is the mechanism, not a fault.
 
+Once a term reaches high confidence — or is a `user` entry — its distribution is **frozen**: `collect_entry` drops every further proposal, contradictions included. The prompt does list those terms as "do not include", but the model complies poorly (10 converged terms out of 11 re-emitted, measured on a full volume), so the filter sits in Python rather than in the prompt.
+
 **Glossary seeding** ([glossary_seed.py](src/ebook_translator/glossary_seed.py)): fills the glossary before any LLM call, so selection mechanisms can be exercised without waiting for a full run. A TOML file states the *intent* — `niveau = "valide" | "arbitrer" | "emergent"`, matching the three groups of `glossary_existing_block.jinja` — and weights are derived from it. `user = true` yields a validated, authoritative entry. Wired through `PipelineBuilder.glossary()` / `.glossary_seed()`, both resolved at `build()` in any order. Example: [bench/seeds/exemple.toml](bench/seeds/exemple.toml).
 
 ## Phase 0: Literary Analysis
@@ -150,7 +152,7 @@ Correction routing lives in `RETRY_REGISTRY` ([llm/retry_registry.py](src/ebook_
 Jinja2 templates live in the `src/template/` package, rendered via `TemplateRenderer` ([llm/template_renderers.py](src/ebook_translator/llm/template_renderers.py)). Each prompt is a **pair** `<name>_system.jinja` + `<name>_user.jinja`, resolved by the `PhaseTemplate` (prefix `phase/`) and `RetryTemplate` (prefix `retry/`) enums.
 
 - `phase/translate_base_*` — Phase 1 initial translation
-- `phase/translate_refine_*` — Phase 2 refinement (includes glossary)
+- `phase/translate_refine_*` — Phase 2 refinement (adds the previous translation)
 - `phase/analyze_chapter_layered_*` — Phase 0 stratified analysis
 - `phase/glossary_*` — glossary extraction
 - `retry/*` — correction prompts, one per error type

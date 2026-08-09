@@ -10,12 +10,26 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié* | *3 effets de bord, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié, `template` absorbé* | *3 effets de bord, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
 
 ## Non publié
+
+### 🧹 `template` n'est plus un sous-module git
+
+`src/template/` était un dépôt distinct monté en sous-module. Le pointeur devait
+être resynchronisé à chaque merge, pour un contenu qui n'a jamais servi ailleurs
+que dans ce dépôt. Le coût de coordination dépassait le bénéfice : un checkout
+resté en arrière suffisait à faire régresser les tests sans que rien ne le
+signale — c'est exactement ce qui est arrivé lors de l'absorption, l'arbre de
+travail pointant un ancêtre qui annulait la préservation de casse des traductions
+proposées.
+
+Le contenu est désormais versionné dans le dépôt principal, figé sur `23865dc`.
+L'historique du sous-module reste consultable sur `NeOzay/ebook-translator-template`.
+Plus rien à faire au clone : ni `--recursive`, ni `git submodule update`.
 
 ### 🚦 Maîtrise du débit LLM et statut de variante vérifié
 
@@ -277,9 +291,8 @@ Voir [AUDIT.md](AUDIT.md).
 
 ### 📊 Compteurs
 
-`pytest` **385 passés** · `basedpyright src/ebook_translator` **0 erreur** ·
-couverture 72,30 % (seuil 80 % non tenu, cf.
-[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md)).
+`pytest` **790 passés** · `basedpyright src/` **0 erreur** · couverture **83,72 %**
+(seuil de 80 % désormais tenu — l'entrée de dette correspondante est soldée).
 
 ### ⚠️ Effets de bord
 
@@ -289,10 +302,11 @@ Deux conséquences assumées, détaillées dans
 - **Glossaire peuplé depuis un hook asynchrone** — `GlossaryPhase` a migré
   `_populate_glossary()` dans `on_save`. Le peuplement n'est plus garanti
   visible du chunk suivant, et une exception y est absorbée par le `SaveWorker`
-  (entrée 6).
+  (entrée « Le glossaire est peuplé depuis un hook asynchrone »).
 - **`LLM.max_retries` pilote deux mécanismes** — la boucle de retry réseau de
   `query()` et les corrections de schéma d'instructor dans `json_query()`
-  partagent le même réglage (entrée 7).
+  partagent le même réglage (entrée « `LLM.max_retries` pilote deux mécanismes
+  différents »).
 
 ---
 

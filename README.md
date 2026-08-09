@@ -130,7 +130,7 @@ uv run pytest --no-cov
 ```
 
 `uv run pytest` alone keeps the `--cov-fail-under=80` gate from `pyproject.toml`.
-Coverage currently sits at ~72%, so it exits 1 even when every test passes.
+Coverage sits at ~84%, so the gate passes and a non-zero exit means a real failure.
 
 **All quality checks**:
 ```bash

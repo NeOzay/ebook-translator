@@ -45,7 +45,7 @@ template/
 | Membre de `PhaseTemplate` | Fichiers | Phase |
 |---|---|---|
 | `First_Pass_Template` | `translate_base_*` | Phase 1 — traduction initiale |
-| `Refine_Template` | `translate_refine_*` | Phase 2 — raffinage (glossaire + traduction précédente) |
+| `Refine_Template` | `translate_refine_*` | Phase 2 — raffinage (ajoute la traduction précédente) |
 | `Analyze_Chapter` | `analyze_chapter_*` | Phase 0 — analyse simple |
 | `Analyze_Chapter_Layered` | `analyze_chapter_layered_*` | Phase 0 — analyse stratifiée (`AnalyseChapter`) |
 | `Glossary` | `glossary_*` | Phase glossaire |

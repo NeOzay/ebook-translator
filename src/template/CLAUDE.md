@@ -2,31 +2,35 @@
 
 ## Vue d'ensemble
 
-Templates Jinja2 utilisés par un orchestrateur Python pour traduire des epub via l'API DeepSeek V3. Chaque phase segmente le texte, prépare les prompts system/user, appelle le modèle, valide la sortie via un pipeline de checks, et sauvegarde. En cas d'échec de check, un prompt `retry_*` ciblé est émis.
+Templates Jinja2 utilisés par le pipeline `ebook_translator` pour traduire des epub via des API compatibles OpenAI (DeepSeek, Mistral). Chaque phase segmente le texte, prépare les prompts system/user, appelle le modèle, valide la sortie via un pipeline de checks, et sauvegarde. En cas d'échec de check, un prompt `retry_*` ciblé est émis.
 
 ### Pipeline global
 
 ```
-┌──────────────────┐
-│ Analyse littér.  │─┐
-│ (analyze_chapter)│ │
-│ → contexte       │ │
-└──────────────────┘ │    ┌─────────────┐   ┌──────────────┐
-                     ├──→ │ Traduction  │ → │ Raffinement  │
-┌──────────────────┐ │    │ (phase 1)   │   │ (phase 2)    │
-│ Glossaire        │─┘    │ translate_  │   │ translate_   │
-│ (glossary) ↻     │      │ base        │   │ refine       │
-│ → entrées pondér.│      └─────────────┘   └──────────────┘
-└──────────────────┘
+┌────────────────────────┐   ┌──────────────────┐
+│ Analyse littéraire     │ → │ Glossaire        │ ─┐
+│ (analyze_chapter_      │   │ (glossary)       │  │
+│  layered) → contexte   │   │ → entrées pondér.│  │
+└────────────────────────┘   └──────────────────┘  │
+                                                   ↓
+              ┌─────────────┐   ┌──────────────┐
+              │ Traduction  │ → │ Raffinement  │
+              │ (phase 1)   │   │ (phase 2)    │
+              │ translate_  │   │ translate_   │
+              │ base        │   │ refine       │
+              └─────────────┘   └──────────────┘
 ```
 
-Analyse littéraire et glossaire : phases **indépendantes**, parallèles (tailles de blocs différentes). Le glossaire boucle jusqu'à convergence. Les deux produits alimentent les phases de traduction.
+Les quatre phases s'enchaînent **dans cet ordre**, chacune sur ses propres tailles de blocs (grands pour l'analyse, petits pour l'extraction fine du glossaire). Analyse, glossaire et raffinement sont `SEQUENTIAL` ; seule la traduction initiale est `PARALLEL`.
+
+Le glossaire ne boucle pas : il fait **une passe** sur ses blocs, et chaque bloc voit les termes déjà appris par les précédents. La « convergence » d'un terme est un seuil de poids atteint en cours de passe (`converged_weight()`), pas une itération supplémentaire.
 
 ## Architecture des templates
 
 ```
 template/
 ├── phase/      — templates principaux (un couple system/user par type d'appel)
+├── retry/      — prompts de correction ciblés
 └── common/     — blocs réutilisables (includes)
 ```
 
@@ -77,8 +81,10 @@ Pas d'enveloppe JSON : à structure égale, elle coûtait deux fois plus de toke
 
 ### Cycle de vie
 
+0. **Préremplissage** facultatif depuis un TOML (`glossary_seed.py`), avant tout appel LLM : permet d'exercer les mécanismes de sélection sans attendre une passe complète.
 1. **Extraction** par la phase glossaire sur chaque bloc.
 2. **Agrégation** Python : chaque proposition incrémente indépendamment le poids de sa `traduction`, `type`, `sexe` (trois distributions par terme).
+   **Gel** : un terme validé `user` ou déjà converti en confiance `high` n'accepte plus aucune proposition — sa distribution est figée. Le prompt liste bien ces termes sous « NE PAS inclure », mais le modèle suit mal la consigne (10 termes convergés sur 11 réémis, mesuré sur un tome) ; le filtre est donc posé côté Python, où il ne dépend pas de son obéissance.
 3. **Confiance** calculée sur la distribution des traductions uniquement.
 4. **Réinjection** selon règles par phase (voir plus bas).
 
@@ -134,7 +140,7 @@ def compute_confidence(d: list[int]) -> float:
 
 ## Contexte littéraire
 
-Produit par `analyze_chapter_system.jinja`, injecté dans les phases 1/2 via `literary_context_block.jinja`. Contient : résumé narratif, tonalité, style, thèmes, références culturelles, pistes de traduction.
+Produit par `analyze_chapter_layered_system.jinja` (seul template d'analyse branché ; `analyze_chapter_*` reste dans l'enum mais n'est plus appelé), injecté dans les phases 1/2 via `literary_context_block.jinja`. Contient : résumé narratif, tonalité, style, thèmes, références culturelles, pistes de traduction.
 
 ## Retry et checks
 

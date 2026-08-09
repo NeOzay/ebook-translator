@@ -8,8 +8,17 @@ vérifiée dans le code — pas des idées d'amélioration : pour celles-ci, voi
 Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
-> Dernière vérification : 2026-08-09 (banc + audit de la phase glossaire, chantier
-> `glossary-seeding`). Les entrées 1 à 9 n'ont pas été revérifiées à cette date.
+> Dernière vérification : 2026-08-09 (relecture doc/code après l'absorption du
+> sous-module `template`).
+>
+> Soldé le 2026-08-09 : *« La couverture de tests ne passe pas son propre seuil »*.
+> Elle est à **83,72 %** — le `--cov-fail-under=80` de `pyproject.toml` est tenu et
+> le code de sortie de `pytest` redevient exploitable. Aucun chantier ne l'a visée :
+> les tests ajoutés par `bench`, `glossary-seeding` et `debit-llm` ont suffi
+> (`glossary.py` est passé de 15 % à 83 %). L'orchestration reste peu couverte —
+> `executor.py` 17 %, `pipeline.py` 25 %, `store_manager.py` 33 %, `client.py` 38 % —
+> mais ce n'est plus de la dette au sens de ce document : le seuil que le projet
+> s'est donné est respecté. Les entrées suivantes ont été renumérotées.
 >
 > Soldé le 2026-08-09 par le chantier `debit-llm` : *« Un run de banc étranglé par
 > le débit passe pour réussi, sans trace »*, qui portait trois défauts. La capture
@@ -21,47 +30,7 @@ retirée, pas barrée.
 
 ---
 
-## 1. La couverture de tests ne passe pas son propre seuil
-
-**Constat** — `pyproject.toml` impose `--cov-fail-under=80` dans ses `addopts`.
-La couverture réelle est de **72,30 %**. Conséquence directe : `uv run pytest`
-**sort en code 1 alors que les 385 tests passent**. C'est la commande
-documentée comme *la* façon de lancer les tests.
-
-**Préexistant** : 68,45 % avant le chantier `docs-realignment`, qui a ajouté
-27 tests. La dette n'a pas été créée par un chantier, elle s'est accumulée.
-
-**Contournement en place** — `uv run pytest --no-cov` est documenté dans les
-deux README ; `CLAUDE.md` explique le seuil et invite à lire le résumé des
-tests plutôt que le code de sortie.
-
-**Modules les moins couverts** :
-
-| Module | Couverture |
-|---|---|
-| `llm/template_params.py` | 0 % |
-| `glossary.py` | 15 % |
-| `pipeline/executor.py` | 18 % |
-| `pipeline/pipeline.py` | 25 % |
-| `exporter/glossary_exporter.py` | 28 % |
-| `pipeline/store_manager.py` | 33 % |
-| `llm/clients/client.py` | 40 % |
-| `validation/validation_worker_pool.py` | 61 % |
-
-**Pour solder** — deux voies, exclusives :
-
-- couvrir l'orchestration (`executor.py`, `pipeline.py`, `validation_worker_pool.py`
-  concentrent l'essentiel du déficit et sont le cœur du système) ;
-- ou ramener le seuil à une valeur tenue, quitte à le remonter par paliers.
-
-Laisser un seuil non tenu est le pire des trois : il rend le signal d'échec
-inexploitable.
-
-*Identifié par `docs-realignment`, étape 10.*
-
----
-
-## 2. `RetryStrategy` est déclaré mais jamais consulté
+## 1. `RetryStrategy` est déclaré mais jamais consulté
 
 **Constat** — chaque `ContentCheck` déclare un `retry_strategy` parmi
 `NORMAL_ONLY`, `PROGRESSIVE_REASONING` et `REASONING_ONLY`. Le helper
@@ -90,7 +59,7 @@ est plus honnête si la politique par check n'a pas d'usage prévu.
 
 ---
 
-## 3. Le déballage `**kwargs` masque encore les appels du builder
+## 2. Le déballage `**kwargs` masque encore les appels du builder
 
 **Constat** — `_skip_none(**overrides) -> dict[str, Any]`
 ([pipeline/builder.py](../src/ebook_translator/pipeline/builder.py)) reste
@@ -116,7 +85,7 @@ builder plutôt que de filtrer des `None`.
 
 ---
 
-## 4. Écarts entre le refactor `PhaseBase` et sa cible
+## 3. Écarts entre le refactor `PhaseBase` et sa cible
 
 Le plan du refactor, archivé dans
 `.claude/implementation/done/2026-07-30-refactor-phasebase.md`, annonçait huit
@@ -147,7 +116,7 @@ la dette réelle.
 
 ---
 
-## 5. Template orphelin
+## 4. Template orphelin
 
 **Constat** — `template/common/literary_context_layered_block.jinja`
 (77 lignes) n'a **aucun référent**, ni dans `src/ebook_translator/`, ni dans
@@ -167,7 +136,7 @@ l'injection stratifiée est souhaitée) ou le supprimer.
 
 ---
 
-## 6. Le glossaire est peuplé depuis un hook asynchrone
+## 5. Le glossaire est peuplé depuis un hook asynchrone
 
 **Constat** — `GlossaryPhase.on_save()` appelle `_populate_glossary()`. `on_save`
 est exécuté par le `SaveWorker`, sur son propre thread. L'executor, lui,
@@ -196,7 +165,7 @@ la phase glossaire (coûteux, elle est déjà séquentielle).
 
 ---
 
-## 7. `LLM.max_retries` pilote deux mécanismes différents
+## 6. `LLM.max_retries` pilote deux mécanismes différents
 
 **Constat** — la même valeur (défaut 3) règle deux politiques sans rapport :
 
@@ -226,7 +195,7 @@ l'appelant décide.
 
 ---
 
-## 8. La Phase 2 ne s'exécute jamais
+## 7. La Phase 2 ne s'exécute jamais
 
 **Constat** — `LineIndexedPersister.is_chunk_cached`
 ([persistence/line_indexed_persister.py](../src/ebook_translator/persistence/line_indexed_persister.py))
@@ -249,7 +218,8 @@ suppression complète du répertoire `refinement/`, le run rapporte
 jamais eu lieu, quel que soit le provider.
 
 Le seul chunk qui tente un vrai raffinement est celui que le fallback ne couvre
-pas entièrement (une ligne abandonnée en Phase 1) — et il échoue, cf. entrée 9.
+pas entièrement (une ligne abandonnée en Phase 1) — et il échoue, cf. « Une ligne
+manquante en Phase 1 fait perdre tout un chunk en Phase 2 ».
 
 **Le comportement est couvert par un test** :
 `test_fallback_covers_missing_when_main_empty`
@@ -266,7 +236,7 @@ Phase 2 réellement coûteuse en appels LLM, ce qu'elle aurait toujours dû êtr
 
 ---
 
-## 9. Une ligne manquante en Phase 1 fait perdre tout un chunk en Phase 2
+## 8. Une ligne manquante en Phase 1 fait perdre tout un chunk en Phase 2
 
 **Constat** — la Phase 1 sauve délibérément des chunks **partiels** : après
 épuisement des tentatives, les `relevant_indices` en échec sont abandonnés et le
@@ -296,7 +266,7 @@ de tentatives sur l'échec de schéma côté executor.
 
 ---
 
-## 10. La clause « NE PAS inclure » du prompt glossaire ne tient pas
+## 9. La clause « NE PAS inclure » du prompt glossaire ne tient pas
 
 **Constat** — `glossary_existing_block.jinja` liste les termes convergés sous
 « **Termes validés** (confiance haute) — NE PAS inclure dans la sortie ». Le
@@ -342,7 +312,7 @@ sait le faire contre `froid`.
 
 ---
 
-## 11. Les clés du glossaire ne sont normalisées que sur la casse
+## 10. Les clés du glossaire ne sont normalisées que sur la casse
 
 **Constat** — `Glossary.learn()`
 ([glossary.py](../src/ebook_translator/glossary.py)) indexe un terme par
@@ -376,7 +346,7 @@ plus jamais trouvés dans le bloc.
 
 ---
 
-## 12. Les doctests ne sont exécutés par rien
+## 11. Les doctests ne sont exécutés par rien
 
 **Constat** — les `addopts` de `pyproject.toml` ne contiennent pas
 `--doctest-modules`, et aucune configuration ne collecte les doctests par
@@ -388,19 +358,19 @@ ailleurs. Les blocs `Example:` des docstrings, exigés par
 affirmait `'proposition_traduction': 'Alice'` alors que le code rendait
 `'alice'`. Il échouait, sans que rien ne le signale, pendant que le bug qu'il
 décrivait faisait perdre la casse de **tous** les noms propres du glossaire
-(entrée soldée depuis, cf. commit `23865dc` du sous-module). Le doctest disait
+(entrée soldée depuis, cf. commit `23865dc` du dépôt `template`, avant son
+absorption). Le doctest disait
 juste ; personne ne l'écoutait.
 
 **Pour solder** — ajouter `--doctest-modules` aux `addopts`, après avoir passé
 en revue les doctests existants : plusieurs portent des `# doctest: +SKIP` et
-d'autres n'ont probablement jamais tourné. À coupler avec l'entrée 1, le seuil
-de couverture rendant déjà le code de sortie de `pytest` inexploitable.
+d'autres n'ont probablement jamais tourné.
 
 *Identifié par `glossary-seeding`, 2026-08-09.*
 
 ---
 
-## 13. L'auditeur glossaire noie ses vrais constats sous les mots-outils
+## 12. L'auditeur glossaire noie ses vrais constats sous les mots-outils
 
 **Constat** — `candidat-manque` (« entité nommée récurrente absente du
 glossaire ») repère les mots capitalisés en milieu de phrase
@@ -426,7 +396,7 @@ avant comparaison au glossaire.
 
 ---
 
-## 14. Points mineurs, laissés sciemment
+## 13. Points mineurs, laissés sciemment
 
 - `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
   est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le

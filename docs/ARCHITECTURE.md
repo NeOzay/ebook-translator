@@ -216,6 +216,16 @@ Façade au-dessus d'un client provider (`ClientProviderProtocol`) :
 
 Le backoff est piloté par les exceptions du SDK `openai` **et** par leurs équivalents normalisés de [llm/errors.py](../src/ebook_translator/llm/errors.py) (`LLMTimeoutError`, `LLMRateLimitError`, `LLMAPIError`), que lèvent les providers bâtis sur un autre SDK.
 
+#### Plafond de débit
+
+**Fichier** : [llm/rate_limit.py](../src/ebook_translator/llm/rate_limit.py)
+
+`RateLimiter` espace les départs d'appel d'un provider, **tous threads et tous processus confondus** : le créneau est réservé dans un fichier verrouillé par `flock` sous `$XDG_CACHE_HOME/ebook-translator/rate/`, nommé d'après `provider_key_for(client)`. Un limiteur purement en mémoire serait reparti à zéro à chaque sous-processus de variante de banc — d'où le fichier.
+
+Le débit s'auto-corrige en AIMD : chaque 429 divise le débit courant, une série de succès consécutifs en regagne une fraction, avec un plancher à 1/64 du nominal. Hors Unix, `flock` est indisponible et le plafond ne vaut qu'au sein du processus.
+
+Côté appel, un 429 ne consomme pas une tentative mais un **budget en secondes** (`rate_limit_budget`) : une API durablement saturée fait échouer le chunk sur le temps écoulé, pas sur un compteur d'essais. Réglé par `LLMBuilder.rate_limit(per_minute)`.
+
 #### Les clients
 
 [llm/clients/](../src/ebook_translator/llm/clients/) est organisé en trois niveaux :

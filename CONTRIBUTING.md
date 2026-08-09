@@ -549,7 +549,7 @@ Créer `.vscode/settings.json` :
 ## 📚 Ressources
 
 - [Documentation complète](docs/)
-- [Guide de développement détaillé](docs/DEVELOPMENT.md)
+- [Installation et environnement de dev](docs/SETUP.md)
 - [Standards de code](docs/CODING_STANDARDS.md)
 - [Architecture du projet](docs/ARCHITECTURE.md)
 - [Système de validation](docs/VALIDATION.md)
