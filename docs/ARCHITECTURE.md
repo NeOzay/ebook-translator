@@ -130,7 +130,7 @@ Le mode parallèle (`ThreadPoolExecutor`) est retenu si `execution_mode == PARAL
 
 - Chunk : `ChapterPartChunk` — blocs de 5000 tokens, `overlap_ratio` figé à 0.0, 1 worker
 - Séquentielle, sortie structurée via Instructor
-- `payload_type` = `data_type` = `AnalyseChapter` (schéma stratifié, submodule `template`)
+- `payload_type` = `data_type` = `AnalyseChapter` (schéma stratifié, paquet `template`)
 - `content_checks = ()` — la validation est intégralement portée par le schéma Pydantic
 - Analyse **incrémentale** : chaque bloc reprend la fiche du bloc précédent et l'enrichit
 - Expose `latest_analysis_for(chapter_name)`, injecté dans `Chapters` comme `AnalysisLookup`
@@ -234,7 +234,7 @@ Le provider Mistral n'utilise **pas** Instructor : la bibliothèque résout enco
 
 **Fichier** : [llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py)
 
-Charge et rend les templates Jinja2 du submodule `template/`. Chaque template est une **paire** `*_system.jinja` + `*_user.jinja`, résolue par les enums `PhaseTemplate` (préfixe `phase/`) et `RetryTemplate` (préfixe `retry/`).
+Charge et rend les templates Jinja2 du paquet `template/`. Chaque template est une **paire** `*_system.jinja` + `*_user.jinja`, résolue par les enums `PhaseTemplate` (préfixe `phase/`) et `RetryTemplate` (préfixe `retry/`).
 
 Voir [TEMPLATES.md](TEMPLATES.md).
 

@@ -1,0 +1,33 @@
+{#- ================================================================
+TRANSLATE_REFINE_USER.JINJA - Phase 2: Refinement (User)
+
+Purpose: User prompt with source text, initial translation,
+         and head/tail context for refinement.
+
+Input variables:
+  - original_text
+  - initial_translation
+  - head_context (optional)
+  - tail_context (optional)
+
+Pair: translate_refine_system.jinja
+================================================================ -#}
+{%- if head_context %}
+[Contexte précédent]
+{{ head_context }}
+
+{% endif -%}
+
+[Lignes à affiner]
+
+Texte source :
+{{ original_text }}
+
+Traduction initiale :
+{{ initial_translation }}
+
+{%- if tail_context %}
+
+[Contexte suivant]
+{{ tail_context }}
+{% endif %}

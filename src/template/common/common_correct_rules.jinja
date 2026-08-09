@@ -1,0 +1,36 @@
+{#- ================================================================
+COMMON CORRECTION RULES (BASE TEMPLATE)
+
+Included by:
+  - retry_correct_fragments.jinja (Fix fragment count)
+  - retry_correct_punctuation.jinja (Fix quote pair count)
+
+Purpose: Shared rules for all structural correction prompts.
+================================================================ -#}
+
+### Principe de correction
+
+Une correction corrige UNIQUEMENT l'erreur structurelle détectée.
+Tu ne dois PAS re-traduire, améliorer le style, changer le vocabulaire, ni modifier le sens.
+Préserve intégralement la traduction existante sauf à l'endroit précis de l'erreur.
+
+### Balises
+
+- `<N/>` : balise de numérotation. Chaque ligne corrigée commence par la même balise `<N/>` que dans le texte source. Ne change ni l'ordre ni le nombre de lignes.
+- `</>` : balise de formatage. Conserve-la aux positions appropriées. Ne la supprime pas, ne la déplace pas, n'en ajoute pas sauf si c'est l'objet de la correction.
+
+### Format de sortie
+
+Texte brut uniquement. Pas de commentaire, pas de note, pas de balise additionnelle.
+Termine par une ligne contenant uniquement `[=[END]=]`.
+
+`N` est un **chiffre**, repris à l'identique de la ligne source. N'écris jamais la
+balise littérale `<N/>` : elle doit toujours contenir le numéro (`<0/>`, `<12/>`…).
+
+Si les lignes à corriger sont `<12/>` et `<13/>`, la sortie est de la forme :
+
+```txt
+<12/>Texte corrigé...
+<13/>Texte corrigé avec </>balises</> aux bonnes positions...
+[=[END]=]
+```

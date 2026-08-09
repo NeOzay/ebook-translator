@@ -1,0 +1,28 @@
+{#- ================================================================
+RETRY_TRANSLATE_SENTENCE_USER.JINJA (User)
+
+Purpose: User prompt with truncated lines to retranslate.
+
+Input variables:
+  - missing_indices
+  - original_text
+  - previous_translation
+
+Pair: retry_translate_sentence_system.jinja
+================================================================ -#}
+
+Lignes tronquées détectées : {{ missing_indices }}
+
+**Texte source (original)** :
+```
+{{ original_text }}
+```
+
+**Traduction Phase 1 (référence complète)** :
+```
+{{ previous_translation }}
+```
+
+La traduction Phase 1 contient tout le contenu de l'original. Utilise-la comme référence pour vérifier que rien ne manque.
+
+Produis la traduction complète de ces lignes en préservant intégralement tout le contenu :

@@ -147,7 +147,7 @@ Correction routing lives in `RETRY_REGISTRY` ([llm/retry_registry.py](src/ebook_
 
 ## Templates
 
-Jinja2 templates live in the `template/` submodule, rendered via `TemplateRenderer` ([llm/template_renderers.py](src/ebook_translator/llm/template_renderers.py)). Each prompt is a **pair** `<name>_system.jinja` + `<name>_user.jinja`, resolved by the `PhaseTemplate` (prefix `phase/`) and `RetryTemplate` (prefix `retry/`) enums.
+Jinja2 templates live in the `src/template/` package, rendered via `TemplateRenderer` ([llm/template_renderers.py](src/ebook_translator/llm/template_renderers.py)). Each prompt is a **pair** `<name>_system.jinja` + `<name>_user.jinja`, resolved by the `PhaseTemplate` (prefix `phase/`) and `RetryTemplate` (prefix `retry/`) enums.
 
 - `phase/translate_base_*` — Phase 1 initial translation
 - `phase/translate_refine_*` — Phase 2 refinement (includes glossary)

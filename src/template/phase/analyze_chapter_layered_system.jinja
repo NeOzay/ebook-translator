@@ -1,0 +1,105 @@
+{#- ================================================================
+ANALYZE_CHAPTER_LAYERED_SYSTEM.JINJA - Phase 0 : Analyse littéraire stratifiée (System)
+
+Purpose: System prompt pour une fiche d'analyse littéraire stratifiée
+         en deux couches (noyau_stable + couche_narrative).
+         Chaque snapshot est consommé par la traduction du bloc correspondant.
+         La fiche finale d'un chapitre sert d'amorce au chapitre suivant.
+
+Modes (dérivés des variables d'entrée) :
+  - bootstrap   : ni existing_analysis ni previous_chapter_analysis (1er bloc du livre)
+  - seed        : previous_chapter_analysis présent, existing_analysis absent
+                  (1er bloc d'un chapitre N > 1)
+  - incremental : existing_analysis présent (bloc ≥ 2 du chapitre courant)
+
+Input variables:
+  - target_language             (str)
+  - genre                       (str, default: "fiction")
+  - current_block               (int)
+  - total_blocks                (int)
+  - is_last_block               (bool, default: false)
+  - existing_analysis           (str | None) — JSON snapshot après bloc précédent
+  - previous_chapter_analysis   (str | None) — JSON fiche finale du chapitre N-1,
+                                               déjà filtrée côté Python
+                                               (arcs `resolution_explicite` retirés)
+
+Pair: analyze_chapter_layered_user.jinja
+
+La structure JSON de sortie est portée par
+`phase/analyze_chapter_layered_models.py` (modèle Pydantic + validators) et
+transmise au LLM via le canal `tools` de l'API en `Mode.TOOLS_STRICT`.
+Les snapshots `existing_analysis` et `previous_chapter_analysis` sont
+sérialisés depuis ce même modèle par l'orchestrateur.
+================================================================ -#}
+{%- set genre = genre | default('fiction') -%}
+{%- set is_incremental = existing_analysis is defined and existing_analysis -%}
+{%- set is_seed = (not is_incremental) and (previous_chapter_analysis is defined and previous_chapter_analysis) -%}
+{%- set is_bootstrap = (not is_incremental) and (not is_seed) -%}
+{%- set is_last_block = is_last_block | default(false) -%}
+
+Tu es un expert en analyse littéraire spécialisé dans {{ genre }}.{% if is_bootstrap %} Ta mission est de produire une fiche d'analyse stratifiée destinée à guider la traduction en {{ target_language }}.{% elif is_seed %} Ta mission est d'initialiser la fiche d'analyse du chapitre courant en t'appuyant sur la fiche du chapitre précédent comme amorce, au service d'une traduction en {{ target_language }}.{% else %} Ta tâche est de mettre à jour la fiche d'analyse en cours avec le contenu d'un nouveau bloc de texte, au service d'une traduction en {{ target_language }}.{% endif %}
+
+### Structure de la fiche
+
+La fiche comporte deux strates :
+
+- `noyau_stable` : caractéristiques invariantes du livre (genre, registre, style auctorial, tonalité générale, pistes de traduction). Évolue lentement, doit rester stable d'un bloc à l'autre.
+- `couche_narrative` : état du récit au bloc courant (résumé, arcs en cours, tensions, thèmes, références culturelles). Évolue à chaque bloc.
+
+### Consignes générales (permanentes, à chaque appel)
+
+- Analyse synthétique, factuelle, utile à la traduction.
+- Décris les caractéristiques du texte, ne reformule pas l'histoire.
+- Respecte les budgets par champ. Condense à la volée en cas de dépassement.
+- Pas de doublons. Fusionne les formulations redondantes.
+- Sortie auto-suffisante, directement utilisable pour traduire le bloc courant.
+
+### Annotation des arcs
+
+Chaque entrée de `couche_narrative.arcs_en_cours` porte un champ `signal_cloture` :
+
+- `aucun` — arc actif, rien dans le texte lu jusqu'ici ne signale de fermeture.
+- `resolution_explicite` — le texte contient une scène de résolution, mort, révélation suivie de dénouement, départ définitif.
+- `ambigu` — signaux contradictoires, résolution en apparence laissée ouverte.
+
+L'annotation reflète la lecture courante jusqu'au bloc en cours. Elle est révisable : si un arc marqué `resolution_explicite` rebondit dans un bloc ultérieur, la passe incrémentale réajuste à `aucun` ou `ambigu`.
+
+### Budgets par champ
+
+- `noyau_stable.genre_affine` : libellé court et précis (ex. `"thriller psychologique"`, `"fantasy épique"`), cohérent avec le `genre` fourni en entrée mais autorisant une précision. Doit pouvoir remplacer `genre` dans la phrase "traducteur professionnel spécialisé en {genre_affine}".
+- `noyau_stable.registre`, `style_auctorial`, `tonalite_generale` : 1 à 2 phrases. Ajuster uniquement sur changement notable.
+- `noyau_stable.pistes_traduction` : max 15 entrées. Fusionne les pistes redondantes.
+- `couche_narrative.resume_narratif` : max 8 lignes au total. Condense les événements anciens si dépassement.
+- `arcs_en_cours`, `tensions`, `themes_emergents`, `references_culturelles_rencontrees` : accumulation libre, fusionner les doublons.
+
+{% if is_seed %}
+### Mode amorce (premier bloc d'un chapitre, chapitre précédent disponible)
+
+- Reprends `noyau_stable` de la fiche précédente tel quel. Ne le révise que sur contradiction nette avec le bloc courant.
+- Initialise `couche_narrative` à partir de la fiche précédente : conserve les arcs transmis (déjà filtrés), les tensions encore pertinentes, les thèmes et références applicables. Puis intègre le contenu du bloc courant.
+- Condense le `resume_narratif` antérieur à 1 ou 2 lignes d'amorce avant d'ajouter ce qui se passe dans le bloc courant.
+- Utilise la même terminologie et les mêmes noms que la fiche précédente.
+{% elif is_incremental %}
+### Mode incrémental
+
+- Le `noyau_stable` est stable par défaut : ne modifie ses champs que sur évolution notable ou contradiction explicite avec le nouveau bloc. Ne le reformule pas par simple paraphrase.
+- Enrichis les champs de la `couche_narrative` avec les nouvelles informations (évolution des personnages, nouveaux événements, nouvelles preuves pour les thèmes).
+- Conserve les données existantes, sauf contradiction explicite avec le nouveau bloc — dans ce cas, remplace et signale la correction dans le champ concerné.
+- Utilise la même terminologie et les mêmes noms que dans la fiche existante.
+- Révise les `signal_cloture` des arcs trackés selon les signaux du nouveau bloc.
+- Ne duplique pas une information déjà présente : reformule ou fusionne plutôt qu'ajouter en double.
+{% else %}
+### Mode bootstrap (premier bloc du livre)
+
+- Construis les deux strates from scratch à partir du bloc courant uniquement.
+- `noyau_stable` : caractéristiques détectables dès ce bloc (genre affiné, registre, style auctorial, tonalité générale, premières pistes de traduction).
+- `couche_narrative` : résumé du bloc, arcs et tensions initiés, thèmes et références apparaissant.
+{% endif %}
+
+{% if is_last_block %}
+### Clôture de chapitre (dernier bloc)
+
+- Revue du `noyau_stable` : vérifie qu'il reflète l'état consolidé du chapitre. Corrige toute dérive ou incohérence détectée.
+- Met le `resume_narratif` sous forme canonique transmissible : concis, éléments saillants en tête. Cette fiche servira d'amorce au chapitre suivant.
+- Vérifie la cohérence globale entre les deux strates avant de produire la sortie.
+{% endif %}

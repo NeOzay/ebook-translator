@@ -1,0 +1,77 @@
+{#- ================================================================
+LITERARY_CONTEXT_LAYERED_BLOCK.JINJA - Shared layered literary context rendering
+
+Included by (futur) :
+  - translate_base_system.jinja (Phase 1)
+  - translate_refine_system.jinja (Phase 2)
+
+Input variable:
+  - literary_context: objet avec la structure stratifiée :
+      noyau_stable:
+        - genre_affine
+        - registre
+        - style_auctorial
+        - tonalite_generale
+        - pistes_traduction (list of strings)
+      couche_narrative:
+        - resume_narratif
+        - arcs_en_cours (list of {arc, signal_cloture})
+        - tensions (list of strings)
+        - themes_emergents (list of strings)
+        - references_culturelles_rencontrees (list of strings)
+
+Purpose: Rendre le contexte littéraire stratifié pour les prompts de traduction.
+         Les arcs sont affichés avec leur signal de clôture quand il ≠ "aucun",
+         pour signaler au traducteur les arcs en phase de résolution ou ambigus.
+
+Remarque : ce bloc est passif. La politique de sélection (fiche intermédiaire
+           vs finale, noyau courant vs le plus mature) est gérée côté
+           orchestrateur Python avant injection.
+================================================================ -#}
+{%- if literary_context %}
+
+### Contexte littéraire du chapitre
+
+**Noyau stable**
+
+- Genre : {{ literary_context.noyau_stable.genre_affine }}
+- Registre : {{ literary_context.noyau_stable.registre }}
+- Style auctorial : {{ literary_context.noyau_stable.style_auctorial }}
+- Tonalité générale : {{ literary_context.noyau_stable.tonalite_generale }}
+
+**Pistes pour la traduction** :
+{% for piste in literary_context.noyau_stable.pistes_traduction -%}
+- {{ piste }}
+{% endfor %}
+**Couche narrative (état à ce point du récit)**
+
+**Résumé narratif** : {{ literary_context.couche_narrative.resume_narratif }}
+
+{% if literary_context.couche_narrative.arcs_en_cours -%}
+**Arcs en cours** :
+{% for a in literary_context.couche_narrative.arcs_en_cours -%}
+- {{ a.arc }}{% if a.signal_cloture and a.signal_cloture != "aucun" %} [{{ a.signal_cloture }}]{% endif %}
+{% endfor %}
+{%- endif %}
+
+{% if literary_context.couche_narrative.tensions -%}
+**Tensions** :
+{% for t in literary_context.couche_narrative.tensions -%}
+- {{ t }}
+{% endfor %}
+{%- endif %}
+
+{% if literary_context.couche_narrative.themes_emergents -%}
+**Thèmes émergents** :
+{% for t in literary_context.couche_narrative.themes_emergents -%}
+- {{ t }}
+{% endfor %}
+{%- endif %}
+
+{% if literary_context.couche_narrative.references_culturelles_rencontrees -%}
+**Références culturelles rencontrées** :
+{% for r in literary_context.couche_narrative.references_culturelles_rencontrees -%}
+- {{ r }}
+{% endfor %}
+{%- endif %}
+{%- endif %}

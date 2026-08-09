@@ -181,7 +181,7 @@ Within each phase, `PhaseExecutor` segments the content, calls the LLM, validate
 
 ### Template Architecture
 
-Jinja2 templates live in the `template/` submodule. Each prompt is a **pair** of files — `<name>_system.jinja` and `<name>_user.jinja` — resolved together by the `PhaseTemplate` and `RetryTemplate` enums.
+Jinja2 templates live in the `src/template/` package. Each prompt is a **pair** of files — `<name>_system.jinja` and `<name>_user.jinja` — resolved together by the `PhaseTemplate` and `RetryTemplate` enums.
 
 ```
 template/
@@ -206,7 +206,7 @@ ebook-translator/
 │   ├── stores/              # ByteStore / Store
 │   ├── translation/         # EPUB I/O
 │   └── validation/          # Worker pool, unified worker, save worker, retry helpers
-├── src/template/            # Jinja2 prompt templates (submodule)
+├── src/template/            # Jinja2 prompt templates
 ├── examples/                # Runnable examples
 ├── tests/                   # Unit tests (374 tests)
 ├── docs/                    # Specialized documentation

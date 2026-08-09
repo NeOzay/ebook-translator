@@ -1,0 +1,48 @@
+{#- ================================================================
+ANALYZE_CHAPTER_LAYERED_USER.JINJA - Phase 0 : Analyse littéraire stratifiée (User)
+
+Purpose: User prompt pour l'analyse stratifiée.
+         Fournit les données selon le mode (bootstrap / seed / incremental).
+
+Input variables:
+  - chapter_name                (str)
+  - chapter_text                (str)
+  - current_block               (int)
+  - total_blocks                (int)
+  - is_last_block               (bool, default: false)
+  - existing_analysis           (str | None) — JSON snapshot après bloc précédent
+  - previous_chapter_analysis   (str | None) — JSON fiche finale du chapitre N-1,
+                                               déjà filtrée côté Python
+
+Pair: analyze_chapter_layered_system.jinja
+================================================================ -#}
+{%- set is_incremental = existing_analysis is defined and existing_analysis -%}
+{%- set is_seed = (not is_incremental) and (previous_chapter_analysis is defined and previous_chapter_analysis) -%}
+{%- set is_last_block = is_last_block | default(false) -%}
+{% if is_incremental %}
+Chapitre : "{{ chapter_name }}" — Bloc {{ current_block }}/{{ total_blocks }}{% if is_last_block %} (dernier bloc){% endif %}
+
+Fiche en cours (snapshot après bloc {{ current_block - 1 }}) :
+```json
+{{ existing_analysis }}
+```
+
+Nouveau bloc de texte :
+
+{{ chapter_text }}
+{% elif is_seed %}
+Chapitre : "{{ chapter_name }}" — Bloc {{ current_block }}/{{ total_blocks }}{% if is_last_block %} (dernier bloc){% endif %}
+
+Fiche du chapitre précédent (amorce) :
+```json
+{{ previous_chapter_analysis }}
+```
+
+Nouveau bloc de texte (début du chapitre courant) :
+
+{{ chapter_text }}
+{% else %}
+Chapitre : "{{ chapter_name }}" — Bloc {{ current_block }}/{{ total_blocks }}{% if is_last_block %} (dernier bloc){% endif %}
+
+{{ chapter_text }}
+{% endif %}

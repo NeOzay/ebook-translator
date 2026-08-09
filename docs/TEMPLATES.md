@@ -1,6 +1,6 @@
 # Architecture des templates LLM
 
-Les templates Jinja2 vivent dans le submodule `template/` (monté sous [src/template/](../src/template/)). Ils sont rendus via `TemplateRenderer` ([llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py)), dont le `prompt_dir` pointe la racine du submodule.
+Les templates Jinja2 vivent dans le paquet [src/template/](../src/template/). Ils sont rendus via `TemplateRenderer` ([llm/template_renderers.py](../src/ebook_translator/llm/template_renderers.py)), dont le `prompt_dir` pointe la racine de ce paquet.
 
 ## Convention : une paire par prompt
 

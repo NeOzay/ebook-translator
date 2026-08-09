@@ -1,0 +1,73 @@
+{#- ================================================================
+GLOSSARY_BLOCK.JINJA - Shared glossary rendering
+
+Included by:
+  - translate_base_system.jinja (Phase 1)
+  - translate_refine_system.jinja (Phase 2)
+
+Input variable:
+  - glossary: list of objects with fields:
+      - terme (str): original term
+      - type (str): one of "personnage", "lieu", "creature",
+                     "appellation", "organisation", "objet", "terme_technique",
+                     "reference_culturelle"
+      - sexe (str): "m", "f", or "nc"
+      - traduction (str): target language translation
+
+Purpose: Render glossary as a structured table for the LLM.
+         The template groups entries by type for readability.
+================================================================ -#}
+{%- if glossary and glossary|length > 0 %}
+
+### Glossaire
+
+Tu DOIS utiliser les traductions ci-dessous pour chaque terme rencontré dans le texte.
+Si un terme du glossaire apparaît dans le texte source, utilise sa traduction définie, pas la tienne.
+
+Usage selon la section :
+- **Personnages** et **Lieux** : traduction reprise telle quelle, sans adaptation morphologique.
+- Autres sections : traduction accordable au contexte (nombre, article/déterminant, élisions, contractions, accord en genre des mots qui s'y rapportent).
+
+Colonne `Sexe` : `m` ou `f` fixe le genre grammatical des mots qui s'accordent avec le terme (articles, adjectifs, pronoms). `nc` laisse le choix du genre grammatical selon la traduction française.
+
+{#- Define type labels for display -#}
+{%- set type_labels = {
+  'personnage': 'Personnages',
+  'lieu': 'Lieux',
+  'creature': 'Créatures',
+  'appellation': 'Appellations',
+  'organisation': 'Organisations',
+  'objet': 'Objets',
+  'terme_technique': 'Termes techniques',
+  'reference_culturelle': 'Références culturelles'
+} -%}
+
+{#- Define per-type usage notes -#}
+{%- set usage_notes = {
+  'personnage': 'Repris tels quels, sans adaptation.',
+  'lieu': 'Repris tels quels, sans adaptation.',
+  'creature': 'Accordables au contexte (nombre, article, élisions, accords).',
+  'appellation': 'Accordables au contexte (nombre, article, élisions, accords).',
+  'organisation': 'Accordables au contexte (nombre, article, élisions, accords).',
+  'objet': 'Accordables au contexte (nombre, article, élisions, accords).',
+  'terme_technique': 'Accordables au contexte (nombre, article, élisions, accords).',
+  'reference_culturelle': 'Accordables au contexte (nombre, article, élisions, accords).'
+} -%}
+
+{#- Define type order -#}
+{%- set type_order = ['personnage', 'lieu', 'creature', 'appellation', 'organisation', 'objet', 'terme_technique', 'reference_culturelle'] -%}
+
+{%- for t in type_order -%}
+{%- set entries = glossary | selectattr('type', 'equalto', t) | list -%}
+{%- if entries|length > 0 %}
+
+**{{ type_labels[t] }}** — {{ usage_notes[t] }}
+| Terme | Traduction | Sexe |
+|-------|------------|------|
+{%- for e in entries %}
+| {{ e.terme }} | {{ e.traduction }} | {{ e.sexe }} |
+{%- endfor %}
+{%- endif -%}
+{%- endfor %}
+
+{%- endif %}

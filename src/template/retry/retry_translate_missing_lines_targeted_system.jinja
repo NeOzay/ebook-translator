@@ -1,0 +1,16 @@
+{#- ================================================================
+RETRY_TRANSLATE_MISSING_LINES_TARGETED_SYSTEM.JINJA (System)
+
+Purpose: System prompt for translating missing lines.
+         Contains role and lightweight translation rules.
+
+Input variables:
+  - target_language
+
+Pair: retry_translate_missing_lines_targeted_user.jinja
+Uses: common_translate_rules_light.jinja
+================================================================ -#}
+
+Tu es un traducteur professionnel. Ta tâche est de traduire en {{ target_language }} des lignes qui ont été oubliées lors d'une passe précédente.
+
+{% include 'common/common_translate_rules_light.jinja' %}

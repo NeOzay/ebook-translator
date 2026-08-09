@@ -1,0 +1,39 @@
+{#- ================================================================
+RETRY_CORRECT_FRAGMENTS_USER.JINJA - Fix Fragment Count (User)
+
+Purpose: User prompt with concrete data for fragment correction.
+
+Input variables:
+  - mode: "strict" (default) or "flexible"
+  - original_text, incorrect_translation
+  - expected_separators, actual_separators
+  - target_language
+
+Pair: retry_correct_fragments_system.jinja
+================================================================ -#}
+{%- set mode = mode | default('strict') -%}
+
+**Texte original** :
+{{ original_text }}
+
+**Traduction incorrecte** :
+{{ incorrect_translation }}
+
+Séparateurs `</>` attendus : **{{ expected_separators }}**
+Séparateurs `</>` dans la traduction : **{{ actual_separators }}**
+
+{% if expected_separators == 0 -%}
+Le texte original ne contient aucun séparateur. Des `</>` ont été ajoutés par erreur.
+{%- elif actual_separators == 0 -%}
+Le texte original contient {{ expected_separators }} séparateur(s), mais la traduction n'en contient aucun.
+{% elif actual_separators > expected_separators -%}
+Il y a {{ actual_separators - expected_separators }} séparateur(s) en trop.
+{% else -%}
+Il manque {{ expected_separators - actual_separators }} séparateur(s).
+{%- endif %}
+
+{%- if mode == 'strict' and expected_separators > 0 %}
+Positions dans l'original :
+{{ original_text | replace('</>', ' [</>] ') }}
+{% endif %}
+Produis la correction avec exactement **{{ expected_separators }}** séparateur(s) `</>` :

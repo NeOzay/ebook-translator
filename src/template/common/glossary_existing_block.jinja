@@ -1,0 +1,77 @@
+{#- ================================================================
+GLOSSARY_EXISTING_BLOCK.JINJA - Existing glossary reinjection (glossary extraction)
+
+Included by:
+  - glossary_system.jinja (glossary extraction phase)
+
+Precondition: caller must guard with `{% if existing_glossary %}`.
+  This block assumes existing_glossary is non-empty.
+
+Input variables:
+  - existing_glossary: list of GlossaryMultipleValueEntry objects (non-empty)
+      - terme (str): original term
+      - traductions: list of (str, int) tuples — translation + weight
+      - sexes: list of (str, int) tuples — gender + weight
+      - types: list of (str, int) tuples — type + weight
+      - weight (int): total weight
+      - confidence (str): "low", "medium", or "high"
+        (computed on translations only)
+  - min_reinjection_weight (int): weight from which proposals are shown
+      (`DEFAULT_MIN_REINJECTION_WEIGHT` in `glossary.py`)
+
+Le découpage en trois groupes ci-dessous est **dupliqué** dans
+`Glossary.reinjection_group` (`glossary.py`), qui s'en sert pour décider quoi
+garder quand `max_terms` mord. Modifier l'un demande de suivre dans l'autre.
+
+Purpose: Render existing glossary entries in three groups:
+  - Validated (high confidence): shown for context, excluded from output
+  - To arbitrate (weight >= threshold): must be included with chosen values
+  - Emerging (weight < threshold): term shown alone, so that the model reuses
+    the established form instead of a variant. Below the threshold a single
+    proposal would anchor the model on an isolated guess.
+================================================================ -#}
+{%- set validated = existing_glossary | selectattr('confidence', 'equalto', 'high') | list -%}
+{%- set unsettled = existing_glossary | rejectattr('confidence', 'equalto', 'high') | list -%}
+{%- set to_arbitrate = unsettled | selectattr('weight', 'ge', min_reinjection_weight) | list -%}
+{%- set emerging = unsettled | rejectattr('weight', 'ge', min_reinjection_weight) | list -%}
+
+### Glossaire existant
+
+Un terme rencontré dans le bloc courant qui n'est listé nulle part ci-dessous entre comme nouvelle entrée s'il satisfait les conditions d'admission.
+
+{% if validated|length > 0 -%}
+**Termes validés** (confiance haute) — NE PAS inclure dans la sortie :
+
+Ces termes sont stables. Ils sont listés ici pour que tu connaisses la terminologie établie, mais tu ne dois PAS les reproduire dans ton glossaire de sortie.
+
+{% for entry in validated -%}
+- {{ entry.terme }} → {{ entry.traductions[0][0] }} ({{ entry.types[0][0] }}, {{ entry.sexes[0][0] }})
+{% endfor %}
+{% endif -%}
+
+{% if to_arbitrate|length > 0 -%}
+**Termes à arbitrer** (signal établi, pas encore stable) — À inclure dans la sortie :
+
+Pour chaque terme ci-dessous rencontré dans le bloc courant, choisis les valeurs les plus adaptées au contexte et inclus-les dans ton glossaire de sortie.
+
+Règles :
+- S'il y a une proposition dominante : réutilise-la sauf erreur factuelle manifeste.
+- S'il y a un conflit : choisis la proposition la plus adaptée au contexte, ou proposes-en une nouvelle si aucune n'est satisfaisante.
+- Les modifications sont réservées aux erreurs factuelles (genre grammatical, type erroné, traduction inadaptée). Pas de modifications stylistiques.
+
+{% for entry in to_arbitrate -%}
+- **{{ entry.terme }}** (w={{ entry.weight }}, {{ entry.confidence }})
+  - traductions : {% for t, w in entry.traductions %}`{{ t }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+  - sexes : {% for s, w in entry.sexes %}`{{ s }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+  - types : {% for ty, w in entry.types %}`{{ ty }}` ({{ w }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endfor -%}
+{% endif -%}
+
+{% if emerging|length > 0 -%}
+**Termes déjà extraits** (signal encore faible) — formes normalisées :
+
+{% for entry in emerging %}`{{ entry.terme }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+Ces termes ont été relevés ailleurs dans le livre, sans traduction encore assez appuyée pour t'être soumise. Les conditions d'admission s'appliquent comme pour tout autre terme : n'inclus dans ta sortie que ceux que le bloc courant justifie. Les formes ci-dessus sont normalisées en minuscules : si tu en retiens un, reprends la graphie telle qu'elle apparaît dans le bloc courant, et non la forme listée. Une seule ligne par terme.
+{% endif -%}

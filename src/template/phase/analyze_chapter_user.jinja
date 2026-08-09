@@ -1,0 +1,39 @@
+{#- ================================================================
+ANALYZE_CHAPTER_USER.JINJA - Phase 0 : Analyse littéraire (User)
+
+Purpose: User prompt for chapter analysis.
+         First block: chapter text to analyze from scratch.
+         Incremental: existing analysis + new text block to merge.
+
+Input variables:
+  - chapter_name       (str)
+  - target_language    (str)
+  - genre              (str, default: "fiction")
+  Premier bloc (existing_analysis absent) :
+    - chapter_text     (str)
+  Incrémental (existing_analysis présent) :
+    - existing_analysis  (str)   JSON de l'analyse partielle — active aussi le mode incrémental
+    - current_block      (int)
+    - total_blocks       (int)
+    - chapter_text       (str)
+    - is_last_block      (bool)
+
+Pair: analyze_chapter_system.jinja
+================================================================ -#}
+{%- set is_incremental = existing_analysis is defined and existing_analysis -%}
+{% if is_incremental %}
+Chapitre : "{{ chapter_name }}" — Bloc {{ current_block }}/{{ total_blocks }}{% if is_last_block %} (dernier bloc){% endif %}
+
+Analyse existante :
+```json
+{{ existing_analysis }}
+```
+
+Nouveau bloc de texte :
+
+{{ chapter_text }}
+{% else %}
+Chapitre : "{{ chapter_name }}"
+
+{{ chapter_text }}
+{% endif %}

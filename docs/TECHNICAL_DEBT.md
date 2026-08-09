@@ -147,7 +147,7 @@ la dette réelle.
 
 ---
 
-## 5. Template orphelin dans le submodule
+## 5. Template orphelin
 
 **Constat** — `template/common/literary_context_layered_block.jinja`
 (77 lignes) n'a **aucun référent**, ni dans `src/ebook_translator/`, ni dans
@@ -157,10 +157,10 @@ C'est vraisemblablement le pendant stratifié de `literary_context_block.jinja`,
 écrit pour injecter un `AnalyseChapter` dans les prompts de traduction, mais
 jamais branché : les phases 1 et 2 incluent toujours la version non stratifiée.
 
-**Hors-périmètre** du chantier qui l'a trouvé — le submodule `template` a son
-propre dépôt et sa propre documentation.
+**Hors-périmètre** du chantier qui l'a trouvé — `template` vivait alors dans son
+propre dépôt, avec sa propre documentation.
 
-**Pour solder** — dans un chantier dédié au submodule : le brancher (si
+**Pour solder** — dans un chantier dédié aux templates : le brancher (si
 l'injection stratifiée est souhaitée) ou le supprimer.
 
 *Identifié par `docs-realignment`, étape 3.*

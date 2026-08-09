@@ -1,0 +1,31 @@
+{#- ================================================================
+RETRY_CORRECT_ANALYSIS_MISSING_SECTIONS_USER.JINJA (User)
+
+Purpose: User prompt with missing sections list and incomplete analysis.
+
+Input variables:
+  - missing_sections (list of str)
+  - incomplete_response (str, the JSON to complete)
+  - chapter_name
+  - chapter_text
+
+Pair: retry_correct_analysis_missing_sections_system.jinja
+================================================================ -#}
+
+Chapitre : "{{ chapter_name }}"
+
+Sections manquantes ({{ missing_sections|length }}) :
+{%- for section in missing_sections %}
+- `{{ section }}`
+{%- endfor %}
+
+Analyse incomplète :
+```json
+{{ incomplete_response }}
+```
+
+Texte du chapitre :
+
+{{ chapter_text }}
+
+Complète les sections manquantes à partir du texte ci-dessus et produis le JSON complet :
