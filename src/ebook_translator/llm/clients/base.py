@@ -89,6 +89,14 @@ class LLMClientBase[
     _api_key_env: ClassVar[str | None] = None
     """Variable d'environnement propre au provider, consultée avant `API_KEY`."""
 
+    provider_key: ClassVar[str | None] = None
+    """Clé de partage du créneau de débit, `None` pour dériver du nom de classe.
+
+    Une limite de débit s'applique à un compte d'API, donc à un provider — pas à
+    un modèle ni à un run. Deux clients qui portent la même clé partagent leur
+    plafond, y compris entre processus (`llm/rate_limit.py`).
+    """
+
     _parameters: Data
 
     @property

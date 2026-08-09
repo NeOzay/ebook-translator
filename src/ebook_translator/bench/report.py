@@ -22,7 +22,7 @@ from pathlib import Path
 from string import ascii_uppercase
 
 from ebook_translator.bench.collect import Corpus, DocumentSet, TranslationCorpus
-from ebook_translator.bench.results import VariantResult
+from ebook_translator.bench.results import VariantResult, describe_shortfall
 from ebook_translator.bench.runner import BenchRun
 from ebook_translator.exporter.helper import slugify
 from ebook_translator.logger import get_logger
@@ -156,8 +156,12 @@ def render_metrics(run: BenchRun, anonymization: Anonymization) -> str:
             continue
         rejets = sum(phase.chunks_rejected for phase in result.phases)
         usage = result.usage
+        # Un statut dégradé sans son ratio obligerait à rouvrir `result.json`
+        # pour savoir si la variante a produit quelque chose d'exploitable.
+        shortfall = describe_shortfall(result.phases)
+        statut = f"{result.status} ({shortfall})" if shortfall else result.status
         lignes.append(
-            f"| {label} | {result.status} | {result.duration_seconds:.0f} s | "
+            f"| {label} | {statut} | {result.duration_seconds:.0f} s | "
             f"{usage.llm_calls} | {usage.prompt_tokens} | {usage.completion_tokens} | "
             f"{rejets} |"
         )
@@ -361,7 +365,12 @@ def write_report(run: BenchRun, corpus: Corpus) -> Path:
     Returns:
         Le répertoire du run.
     """
-    anonymization = anonymize(corpus.variant_ids, run.run_id)
+    # Étiqueter **toutes** les variantes du run, pas seulement celles du
+    # corpus : celui-ci ne retient que les variantes complètes, et une variante
+    # écartée disparaîtrait alors de `metrics.md`, où l'on veut justement lire
+    # son statut. Les sections comparatives la montrent « non produite », ce qui
+    # est exact et se voit.
+    anonymization = anonymize([v.variant_id for v in run.variants], run.run_id)
 
     (run.root / MANIFEST_NAME).write_text(
         render_manifest(run, anonymization), encoding="utf-8"

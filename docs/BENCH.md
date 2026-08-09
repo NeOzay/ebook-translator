@@ -26,6 +26,24 @@ bench/runs/<run_id>/
   work/<variant_id>/     # workspace brut : cache, EPUB produit, result.json
 ```
 
+### Statut d'une variante
+
+Chaque `result.json` porte un statut **dérivé du travail accompli**, jamais déclaré :
+
+| Statut | Condition | Conséquence |
+|---|---|---|
+| `ok` | chaque phase a traité tous ses chunks | entre dans le corpus d'arbitrage |
+| `partial` | au moins une phase incomplète | **écartée du corpus**, signalée au rapport |
+| `error` | rien de traité, ou exception | écartée du corpus |
+
+Les chunks servis par le cache comptent comme traités : un run entièrement amorcé par
+un `Seed` reste `ok`. Une phase sans travail (`chunks_total == 0`) est neutre.
+
+Ce calcul existe parce qu'un run étranglé par le débit rend la main **sans exception**
+avec zéro chunk : il était déclaré `ok`, et son corpus vide entrait dans l'arbitrage.
+`metrics.md` affiche le ratio à côté d'un statut dégradé (`partial — glossary: 1/4
+chunks`), et `ebook-bench` sort en code 1 dès qu'une variante n'est pas `ok`.
+
 Dans `metrics.md` et `compare/`, les variantes ne portent que des étiquettes `A`, `B`,
 `C`. Le lien avec les paramètres n'existe que dans `manifest.json`, que l'arbitre
 n'ouvre qu'après avoir conclu. L'attribution des étiquettes est un mélange déterministe
@@ -66,6 +84,37 @@ suite = BenchSuite(
 `params` est de la métadonnée pure : elle nourrit le manifeste, jamais le corpus remis
 à l'arbitre. Elle n'agit pas sur le pipeline — c'est la fabrique qui décide.
 
+### Plafonner le débit d'un provider
+
+Un quota d'API se règle sur le `LLMBuilder` de la variante :
+
+```python
+.llm(LLMBuilder().default_client(Mistral(MistralModels.LARGE)).rate_limit(4.2))
+```
+
+Le quota se lit souvent en requêtes **par seconde** : multiplier par 60.
+`mistral-large-2512` annonce 0,07 req/s, soit 4,2 par minute — d'où un flottant,
+qu'un arrondi fausserait.
+
+Ce plafond est partagé bien au-delà d'un pipeline. Les threads d'executor et ceux du
+pool de validation émettent ensemble ; chaque variante d'un banc est un sous-processus ;
+et deux bancs peuvent tourner côte à côte. Le créneau est donc réservé dans un fichier
+verrouillé, commun à tout ce qui vise le même provider :
+
+```
+$XDG_CACHE_HOME/ebook-translator/rate/<provider>
+```
+
+À 4,2 appels/minute, un appel part toutes les ~14 s : **augmenter `.workers()`
+n'accélère plus rien**, le plafond mordant avant le parallélisme.
+
+En cas de 429 malgré tout, le débit est divisé par deux et le créneau repoussé pour
+tous les émetteurs, puis regagné par paliers après une série de succès. Un 429 ne
+consomme pas de tentative réseau mais un budget en secondes (`.rate_limit_budget()`,
+120 s par défaut) : une limite exprimée par minute ne peut pas être franchie par
+quelques secondes de backoff. Mistral n'envoie pas de `Retry-After` ; l'en-tête est
+exploité quand un provider le fournit.
+
 ### Relayer le `RunEnv` est obligatoire
 
 Une fabrique qui code en dur son EPUB ou son cache ferait fuiter les variantes les unes
@@ -86,6 +135,21 @@ Vérification dans `metrics.md` : la phase partagée doit afficher `cache = chun
 
 La copie est délibérée — un symlink laisserait une variante corrompre la référence
 commune si elle recalculait une partie de la phase.
+
+### Faire varier le glossaire de départ
+
+Comparer des pipelines suppose parfois de faire varier non pas un réglage, mais l'**état
+initial** que la phase reçoit. Le cas type est le glossaire : à froid, il reste instable
+pendant l'essentiel du livre, puisqu'il faut cinq émissions unanimes pour qu'un terme
+converge. Les trois groupes du prompt ne sont donc réellement peuplés qu'à la fin.
+
+`PipelineBuilder.glossary(...)` et `.glossary_seed(...)` permettent de partir d'un
+glossaire hérité d'un tome précédent ou d'un seed déclaratif — voir
+[bench/config_glossaire_seed.py](../bench/config_glossaire_seed.py), qui oppose un run à
+froid à un run prérempli.
+
+Dans ce cas, la phase glossaire ne doit **surtout pas** figurer dans les phases partagées
+du `Seed` : elle est l'objet de la comparaison. Ne partager que l'analyse littéraire.
 
 ## Options de corpus
 
@@ -151,7 +215,7 @@ puis lève l'anonymat en fin de fichier.
 ## Limites connues
 
 - Pas de conversion tokens → euros : aucune table de prix par provider n'est tenue.
-- Les logs du pipeline partent dans `logs/run_<horodatage>/` du répertoire courant, un
-  répertoire par sous-processus, hors du workspace de la variante.
 - L'EPUB source n'est pas sous-échantillonné : préférer un livre court pour un banc
   d'essais, ou plafonner le corpus rendu avec `max_fragments`.
+- Le plafond de débit se règle par variante, dans son `LLMBuilder` : rien ne le déduit
+  du provider ni ne le partage automatiquement entre variantes d'une même suite.

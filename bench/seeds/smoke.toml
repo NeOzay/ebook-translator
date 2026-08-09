@@ -1,0 +1,62 @@
+# Seed de fumée — termes tirés de `books/Chillin Vol 01 - extrait chapitre 3_1.epub`.
+#
+# Les quatre canaux de réinjection sont exercés en un seul chunk : c'est ce qui
+# rend ce seed utile pour vérifier la mécanique du banc à coût quasi nul.
+#
+# Les termes doivent apparaître dans le texte, sinon rien n'est injecté et les
+# deux variantes reçoivent le même prompt. Les occurrences relevées dans
+# l'extrait sont notées en regard de chaque entrée.
+
+# Attendu : listé sous « Termes validés — NE PAS inclure ». Le modèle ne
+# devrait pas le réémettre. S'il le fait, la consigne d'exclusion ne porte pas.
+# 24 occurrences — le protagoniste, impossible à manquer.
+[[entree]]
+terme = "flio"
+traduction = "Flio"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+# Attendu : listé sous « Termes à arbitrer », avec les deux propositions et
+# leurs poids. Le modèle doit trancher, pas inventer une troisième forme.
+# Conflit de traduction réel — une épithète que le français peut rendre de
+# plusieurs façons, contrairement à un nom propre qui ne varie qu'en graphie.
+[[entree]]
+terme = "dark one"
+type = "appellation"
+sexe = "m"
+propositions = [
+  ["le Ténébreux", 3],
+  ["l'Obscur", 2],
+]
+
+# Attendu : listé sous « Termes déjà extraits », forme seule. Le modèle doit
+# reprendre cette forme exacte s'il retient le terme, pas une variante.
+# 8 occurrences.
+[[entree]]
+terme = "gholl"
+traduction = "Gholl"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+# Attendu : absent du bloc « Glossaire existant ». Une entrée validée ne passe
+# pas par l'arbitrage — elle alimente les phases de traduction.
+# 7 occurrences.
+[[entree]]
+terme = "balirossa"
+traduction = "Balirossa"
+type = "personnage"
+sexe = "f"
+user = true
+
+# Même canal que `balirossa`, mais la traduction s'écarte du terme source. Le
+# modèle, qui ne voit pas cette entrée, proposera `Rys` ; l'entrée doit tenir
+# malgré cette proposition, et c'est `Lys` que les phases de traduction
+# reçoivent. Ce que `balirossa`, traduit par lui-même, ne pouvait pas montrer.
+[[entree]]
+terme = "rys"
+traduction = "Lys"
+type = "personnage"
+sexe = "f"
+user = true

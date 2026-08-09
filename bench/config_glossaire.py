@@ -50,9 +50,11 @@ def pipeline(env: RunEnv, client: Deepseek | Mistral) -> PipelineBuilder:
         .phases(PhasesBuilder().add_glossary_generation())
         # `2` est la valeur employée pour les 8 runs de vérification du
         # 2026-08-04, gardée telle quelle pour qu'ils restent reproductibles.
-        # Mistral y étrangle le débit une fois sur quatre : le run rend alors
-        # zéro chunk sans que rien ne le signale (dette technique n° 10).
-        # Passer à 1 avant tout run Mistral dont le résultat doit être fiable.
+        # Mistral y étranglait le débit une fois sur quatre, rendant zéro chunk
+        # sans que rien ne le signale. Ce n'est plus silencieux : un run vide
+        # sort désormais en `status: "error"`. Pour l'éviter tout court, ajouter
+        # `.rate_limit(4.2)` au `LLMBuilder` de la variante Mistral — quota
+        # `mistral-large-2512`, 0,07 req/s (voir bench/config_debit_mistral.py).
         .workers(2)
     )
 

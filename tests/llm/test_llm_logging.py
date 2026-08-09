@@ -98,7 +98,11 @@ def test_llm_creates_log_with_context(llm_instance):
 def test_llm_creates_log_without_context(llm_instance):
     """Test que le LLM crée un log sans contexte (fallback)."""
     session_dir = LogSession.get_session_dir()
-    initial_count = len(list(session_dir.glob("llm_*.log")))
+    # Identifier le fichier par différence d'ensembles, et non en prenant le
+    # `st_mtime` le plus élevé : le répertoire de session est partagé par toute
+    # la suite, et des logs écrits dans la même seconde s'y départagent alors
+    # dans l'ordre arbitraire du glob.
+    avant = set(session_dir.glob("llm_*.log"))
 
     result = llm_instance.query(
         system_prompt="Translate this",
@@ -107,10 +111,10 @@ def test_llm_creates_log_without_context(llm_instance):
 
     assert result == "Mocked translation"
 
-    log_files = list(session_dir.glob("llm_*.log"))
-    assert len(log_files) == initial_count + 1, "Un fichier de log doit avoir été créé"
+    nouveaux = set(session_dir.glob("llm_*.log")) - avant
+    assert len(nouveaux) == 1, "Un fichier de log doit avoir été créé"
 
-    new_file = sorted(log_files, key=lambda p: p.stat().st_mtime)[-1]
+    new_file = nouveaux.pop()
     assert new_file.name.startswith("llm_")
     assert new_file.name.endswith(".log")
     # Format without context: llm_NNNN_<timestamp>.log → stem parts ≥ 2

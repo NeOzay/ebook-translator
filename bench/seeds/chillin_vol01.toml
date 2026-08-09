@@ -1,0 +1,305 @@
+# Seed du banc réel — `bench/config_glossaire_seed.py`, variante `preremp`.
+#
+# Remplace le glossaire du tome voisin que prévoyait le plan, perdu avec le
+# corpus de la session 2. Ce n'est donc pas un glossaire appris : c'est un
+# préremplissage contrôlé, dérivé de la terminologie réellement présente dans
+# le Vol 01 et de ses fréquences. Le banc mesure de ce fait l'effet d'un
+# glossaire garni sur la sélection des termes, non la situation de production
+# (tome suivant traduit après le précédent).
+#
+# Les trois niveaux peuplent les trois groupes de
+# `common/glossary_existing_block.jinja` :
+#
+#   valide   → w=5, confiance haute, listé comme à ne pas réémettre
+#   arbitrer → propositions pondérées, le modèle doit trancher
+#   emergent → w=1, forme seule, sans traduction soumise
+#
+# Les occurrences notées en commentaire sont comptées sur le texte du tome.
+# Aucune entrée `user` : la question porte sur les trois groupes d'arbitrage,
+# et une entrée user en sort par construction.
+
+# ─────────────────────────── Validés (w=5) ───────────────────────────
+# Noms propres dominants, dont la forme française ne fait pas débat. Le
+# modèle ne devrait pas les réémettre — c'est la première chose à mesurer.
+
+[[entree]]
+terme = "flio"        # 474
+traduction = "Flio"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+[[entree]]
+terme = "rys"         # 261
+traduction = "Rys"
+type = "personnage"
+sexe = "f"
+niveau = "valide"
+
+[[entree]]
+terme = "banaza"      # 115
+traduction = "Banaza"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+[[entree]]
+terme = "sybe"        # 91
+traduction = "Sybe"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+[[entree]]
+terme = "balirossa"   # 74
+traduction = "Balirossa"
+type = "personnage"
+sexe = "f"
+niveau = "valide"
+
+[[entree]]
+terme = "fenrys"      # 67
+traduction = "Fenrys"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+[[entree]]
+terme = "uliminas"    # 66
+traduction = "Uliminas"
+type = "personnage"
+sexe = "f"
+niveau = "valide"
+
+[[entree]]
+terme = "belano"      # 56
+traduction = "Belano"
+type = "personnage"
+sexe = "f"
+niveau = "valide"
+
+[[entree]]
+terme = "blossom"     # 51
+traduction = "Blossom"
+type = "personnage"
+sexe = "f"
+niveau = "valide"
+
+[[entree]]
+terme = "gholl"       # 48
+traduction = "Gholl"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+[[entree]]
+terme = "klyrode"     # 87
+traduction = "Klyrode"
+type = "lieu"
+sexe = "nc"
+niveau = "valide"
+
+# ─────────────────────── À arbitrer (conflits) ───────────────────────
+# Termes dont le français admet plusieurs rendus défendables. Le modèle doit
+# choisir parmi les propositions, non en inventer une troisième — c'est le
+# comportement que le groupe existe pour obtenir.
+
+[[entree]]
+terme = "hero"        # 288
+type = "appellation"
+sexe = "m"
+propositions = [
+  ["le Héros", 4],
+  ["le Brave", 2],
+]
+
+[[entree]]
+terme = "dark one"    # 97
+type = "appellation"
+sexe = "m"
+propositions = [
+  ["le Ténébreux", 3],
+  ["le Seigneur des Ténèbres", 3],
+]
+
+[[entree]]
+terme = "golden-haired hero"  # 63
+type = "appellation"
+sexe = "m"
+propositions = [
+  ["le Héros aux Cheveux d'Or", 4],
+  ["le Héros à la Chevelure Dorée", 2],
+]
+
+[[entree]]
+terme = "klyrode castle"      # 38
+type = "lieu"
+sexe = "nc"
+propositions = [
+  ["Château de Klyrode", 4],
+  ["Castel de Klyrode", 1],
+]
+
+[[entree]]
+terme = "dark army"           # 33
+type = "organisation"
+sexe = "nc"
+propositions = [
+  ["Armée des Ténèbres", 4],
+  ["Armée Sombre", 2],
+]
+
+[[entree]]
+terme = "delaveza forest"     # 30
+type = "lieu"
+sexe = "nc"
+propositions = [
+  ["Forêt de Delaveza", 4],
+  ["Bois de Delaveza", 1],
+]
+
+[[entree]]
+terme = "adventurers’ association"  # 25 — apostrophe typographique
+type = "organisation"
+sexe = "nc"
+propositions = [
+  ["Association des Aventuriers", 3],
+  ["Guilde des Aventuriers", 3],
+]
+
+[[entree]]
+terme = "bottomless bag"      # 20
+type = "objet"
+sexe = "nc"
+propositions = [
+  ["Sac sans Fond", 3],
+  ["Besace sans Fond", 2],
+]
+
+[[entree]]
+terme = "grand magus"         # 15
+type = "appellation"
+sexe = "m"
+propositions = [
+  ["Grand Mage", 3],
+  ["Archimage", 3],
+]
+
+[[entree]]
+terme = "citadel of the dark one"  # 10
+type = "lieu"
+sexe = "nc"
+propositions = [
+  ["Citadelle du Ténébreux", 3],
+  ["Citadelle du Seigneur des Ténèbres", 2],
+]
+
+# ────────────────────────── Émergents (w=1) ──────────────────────────
+# Signal faible : le prompt ne montre que la forme, sans traduction. Ce sont
+# eux que la troncature protège en priorité, un émergent invisible étant
+# condamné à être réémis en variante.
+
+[[entree]]
+terme = "tsuya"       # 46
+traduction = "Tsuya"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "damalynas"   # 44
+traduction = "Damalynas"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "byleri"      # 34
+traduction = "Byleri"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "hiya"        # 61
+traduction = "Hiya"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "quinn"       # 13
+traduction = "Quinn"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+[[entree]]
+terme = "boralis"     # 9
+traduction = "Boralis"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+[[entree]]
+terme = "kuro"        # 9
+traduction = "Kuro"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+[[entree]]
+terme = "oryou"       # 8
+traduction = "Oryou"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "fengaryl"    # 8
+traduction = "Fengaryl"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+[[entree]]
+terme = "mimew"       # 8
+traduction = "Mimew"
+type = "personnage"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "houghtow"    # 16
+traduction = "Houghtow"
+type = "lieu"
+sexe = "nc"
+niveau = "emergent"
+
+[[entree]]
+terme = "meown"       # 19
+traduction = "Meown"
+type = "creature"
+sexe = "nc"
+niveau = "emergent"
+
+[[entree]]
+terme = "infernal"    # 10
+traduction = "Infernal"
+type = "creature"
+sexe = "m"
+niveau = "emergent"
+
+[[entree]]
+terme = "teleportation"  # 23
+traduction = "Téléportation"
+type = "terme_technique"
+sexe = "f"
+niveau = "emergent"
+
+[[entree]]
+terme = "purification"   # 16
+traduction = "Purification"
+type = "terme_technique"
+sexe = "f"
+niveau = "emergent"

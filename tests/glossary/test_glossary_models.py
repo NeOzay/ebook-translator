@@ -32,19 +32,19 @@ class TestParseValid:
                 "terme": "alice",
                 "type": "personnage",
                 "sexe": "f",
-                "proposition_traduction": "alice",
+                "proposition_traduction": "Alice",
             },
             {
                 "terme": "white rabbit",
                 "type": "creature",
                 "sexe": "m",
-                "proposition_traduction": "lapin blanc",
+                "proposition_traduction": "Lapin Blanc",
             },
             {
                 "terme": "dark army",
                 "type": "organisation",
                 "sexe": "nc",
-                "proposition_traduction": "armée des ténèbres",
+                "proposition_traduction": "Armée des Ténèbres",
             },
         ]
 
@@ -56,9 +56,20 @@ class TestParseValid:
                 "terme": "alice",
                 "type": "personnage",
                 "sexe": "f",
-                "proposition_traduction": "alice",
+                "proposition_traduction": "Alice",
             }
         ]
+
+    def test_translation_keeps_its_casing(self):
+        """Le terme est normalisé — il sert de clé — mais pas la traduction.
+
+        La casse de la traduction finit dans le texte traduit : un nom propre
+        ramené en minuscules y reste en minuscules.
+        """
+        raw = "dark one|appellation|m|le Ténébreux\n[=[END]=]"
+        entry = LLMGlossaryModel.model_validate(raw).build()[0]
+        assert entry["terme"] == "dark one"
+        assert entry["proposition_traduction"] == "le Ténébreux"
 
     def test_enum_values_are_case_insensitive(self):
         raw = "Alice|PERSONNAGE|F|Alice\n[=[END]=]"

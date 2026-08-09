@@ -79,6 +79,66 @@ class TestLLMBuilder:
         assert llm.retry_delay == 2.5
 
 
+class TestRateLimit:
+    """Plafond de débit : absent par défaut, explicite sinon.
+
+    Motivé par les 429 Mistral du 2026-08-04, qui vidaient un run de banc sans
+    que rien ne le signale.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        # `build()` crée le répertoire de créneau : sans cette isolation, les
+        # tests écriraient dans le cache réel de l'utilisateur.
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    def test_no_limiter_by_default(self, client: Deepseek) -> None:
+        llm = LLMBuilder().default_client(client).build()
+
+        assert llm.rate_limiter is None
+
+    def test_rate_limit_builds_a_limiter(self, client: Deepseek) -> None:
+        llm = LLMBuilder().default_client(client).rate_limit(30).build()
+
+        assert llm.rate_limiter is not None
+        assert llm.rate_limiter.interval == pytest.approx(2.0)
+
+    def test_limiter_key_comes_from_the_client(self, client: Deepseek) -> None:
+        llm = LLMBuilder().default_client(client).rate_limit(30).build()
+
+        assert llm.rate_limiter is not None
+        assert llm.rate_limiter.state_path.name == "deepseek"
+
+    def test_rate_limit_before_the_client_still_works(self, client: Deepseek) -> None:
+        # La clé se déduit du client : l'ordre des appels ne doit pas compter.
+        llm = LLMBuilder().rate_limit(30).default_client(client).build()
+
+        assert llm.rate_limiter is not None
+        assert llm.rate_limiter.state_path.name == "deepseek"
+
+    def test_fractional_rate_is_supported(self, client: Deepseek) -> None:
+        # `mistral-large-2512` : 0,07 req/s, soit 4,2 par minute. Arrondir à 4
+        # sous-utiliserait le quota, à 5 le dépasserait.
+        llm = LLMBuilder().default_client(client).rate_limit(4.2).build()
+
+        assert llm.rate_limiter is not None
+        assert llm.rate_limiter.interval == pytest.approx(60 / 4.2)
+
+    def test_invalid_rate_is_rejected_at_build(self, client: Deepseek) -> None:
+        with pytest.raises(ValueError, match="strictement positif"):
+            _ = LLMBuilder().default_client(client).rate_limit(0).build()
+
+    def test_budget_default_matches_llm(self, client: Deepseek) -> None:
+        built = LLMBuilder().default_client(client).build()
+
+        assert built.rate_limit_budget == LLM(client=client).rate_limit_budget
+
+    def test_budget_is_forwarded(self, client: Deepseek) -> None:
+        llm = LLMBuilder().default_client(client).rate_limit_budget(45.0).build()
+
+        assert llm.rate_limit_budget == 45.0
+
+
 class TestPhasesBuilder:
     @pytest.mark.parametrize(
         ("method", "expected"),

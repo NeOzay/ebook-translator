@@ -220,6 +220,56 @@ class TestRenderMetrics:
         assert "## Variantes en échec" in metrics
         assert "RuntimeError: boum" in metrics
 
+    def test_statut_degrade_porte_son_ratio(self, run: BenchRun):
+        degradee = VariantResult(
+            variant_id="lent",
+            status="partial",
+            phases=(PhaseResult(name="initial", chunks_total=4, chunks_processed=1),),
+        )
+        run = BenchRun(
+            run_id=run.run_id,
+            root=run.root,
+            suite=run.suite,
+            config_path=run.config_path,
+            seed=run.seed,
+            variants=(run.variants[0], degradee),
+        )
+        anonymization = anonymize(["rapide", "lent"], RUN_ID)
+
+        metrics = render_metrics(run, anonymization)
+
+        # Sans le ratio, il faudrait rouvrir `result.json` pour savoir si la
+        # variante a produit quelque chose d'exploitable.
+        assert "partial (initial: 1/4 chunks)" in metrics
+
+
+class TestWriteReportListeToutesLesVariantes:
+    """Une variante écartée du corpus doit rester visible au rapport.
+
+    Le corpus ne retient que les variantes complètes ; si les étiquettes en
+    dérivaient, une variante en échec disparaîtrait de `metrics.md` — l'inverse
+    du but recherché. Constaté sur un run réel dégradé le 2026-08-09.
+    """
+
+    def test_variante_absente_du_corpus_reste_dans_les_metriques(
+        self, run: BenchRun, corpus: Corpus
+    ):
+        # Corpus ne contenant qu'une des deux variantes du run.
+        restreint = Corpus(
+            variant_ids=("rapide",),
+            translation=None,
+            glossary=corpus.glossary,
+            analysis=corpus.analysis,
+        )
+
+        racine = write_report(run, restreint)
+
+        metrics = (racine / METRICS_NAME).read_text(encoding="utf-8")
+        manifest = json.loads((racine / MANIFEST_NAME).read_text(encoding="utf-8"))
+
+        assert len(manifest["variants"]) == 2, "une variante a disparu du manifeste"
+        assert metrics.count("\n| ") >= 2
+
 
 class TestRenderTranslation:
     def test_source_puis_variantes_etiquetees(self, corpus: Corpus):

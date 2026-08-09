@@ -26,6 +26,7 @@ from ebook_translator.llm.errors import (
     LLMAPIError,
     LLMRateLimitError,
     LLMTimeoutError,
+    retry_after_seconds,
 )
 from ebook_translator.llm.llm_config import (
     FullKwargs,
@@ -79,7 +80,10 @@ def _translate_error(error: Exception) -> Exception:
     """
     if isinstance(error, MistralError):
         if error.status_code == 429:
-            return LLMRateLimitError(str(error))
+            # `MistralError.headers` porte le `Retry-After` du provider : sans
+            # lui, le backoff repartirait sur un délai deviné, très en deçà
+            # d'une fenêtre exprimée par minute.
+            return LLMRateLimitError(str(error), retry_after_seconds(error.headers))
         if error.status_code in (408, 504):
             return LLMTimeoutError(str(error))
         return LLMAPIError(str(error))

@@ -11,6 +11,8 @@ from ebook_translator.bench.worker import _check_env_honored, execute, main
 from ebook_translator.bench.workspace import variant_logs_dir
 from ebook_translator.logger import get_session_log_path
 
+from .conftest import BUILD_QUI_TRAITE
+
 
 def make_env(tmp_path: Path) -> RunEnv:
     return RunEnv(
@@ -71,6 +73,61 @@ class TestExecute:
         assert result.status == "error"
         assert result.error is not None
         assert "Variante inconnue" in result.error
+
+
+class TestStatutCalcule:
+    """Le statut d'une variante dérive du travail accompli, pas de l'absence d'erreur.
+
+    Un run étranglé par le débit rendait la main sans exception avec
+    `chunks_processed: 0`, et le banc le déclarait « ok » : son corpus vide
+    entrait alors dans l'arbitrage (run de banc vide déclaré réussi, 2026-08-04).
+    """
+
+    def test_travail_complet_est_ok(
+        self, tmp_path: Path, write_config: Callable[..., Path]
+    ):
+        config = write_config(BUILD_QUI_TRAITE.format(total=4, processed=4))
+
+        result = execute(config, "a", tmp_path / "work")
+
+        assert result.status == "ok"
+        assert result.error is None
+
+    def test_rien_de_traite_est_une_erreur(
+        self, tmp_path: Path, write_config: Callable[..., Path]
+    ):
+        config = write_config(BUILD_QUI_TRAITE.format(total=4, processed=0))
+
+        result = execute(config, "a", tmp_path / "work")
+
+        assert result.status == "error"
+        assert result.error is not None
+        assert "0/4" in result.error
+
+    def test_travail_partiel_est_signale(
+        self, tmp_path: Path, write_config: Callable[..., Path]
+    ):
+        config = write_config(BUILD_QUI_TRAITE.format(total=4, processed=1))
+
+        result = execute(config, "a", tmp_path / "work")
+
+        assert result.status == "partial"
+        assert result.error is not None
+        assert "1/4" in result.error
+
+    def test_le_statut_survit_au_tour_par_json(
+        self, tmp_path: Path, write_config: Callable[..., Path]
+    ):
+        config = write_config(BUILD_QUI_TRAITE.format(total=4, processed=1))
+        work_root = tmp_path / "work"
+
+        code = main(
+            ["--config", str(config), "--variant", "a", "--work-root", str(work_root)]
+        )
+
+        # `from_dict` repliait tout ce qui n'était pas « ok » sur « error ».
+        assert VariantResult.read(work_root / "a" / RESULT_FILENAME).status == "partial"
+        assert code == 1
 
 
 class TestMain:

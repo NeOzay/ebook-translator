@@ -369,6 +369,28 @@ Apprentissage automatique des traductions (noms propres, termes techniques) avec
 
 L'export vers les prompts passe par [exporter/glossary_exporter.py](../src/ebook_translator/exporter/glossary_exporter.py) ; l'export Markdown des analyses par [exporter/analysis_exporter.py](../src/ebook_translator/exporter/analysis_exporter.py), dont les libellés sont validés contre le schéma à l'import.
 
+### Convergence
+
+Un terme n'a pas une traduction, il a une **distribution** de propositions, alimentée une émission à la fois. La confiance vaut `dominance × masse`, où `masse = w / (w + 2)` plafonne les faibles volumes. Deux seuils en découlent, tous deux dérivés par calcul plutôt que codés en dur :
+
+| Seuil | Fonction | Valeur | Effet |
+|---|---|---|---|
+| Réinjection | `DEFAULT_MIN_REINJECTION_WEIGHT` | 3 | En deçà, le prompt de la phase glossaire ne montre que la forme du terme, sans ses propositions |
+| Convergence | `converged_weight()` | 5 | Émissions unanimes nécessaires pour atteindre la confiance haute |
+
+Conséquence structurante : **un livre de moins de 5 chunks glossaire ne fait converger aucun terme**. Réémettre un terme non convergé n'est pas une faute, c'est le mécanisme.
+
+### Préremplissage
+
+**Fichier** : [glossary_seed.py](../src/ebook_translator/glossary_seed.py)
+
+Peupler le glossaire avant le premier appel LLM, pour exercer les mécanismes de sélection sans attendre qu'un run complet les produise. Deux voies :
+
+- `import_from_volume(path, decay)` — hérite d'un tome précédent. ⚠️ Le `decay` par défaut de `0.1` est bien plus agressif qu'il n'y paraît : mesuré sur un glossaire de 329 termes, il en fait retomber 326 en « émergent », donc sans traduction visible dans le prompt.
+- `load_seed(path)` / `apply_seed(glossary, path)` — fichier TOML déclaratif. On y écrit l'**intention**, pas les poids : `niveau = "valide" | "arbitrer" | "emergent"` correspond aux trois groupes de `glossary_existing_block.jinja`, et les poids en sont dérivés. `user = true` produit une entrée validée, prioritaire. Voir [bench/seeds/exemple.toml](../bench/seeds/exemple.toml).
+
+Les deux se combinent : `PipelineBuilder.glossary(...)` et `.glossary_seed(...)` sont résolus au `build()`, dans un ordre indifférent, et le seed complète alors le glossaire hérité.
+
 ---
 
 ## Logging
