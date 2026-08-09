@@ -9,7 +9,15 @@ Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
 > Dernière vérification : 2026-08-09 (banc + audit de la phase glossaire, chantier
-> `glossary-seeding`). Les entrées 1 à 10 n'ont pas été revérifiées à cette date.
+> `glossary-seeding`). Les entrées 1 à 9 n'ont pas été revérifiées à cette date.
+>
+> Soldé le 2026-08-09 par le chantier `debit-llm` : *« Un run de banc étranglé par
+> le débit passe pour réussi, sans trace »*, qui portait trois défauts. La capture
+> des logs par variante l'était en fait depuis le 2026-08-05 (chantier
+> `logs-par-run`) sans que l'entrée ait été mise à jour ; restaient le statut de
+> variante, désormais dérivé de `chunks_processed`, et l'absence de plafond de
+> débit, désormais réglable par `LLMBuilder.rate_limit()`. Les entrées suivantes
+> ont été renumérotées.
 
 ---
 
@@ -288,43 +296,7 @@ de tentatives sur l'échec de schéma côté executor.
 
 ---
 
-## 10. Un run de banc étranglé par le débit passe pour réussi, sans trace
-
-**Constat** — `bench/runs/20260804_212523/work/mistral/result.json` porte
-`"status": "ok"` avec `chunks_processed: 0`, `chunks_rejected: 0` et
-`llm_calls: 0`, pour `duration_seconds: 17.7`. La variante n'a rien produit et
-le banc la déclare réussie. Observé 2 fois sur 8 runs Mistral, dans deux états
-de prompt différents — donc indépendamment de ce qui était mesuré.
-
-**Cause** — limitation de débit côté Mistral, atteinte par les appels simultanés
-d'un même pipeline (les variantes, elles, s'exécutent séquentiellement :
-[bench/runner.py](../src/ebook_translator/bench/runner.py)). Les 429 sont
-absorbés par le retry puis épuisés en silence.
-
-**Trois défauts distincts, à solder séparément** :
-
-1. **Les journaux ne sont pas capturés dans le run.** `bench/worker.py` a bien
-   un `logger`, mais rien de ce qu'il émet n'atterrit sous
-   `bench/runs/<run_id>/`. Sans eux, un échec de débit est indiscernable d'un
-   effet de prompt — c'est exactement l'erreur d'attribution commise pendant le
-   chantier `glossaire-precision`. **Écrire un `<variant_id>.log` par variante
-   dans son workspace.**
-2. **`status: "ok"` ne vérifie pas qu'il s'est passé quelque chose.** Un statut
-   devrait dépendre de `chunks_processed` au regard de `chunks_total`, avec un
-   état intermédiaire pour un run partiel (observé : 1 chunk sur 4).
-3. **Le débit n'est pas un paramètre du banc.** Rien ne permet de plafonner la
-   concurrence pour un provider donné ; `.workers(n)` est un réglage de
-   pipeline, pas une limite de débit par fournisseur.
-
-**Conséquence pratique tant que ce n'est pas soldé** : tout résultat de banc
-impliquant Mistral doit être lu en vérifiant `chunks_processed` dans
-`result.json` avant d'être interprété.
-
-*Identifié par `glossaire-precision`, 8 runs de vérification du 2026-08-04.*
-
----
-
-## 11. La clause « NE PAS inclure » du prompt glossaire ne tient pas
+## 10. La clause « NE PAS inclure » du prompt glossaire ne tient pas
 
 **Constat** — `glossary_existing_block.jinja` liste les termes convergés sous
 « **Termes validés** (confiance haute) — NE PAS inclure dans la sortie ». Le
@@ -370,7 +342,7 @@ sait le faire contre `froid`.
 
 ---
 
-## 12. Les clés du glossaire ne sont normalisées que sur la casse
+## 11. Les clés du glossaire ne sont normalisées que sur la casse
 
 **Constat** — `Glossary.learn()`
 ([glossary.py](../src/ebook_translator/glossary.py)) indexe un terme par
@@ -404,7 +376,7 @@ plus jamais trouvés dans le bloc.
 
 ---
 
-## 13. Les doctests ne sont exécutés par rien
+## 12. Les doctests ne sont exécutés par rien
 
 **Constat** — les `addopts` de `pyproject.toml` ne contiennent pas
 `--doctest-modules`, et aucune configuration ne collecte les doctests par
@@ -428,7 +400,7 @@ de couverture rendant déjà le code de sortie de `pytest` inexploitable.
 
 ---
 
-## 14. L'auditeur glossaire noie ses vrais constats sous les mots-outils
+## 13. L'auditeur glossaire noie ses vrais constats sous les mots-outils
 
 **Constat** — `candidat-manque` (« entité nommée récurrente absente du
 glossaire ») repère les mots capitalisés en milieu de phrase
@@ -454,7 +426,7 @@ avant comparaison au glossaire.
 
 ---
 
-## 15. Points mineurs, laissés sciemment
+## 14. Points mineurs, laissés sciemment
 
 - `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
   est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le

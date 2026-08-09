@@ -23,6 +23,8 @@ from ebook_translator.bench.results import (
     RESULT_FILENAME,
     PhaseResult,
     VariantResult,
+    compute_status,
+    describe_shortfall,
 )
 from ebook_translator.bench.suite import RunEnv, load_suite
 from ebook_translator.bench.workspace import prepare_workspace, variant_logs_dir
@@ -83,11 +85,27 @@ def execute(config_path: Path, variant_id: str, work_root: Path) -> VariantResul
 
         stats = pipeline.run(**run_kwargs)  # pyright: ignore[reportArgumentType]
 
+        phases = tuple(PhaseResult.from_stats(s) for s in stats.values())
+        status = compute_status(phases)
+
+        # Un pipeline qui rend la main sans exception n'a pas forcément
+        # travaillé : une limitation de débit épuisée en silence produit un run
+        # vide, que le banc déclarait « ok » (run de banc vide déclaré réussi, 2026-08-04).
+        message: str | None = None
+        if status != "ok":
+            shortfall = describe_shortfall(phases) or "aucune phase n'a de travail"
+            message = (
+                f"Variante '{variant_id}' incomplète ({shortfall}). "
+                f"Voir logs/translation.log dans le workspace de la variante."
+            )
+            logger.error(f"❌ {message}")
+
         return VariantResult(
             variant_id=variant_id,
-            status="ok",
-            phases=tuple(PhaseResult.from_stats(s) for s in stats.values()),
+            status=status,
+            phases=phases,
             duration_seconds=time.time() - start,
+            error=message,
         )
 
     except Exception as error:

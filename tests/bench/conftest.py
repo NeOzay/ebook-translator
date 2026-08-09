@@ -47,6 +47,43 @@ def build(env):
     raise RuntimeError("fabrique cassée")
 """
 
+BUILD_QUI_TRAITE = """
+from ebook_translator.pipeline.context import PhaseStats
+
+
+class _Pipeline:
+    def __init__(self, env):
+        self.epub_path = env.epub
+        self.cache_dir = env.cache_dir
+
+    def run(self, **kwargs):
+        return {{
+            "traduction": PhaseStats(
+                phase_name="traduction",
+                chunks_total={total},
+                chunks_processed={processed},
+            )
+        }}
+
+
+class _Builder:
+    def __init__(self, env):
+        self._env = env
+
+    def build(self):
+        return _Pipeline(self._env), {{}}
+
+
+def build(env):
+    return _Builder(env)
+"""
+"""Fabrique qui va au bout, paramétrée par le travail accompli.
+
+Sans elle, aucun test n'exerçait le chemin nominal de `worker.execute` : toutes
+les fabriques levaient, et le calcul du statut d'une variante — ce qui empêche
+un run vide de passer pour réussi — n'était donc vérifié nulle part.
+"""
+
 
 @pytest.fixture
 def epub(tmp_path: Path) -> Path:

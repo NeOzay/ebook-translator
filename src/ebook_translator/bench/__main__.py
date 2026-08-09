@@ -67,9 +67,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.error(f"❌ {error}")
         return 1
 
+    # Le corpus n'est bâti que sur les variantes complètes : une variante
+    # incomplète y apporterait moins de matière que les autres, et l'arbitre
+    # comparerait des volumes plutôt que des traductions.
     corpus = collect_corpus(
         run.suite.epub,
-        variant_caches(run.work_root, [v.variant_id for v in run.variants]),
+        variant_caches(run.work_root, [v.variant_id for v in run.succeeded]),
         run.suite.corpus,
     )
     racine = write_report(run, corpus)
@@ -77,9 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n📁 Rapport : {racine}")
     print(f"⚖️  Arbitrage : /bench-judge {run.run_id}")
 
+    if run.partial:
+        partielles = ", ".join(v.variant_id for v in run.partial)
+        print(f"⚠️  Variantes incomplètes, écartées du corpus : {partielles}")
+
     if run.failed:
         echecs = ", ".join(v.variant_id for v in run.failed)
         print(f"⚠️  Variantes en échec : {echecs}")
+
+    if run.failed or run.partial:
         return 1
 
     return 0

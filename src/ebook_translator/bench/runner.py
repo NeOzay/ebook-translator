@@ -75,8 +75,17 @@ class BenchRun:
 
     @property
     def succeeded(self) -> tuple[VariantResult, ...]:
-        """Variantes allées au bout du pipeline."""
+        """Variantes allées au bout du pipeline.
+
+        Seules celles-ci sont comparables : une variante incomplète fausserait
+        l'arbitrage en présentant moins de matière que les autres.
+        """
         return tuple(v for v in self.variants if v.status == "ok")
+
+    @property
+    def partial(self) -> tuple[VariantResult, ...]:
+        """Variantes qui ont travaillé sans aller au bout."""
+        return tuple(v for v in self.variants if v.status == "partial")
 
     @property
     def failed(self) -> tuple[VariantResult, ...]:

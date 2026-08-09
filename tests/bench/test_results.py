@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from ebook_translator.bench.results import PhaseResult, VariantResult
+from ebook_translator.bench.results import (
+    PhaseResult,
+    VariantResult,
+    compute_status,
+    describe_shortfall,
+)
 from ebook_translator.llm.usage import PhaseUsage
 from ebook_translator.pipeline.base import PhaseName
 from ebook_translator.pipeline.context import PhaseStats
@@ -96,3 +101,79 @@ class TestVariantResult:
     def test_lecture_fichier_absent(self, tmp_path: Path):
         with pytest.raises(FileNotFoundError):
             _ = VariantResult.read(tmp_path / "absent.json")
+
+
+class TestComputeStatus:
+    """Le statut dérive du travail accompli (run de banc vide déclaré réussi, 2026-08-04)."""
+
+    def test_tout_traite(self):
+        phases = [PhaseResult("t", chunks_total=4, chunks_processed=4)]
+
+        assert compute_status(phases) == "ok"
+
+    def test_rien_traite(self):
+        phases = [PhaseResult("t", chunks_total=4, chunks_processed=0)]
+
+        assert compute_status(phases) == "error"
+
+    def test_partiellement_traite(self):
+        phases = [PhaseResult("t", chunks_total=4, chunks_processed=1)]
+
+        assert compute_status(phases) == "partial"
+
+    def test_une_seule_phase_incomplete_degrade_le_tout(self):
+        phases = [
+            PhaseResult("a", chunks_total=4, chunks_processed=4),
+            PhaseResult("b", chunks_total=4, chunks_processed=3),
+        ]
+
+        assert compute_status(phases) == "partial"
+
+    def test_phase_sans_travail_est_neutre(self):
+        # Une phase à 0 chunk n'a rien à prouver : elle ne dégrade pas le run.
+        phases = [
+            PhaseResult("vide", chunks_total=0, chunks_processed=0),
+            PhaseResult("t", chunks_total=2, chunks_processed=2),
+        ]
+
+        assert compute_status(phases) == "ok"
+
+    def test_aucune_phase_est_une_erreur(self):
+        assert compute_status([]) == "error"
+
+    def test_cache_integral_reste_ok(self):
+        # Un run amorcé par un Seed ne fait aucun appel LLM : il reste valide.
+        phases = [
+            PhaseResult("t", chunks_total=4, chunks_processed=4, chunks_from_cache=4)
+        ]
+
+        assert compute_status(phases) == "ok"
+
+
+class TestDescribeShortfall:
+    def test_liste_les_phases_incompletes(self):
+        phases = [
+            PhaseResult("a", chunks_total=4, chunks_processed=4),
+            PhaseResult("b", chunks_total=4, chunks_processed=1),
+        ]
+
+        assert describe_shortfall(phases) == "b: 1/4 chunks"
+
+    def test_vide_quand_tout_est_traite(self):
+        phases = [PhaseResult("a", chunks_total=4, chunks_processed=4)]
+
+        assert describe_shortfall(phases) == ""
+
+
+class TestStatusRoundTrip:
+    def test_partial_survit_a_la_relecture(self, tmp_path: Path):
+        chemin = tmp_path / "result.json"
+        VariantResult(variant_id="v1", status="partial").write(chemin)
+
+        assert VariantResult.read(chemin).status == "partial"
+
+    def test_statut_inconnu_devient_erreur(self, tmp_path: Path):
+        chemin = tmp_path / "result.json"
+        chemin.write_text('{"variant_id": "v1", "status": "bizarre"}', encoding="utf-8")
+
+        assert VariantResult.read(chemin).status == "error"

@@ -9,6 +9,7 @@ JSON, le parent le relit. Ces structures sont le contrat entre les deux.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -16,7 +17,13 @@ from typing import Any, Literal
 from ebook_translator.llm.usage import PhaseUsage
 from ebook_translator.pipeline.context import PhaseStats
 
-type RunStatus = Literal["ok", "error"]
+type RunStatus = Literal["ok", "partial", "error"]
+"""Issue d'une variante, dérivée du travail réellement accompli.
+
+Un statut qui ne dépendait que de l'absence d'exception a laissé passer un run
+à `chunks_processed: 0` déclaré réussi, dont le corpus vide est entré dans
+l'arbitrage (run de banc vide déclaré réussi, 2026-08-04). Le statut se calcule donc, il ne se déclare pas.
+"""
 
 RESULT_FILENAME = "result.json"
 """Nom du fichier de résultat déposé dans le workspace de la variante."""
@@ -120,6 +127,63 @@ class PhaseResult:
         )
 
 
+def compute_status(phases: Sequence[PhaseResult]) -> RunStatus:
+    """Dérive l'issue d'une variante du travail réellement accompli.
+
+    Seules les phases ayant quelque chose à faire (`chunks_total > 0`) sont
+    considérées : une phase sans travail est neutre, pas suspecte. Les chunks
+    servis par le cache comptent comme traités — un run entièrement amorcé par
+    un `Seed` reste donc `ok`.
+
+    Args:
+        phases: Mesures par phase, telles que produites par le pipeline.
+
+    Returns:
+        `ok` si chaque phase a traité tout son travail, `partial` s'il en
+        manque, `error` si rien n'a été traité du tout.
+
+    Example:
+        >>> compute_status([PhaseResult("t", chunks_total=4, chunks_processed=4)])
+        'ok'
+        >>> compute_status([PhaseResult("t", chunks_total=4, chunks_processed=1)])
+        'partial'
+        >>> compute_status([PhaseResult("t", chunks_total=4)])
+        'error'
+    """
+    working = [phase for phase in phases if phase.chunks_total > 0]
+    if not working:
+        return "error"
+
+    if all(phase.chunks_processed == 0 for phase in working):
+        return "error"
+
+    if any(phase.chunks_processed < phase.chunks_total for phase in working):
+        return "partial"
+
+    return "ok"
+
+
+def describe_shortfall(phases: Sequence[PhaseResult]) -> str:
+    """Résume en une ligne ce qui n'a pas été traité.
+
+    Args:
+        phases: Mesures par phase.
+
+    Returns:
+        Un texte listant les phases incomplètes, vide si tout a été traité.
+
+    Example:
+        >>> describe_shortfall([PhaseResult("t", chunks_total=4, chunks_processed=1)])
+        't: 1/4 chunks'
+    """
+    manquantes = [
+        f"{phase.name}: {phase.chunks_processed}/{phase.chunks_total} chunks"
+        for phase in phases
+        if phase.chunks_total > 0 and phase.chunks_processed < phase.chunks_total
+    ]
+    return ", ".join(manquantes)
+
+
 @dataclass(frozen=True)
 class VariantResult:
     """Issue d'un run de variante.
@@ -183,7 +247,16 @@ class VariantResult:
         Returns:
             Résultat de variante.
         """
-        status: RunStatus = "ok" if data.get("status") == "ok" else "error"
+        # Tout ce qui n'est pas un statut connu devient `error` : un fichier
+        # tronqué ou écrit par une version antérieure ne doit pas se relire en
+        # succès. Mais `partial` doit survivre au tour par JSON, sinon une
+        # variante dégradée reparaîtrait en échec franc.
+        status: RunStatus = "error"
+        if data.get("status") == "ok":
+            status = "ok"
+        elif data.get("status") == "partial":
+            status = "partial"
+
         phases: list[dict[str, Any]] = data.get("phases", [])
         seeded: list[str] = data.get("seeded_phases", [])
         return cls(

@@ -10,12 +10,60 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire* | *3 effets de bord, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié* | *3 effets de bord, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
 
 ## Non publié
+
+### 🚦 Maîtrise du débit LLM et statut de variante vérifié
+
+#### Un run de banc vide ne peut plus passer pour réussi
+
+Le statut d'une variante est désormais **dérivé** de `chunks_processed` au regard de
+`chunks_total` (`compute_status`, [bench/results.py](../src/ebook_translator/bench/results.py))
+et prend trois valeurs : `ok`, `partial`, `error`. Il était auparavant écrit `"ok"` dès
+que le pipeline rendait la main sans exception — un run étranglé par le débit, à zéro
+chunk, était donc déclaré réussi et son corpus vide entrait dans l'arbitrage.
+
+Les chunks servis par le cache comptent comme traités : un run amorcé par un `Seed`
+reste `ok`. Le corpus d'arbitrage se construit sur `run.succeeded` — **les variantes en
+échec y entraient jusqu'ici**. `metrics.md` affiche le ratio à côté d'un statut dégradé.
+
+#### Plafond de débit partagé entre threads et entre processus
+
+`LLMBuilder.rate_limit(per_minute)` plafonne les appels à un provider. Le créneau est
+réservé dans un fichier verrouillé (`flock`) sous `$XDG_CACHE_HOME/ebook-translator/rate/`,
+donc partagé par les threads d'executor, ceux du pool de validation, les sous-processus
+de variantes d'un banc et deux bancs concurrents. Un limiteur en mémoire seule serait
+reparti à zéro à chaque variante.
+
+La réservation espace les *départs* au lieu d'accumuler des jetons : un « token bucket »
+classique relâche d'un coup tous les threads en attente et reproduit la rafale.
+`per_minute` est un flottant — `mistral-large-2512` annonce 0,07 req/s, soit 4,2/min.
+
+#### Un 429 ne consomme plus une tentative réseau, mais du temps
+
+`LLM.query` et `LLM.json_query` séparent deux politiques : `max_retries` compte les
+erreurs réseau, tandis qu'une limite de débit consomme `rate_limit_budget` (120 s par
+défaut). L'ancienne boucle accordait `retry_delay * 3**attempt` sur 3 tentatives, soit
+**4 secondes au total** — insuffisant par construction face à un quota par minute.
+
+`Retry-After` est lu quand le provider le fournit (`LLMRateLimitError.retry_after`) ;
+Mistral n'en envoie pas. À défaut, backoff plafonné à 30 s par attente. Un 429 divise
+le débit par deux et repousse le créneau **pour tous les émetteurs**, puis une série de
+succès le regagne par paliers.
+
+**Vérifié en conditions réelles** (2026-08-09, `The Yellow Wallpaper`, phase glossaire,
+deux runs simultanés × deux variantes Mistral à 4,2/min et `.workers(2)`) : 4 variantes
+en `ok`, 4/4 chunks chacune, 16 échanges entrelacés entre les 4 sous-processus et
+espacés de 11 à 17 s autour de la cible de 14,3 s. L'unique 429 a été absorbé, son chunk
+traité.
+
+Solde l'entrée *« Un run de banc étranglé par le débit passe pour réussi, sans trace »*
+de [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md), dont le premier des trois défauts (capture
+des logs par variante) l'était depuis le 2026-08-05.
 
 ### ✨ Sélection du glossaire et mesure par phase
 

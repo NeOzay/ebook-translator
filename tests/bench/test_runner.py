@@ -186,6 +186,37 @@ class TestRunSuite:
         assert [v.variant_id for v in run.failed] == ["a"]
         assert [v.variant_id for v in run.succeeded] == ["b"]
 
+    def test_variante_partielle_est_isolee_des_reussites(
+        self,
+        tmp_path: Path,
+        write_config: Callable[..., Path],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Une variante incomplète ne doit pas être comparée aux complètes.
+
+        Elle apporterait moins de matière au corpus, et l'arbitre comparerait
+        des volumes plutôt que des traductions (run de banc vide déclaré réussi, 2026-08-04).
+        """
+        config = write_config()
+
+        def fake_execute(
+            config_path: Path, variant_id: str, work_root: Path
+        ) -> VariantResult:
+            result = VariantResult(
+                variant_id=variant_id,
+                status="partial" if variant_id == "a" else "ok",
+            )
+            result.write(work_root / variant_id / RESULT_FILENAME)
+            return result
+
+        monkeypatch.setattr(runner, "_execute_variant", fake_execute)
+
+        run = run_suite(config, runs_dir=tmp_path / "runs", run_id="essai")
+
+        assert [v.variant_id for v in run.partial] == ["a"]
+        assert [v.variant_id for v in run.succeeded] == ["b"]
+        assert run.failed == ()
+
 
 class TestExecuteVariant:
     def test_resultat_manquant_devient_une_erreur(

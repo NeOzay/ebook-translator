@@ -29,7 +29,9 @@ from typing import TYPE_CHECKING, Any, Self
 from ..htmlpage import BilingualFormat
 from ..llm import LLM
 from ..llm.clients.client import ClientProviderProtocol
+from ..llm.llm import DEFAULT_RATE_LIMIT_BUDGET
 from ..llm.llm_config import FullKwargs, LLMConfig, UserKwargs
+from ..llm.rate_limit import RateLimiter, provider_key_for
 from ..llm.template_renderers import DEFAULT_PROMPT_DIR
 from ..pipeline.phases import (
     GlossaryPhase,
@@ -75,6 +77,8 @@ class LLMBuilder:
         self._max_retries: int = 3
         self._retry_delay: float = 1.0
         self._glossary_max_terms: int = 25
+        self._rate_limit: float | None = None
+        self._rate_limit_budget: float = DEFAULT_RATE_LIMIT_BUDGET
 
     def default_client(self, provider: ClientProviderProtocol[Any, Any]) -> Self:
         """Client LLM déjà configuré (modèle, thinking, température).
@@ -125,6 +129,49 @@ class LLMBuilder:
         self._retry_delay = seconds
         return self
 
+    def rate_limit(self, per_minute: float) -> Self:
+        """Plafonne le débit d'appels au provider (défaut : aucun plafond).
+
+        Le plafond est partagé par tous les threads du pipeline — ceux de
+        `PhaseExecutor` comme ceux du pool de validation — **et** par les autres
+        processus visant le même provider, via un fichier de créneau. C'est ce
+        qui permet à un banc, dont chaque variante est un sous-processus, de ne
+        pas saturer l'API au changement de variante.
+
+        Le quota d'un provider s'exprime souvent en requêtes par seconde :
+        multiplier par 60. `mistral-large-2512` annonce 0,07 req/s, soit 4,2
+        appels par minute — à ce régime, augmenter `.workers()` n'accélère
+        rien, le plafond étant atteint bien avant le parallélisme.
+
+        Args:
+            per_minute: Nombre maximal d'appels par minute, strictement positif.
+                Flottant accepté, l'arrondi fausserait les quotas les plus bas.
+
+        Returns:
+            self pour chaînage.
+
+        Example:
+            >>> from ebook_translator.llm.clients.mistral import Mistral
+            >>> builder = LLMBuilder().default_client(Mistral()).rate_limit(4.2)
+        """
+        self._rate_limit = per_minute
+        return self
+
+    def rate_limit_budget(self, seconds: float) -> Self:
+        """Temps d'attente accordé aux rejets de débit sur un appel (défaut: 120 s).
+
+        Distinct de `max_retries`, qui compte les erreurs réseau : un 429 ne
+        consomme pas de tentative, il consomme du temps.
+
+        Args:
+            seconds: Budget total d'attente par appel.
+
+        Returns:
+            self pour chaînage.
+        """
+        self._rate_limit_budget = seconds
+        return self
+
     def glossary_max_terms(self, n: int) -> Self:
         """Nombre maximum de termes du glossaire envoyés au LLM par requête (défaut: 25).
 
@@ -149,12 +196,22 @@ class LLMBuilder:
         if self._client is None:
             raise ValueError("LLMBuilder: .default_client() requis")
 
+        # Le limiteur est construit ici, pas au `rate_limit()` : la clé de
+        # partage se déduit du client, qui peut être déclaré après le plafond.
+        limiter = (
+            RateLimiter(self._rate_limit, provider_key_for(self._client))
+            if self._rate_limit is not None
+            else None
+        )
+
         return LLM(
             client=self._client,
             prompt_dir=self._prompt_dir,
             max_retries=self._max_retries,
             retry_delay=self._retry_delay,
             glossary_max_terms=self._glossary_max_terms,
+            rate_limiter=limiter,
+            rate_limit_budget=self._rate_limit_budget,
         )
 
 

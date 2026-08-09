@@ -11,10 +11,12 @@ from ebook_translator.llm.errors import (
     LLMClientError,
     LLMRateLimitError,
     LLMTimeoutError,
+    retry_after_seconds,
 )
 from ebook_translator.llm.llm_config import (
     LLMConfig,
 )
+from ebook_translator.llm.rate_limit import RateLimiter
 from template.types import ConvertibleModel
 
 from ..logger import get_logger, get_session_log_path
@@ -23,6 +25,48 @@ from .template_renderers import DEFAULT_PROMPT_DIR, TemplateRenderer
 from .usage import UsageMeter
 
 logger = get_logger(__name__)
+
+MAX_RATE_LIMIT_DELAY = 30.0
+"""Plafond d'une attente calculée par backoff, en secondes.
+
+Sans lui, la progression `3**n` consomme le budget en cinq rejets (1, 3, 9, 27,
+81) : l'essentiel part en une seule attente démesurée au lieu de financer
+plusieurs tentatives espacées. Ne s'applique pas à un délai annoncé par le
+provider, qui fait autorité — s'il excède le budget, l'appel abandonne.
+"""
+
+MAX_RATE_LIMIT_HITS = 20
+"""Rejets de débit tolérés sur un même appel, quel que soit le budget restant.
+
+Garde-fou contre un provider qui annoncerait `Retry-After: 0` en boucle : sans
+elle, un délai nul ne consommerait aucun budget et la boucle ne finirait pas.
+"""
+
+DEFAULT_RATE_LIMIT_BUDGET = 120.0
+"""Secondes d'attente accordées aux 429 sur un même appel.
+
+Ce budget est **distinct** de `max_retries`, qui compte des tentatives réseau.
+Les confondre plafonnait l'attente à 4 s au total (`retry_delay * 3**attempt`,
+3 tentatives), ce qui ne peut pas franchir une limite exprimée par minute : le
+pipeline abandonnait le chunk avant que la fenêtre du provider ne se rouvre.
+"""
+
+
+def _announced_delay(error: Exception) -> float | None:
+    """Délai que le provider a annoncé avec son rejet, s'il en a annoncé un.
+
+    Args:
+        error: Erreur de limite de débit, normalisée ou issue du SDK openai.
+
+    Returns:
+        Le délai en secondes, ou `None` si le provider ne l'a pas fourni.
+    """
+    if isinstance(error, LLMRateLimitError):
+        return error.retry_after
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    return retry_after_seconds(headers)
 
 
 # TODO Je trouve que le nom de la classe est mauvais et porte a confusion avec les clients LLM
@@ -47,10 +91,14 @@ class LLM:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         glossary_max_terms: int = 25,
+        rate_limiter: RateLimiter | None = None,
+        rate_limit_budget: float = DEFAULT_RATE_LIMIT_BUDGET,
     ):
         self.client: ClientProviderProtocol[Any, Any] = client
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.rate_limiter: RateLimiter | None = rate_limiter
+        self.rate_limit_budget = rate_limit_budget
         self._exchange_counter = 0
 
         # Comptabilité des tokens : alimentée à chaque réponse aboutie, lue en
@@ -86,9 +134,14 @@ class LLM:
 
         Note:
             Les erreurs sont loggées et un fichier de log est créé pour chaque requête.
-            Les erreurs Timeout et RateLimitError déclenchent un retry automatique
-            avec backoff exponentiel.
             Le fichier de log n'est créé qu'au moment où la réponse est disponible.
+
+            Deux politiques de retry cohabitent, volontairement séparées :
+            les erreurs réseau consomment `max_retries` tentatives avec backoff
+            exponentiel, tandis qu'une limite de débit (429) ne consomme aucune
+            tentative mais un budget en secondes (`rate_limit_budget`). Un 429
+            attend le délai annoncé par le provider (`Retry-After`) quand il en
+            fournit un, sinon un backoff plafonné par `MAX_RATE_LIMIT_DELAY`.
 
             En mode raisonnement (use_reasoning_mode=True), le modèle deepseek-reasoner
             génère un processus de pensée explicite (reasoning_content) qui est loggé
@@ -107,7 +160,12 @@ class LLM:
         else:
             client = self.client
 
-        for attempt in range(self.max_retries):
+        attempt = 0
+        rate_limit_spent = 0.0
+        rate_limit_hits = 0
+
+        while attempt < self.max_retries:
+            self._await_slot()
             try:
                 result = client.request(
                     system_prompt=system_prompt,
@@ -118,6 +176,8 @@ class LLM:
 
                 self.usage.record(result)
                 response_text = result.content if result.content else "Result Empty"
+                if self.rate_limiter is not None:
+                    self.rate_limiter.record_success()
 
                 if attempt > 0:
                     self.llm_logger.info(
@@ -134,12 +194,45 @@ class LLM:
             # Chaque clause associe l'exception du SDK openai à son équivalent
             # normalisé (`llm/errors.py`), que lèvent les providers bâtis sur un
             # autre SDK — le comportement de retry est ainsi le même pour tous.
+            # Un 429 ne consomme pas de tentative réseau : il consomme du temps.
+            # Le mélanger à `max_retries` bornait l'attente à quelques secondes
+            # là où le provider raisonne en minutes.
+            except (RateLimitError, LLMRateLimitError) as e:
+                last_error = e
+                delay, must_sleep = self._absorb_rate_limit(e, rate_limit_hits)
+                rate_limit_hits += 1
+
+                if (
+                    rate_limit_spent + delay > self.rate_limit_budget
+                    or rate_limit_hits >= MAX_RATE_LIMIT_HITS
+                ):
+                    self.llm_logger.error(
+                        f"❌ Budget d'attente épuisé après "
+                        f"{rate_limit_spent:.0f}s de limite de débit "
+                        f"({rate_limit_hits} rejets): {e}"
+                    )
+                    break
+
+                rate_limit_spent += delay
+                self.llm_logger.warning(
+                    f"🚦 Limite de débit atteinte (rejet {rate_limit_hits}, "
+                    f"{rate_limit_spent:.0f}/{self.rate_limit_budget:.0f}s de "
+                    f"budget): {e}\n⏳ Attente de {delay:.1f}s "
+                    f"({'directe' if must_sleep else 'via le créneau partagé'})..."
+                )
+                # Sans limiteur, c'est ici qu'on patiente ; avec limiteur, le
+                # créneau est déjà repoussé et `acquire()` s'en charge.
+                if must_sleep:
+                    time.sleep(delay)
+                continue
+
             except (APITimeoutError, LLMTimeoutError) as e:
                 last_error = e
-                if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (2**attempt)
+                attempt += 1
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (2 ** (attempt - 1))
                     self.llm_logger.warning(
-                        f"⏱️ Timeout API (tentative {attempt + 1}/{self.max_retries}): {e}\n"
+                        f"⏱️ Timeout API (tentative {attempt}/{self.max_retries}): {e}\n"
                         f"⏳ Attente de {delay:.1f}s avant nouvelle tentative..."
                     )
                     time.sleep(delay)
@@ -149,33 +242,21 @@ class LLM:
                         f"❌ Timeout API après {self.max_retries} tentatives: {e}"
                     )
 
-            except (RateLimitError, LLMRateLimitError) as e:
-                last_error = e
-                if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (3**attempt)
-                    self.llm_logger.warning(
-                        f"🚦 Limite de débit atteinte (tentative {attempt + 1}/{self.max_retries}): {e}\n"
-                        f"⏳ Attente de {delay:.1f}s avant nouvelle tentative..."
-                    )
-                    time.sleep(delay)
-                    continue
-                else:
-                    self.llm_logger.error(
-                        f"❌ Limite de débit après {self.max_retries} tentatives: {e}"
-                    )
-
             except (APIError, LLMAPIError) as e:
                 last_error = e
+                attempt += 1
                 self.llm_logger.error(f"❌ Erreur API: {e}", exc_info=e)
 
             except (OpenAIError, LLMClientError) as e:
                 last_error = e
+                attempt += 1
                 self.llm_logger.error(
                     f"❌ Erreur client LLM générique: {e}", exc_info=e
                 )
 
             except Exception as e:
                 last_error = e
+                attempt += 1
                 self.llm_logger.exception(
                     f"❌ Erreur inattendue lors de la requête LLM: {e}"
                 )
@@ -187,6 +268,40 @@ class LLM:
             if last_error
             else Exception("Échec de la requête LLM sans exception spécifique")
         )
+
+    def _await_slot(self) -> None:
+        """Attend le créneau de débit, s'il y a un limiteur.
+
+        Appelé à chaque tentative et non une seule fois par requête : un retry
+        après 429 doit reprendre un créneau, sinon le limiteur laisserait
+        passer la rafale qu'il existe pour éviter.
+        """
+        if self.rate_limiter is not None:
+            self.rate_limiter.acquire()
+
+    def _absorb_rate_limit(
+        self, error: Exception, previous_hits: int
+    ) -> tuple[float, bool]:
+        """Enregistre un rejet de débit et rend l'attente à observer.
+
+        Args:
+            error: Erreur de limite de débit reçue.
+            previous_hits: Nombre de rejets déjà encaissés pour cette requête.
+
+        Returns:
+            Le couple (attente en secondes, faut-il dormir soi-même). Avec un
+            limiteur, la pénalité a déjà repoussé le créneau et `acquire()`
+            attendra : dormir en plus doublerait l'attente et fausserait la
+            trace, qui annonçait 1 s là où le créneau imposait 28 s.
+        """
+        announced = _announced_delay(error)
+
+        if self.rate_limiter is not None:
+            return self.rate_limiter.penalize(announced), False
+
+        if announced is not None:
+            return announced, True
+        return min(self.retry_delay * (3**previous_hits), MAX_RATE_LIMIT_DELAY), True
 
     def json_query[M: ConvertibleModel[Any]](
         self,
@@ -204,16 +319,55 @@ class LLM:
         else:
             client = self.client
 
-        json, response = client.json_request(
-            system_prompt,
-            content,
-            response_model,
-            config,
-            self.llm_logger,
-            self.max_retries,
-        )
-        self.usage.record(response)
-        return json
+        rate_limit_spent = 0.0
+        rate_limit_hits = 0
+
+        while True:
+            self._await_slot()
+            try:
+                json, response = client.json_request(
+                    system_prompt,
+                    content,
+                    response_model,
+                    config,
+                    self.llm_logger,
+                    self.max_retries,
+                )
+            except (RateLimitError, LLMRateLimitError) as e:
+                # `json_request` porte ses propres retries de schéma, mais rien
+                # sur le débit : sans cette boucle, la voie Instructor perdrait
+                # son chunk là où `query` tiendrait.
+                delay, must_sleep = self._absorb_rate_limit(e, rate_limit_hits)
+                rate_limit_hits += 1
+
+                if (
+                    rate_limit_spent + delay > self.rate_limit_budget
+                    or rate_limit_hits >= MAX_RATE_LIMIT_HITS
+                ):
+                    self.llm_logger.error(
+                        f"❌ Budget d'attente épuisé après "
+                        f"{rate_limit_spent:.0f}s de limite de débit "
+                        f"({rate_limit_hits} rejets): {e}"
+                    )
+                    raise
+
+                rate_limit_spent += delay
+                self.llm_logger.warning(
+                    f"🚦 Limite de débit atteinte (rejet {rate_limit_hits}, "
+                    f"{rate_limit_spent:.0f}/{self.rate_limit_budget:.0f}s de "
+                    f"budget): {e}\n⏳ Attente de {delay:.1f}s "
+                    f"({'directe' if must_sleep else 'via le créneau partagé'})..."
+                )
+                # Sans limiteur, c'est ici qu'on patiente ; avec limiteur, le
+                # créneau est déjà repoussé et `acquire()` s'en charge.
+                if must_sleep:
+                    time.sleep(delay)
+                continue
+
+            self.usage.record(response)
+            if self.rate_limiter is not None:
+                self.rate_limiter.record_success()
+            return json
 
     def _make_log_path(self, context: str | None) -> Path:
         self._exchange_counter += 1
