@@ -25,8 +25,8 @@ from ebook_translator.bench.results import (
     VariantResult,
 )
 from ebook_translator.bench.suite import RunEnv, load_suite
-from ebook_translator.bench.workspace import prepare_workspace
-from ebook_translator.logger import get_logger
+from ebook_translator.bench.workspace import prepare_workspace, variant_logs_dir
+from ebook_translator.logger import LogSession, get_logger
 
 logger = get_logger(__name__)
 
@@ -103,6 +103,10 @@ def execute(config_path: Path, variant_id: str, work_root: Path) -> VariantResul
 def main(argv: list[str] | None = None) -> int:
     """Exécute la variante demandée et écrit `result.json` dans son workspace.
 
+    Les logs sont redirigés vers le workspace de la variante avant toute
+    exécution : sans cela, ils atterriraient dans le `logs/run_<horodatage>/`
+    du répertoire courant, sans rattachement au run ni à la variante.
+
     Args:
         argv: Arguments de ligne de commande (par défaut `sys.argv[1:]`).
 
@@ -121,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
     config_path: Path = args.config
     variant_id: str = args.variant
     work_root: Path = args.work_root
+
+    LogSession.redirect(variant_logs_dir(work_root, variant_id))
 
     result = execute(config_path, variant_id, work_root)
     result.write(work_root / variant_id / RESULT_FILENAME)

@@ -337,6 +337,7 @@ class PipelineBuilder:
         self._cache_dir: Path | None = None
         self._bilingual_format: BilingualFormat | None = None
         self._glossary: Glossary | None = None
+        self._glossary_seed: Path | None = None
 
     def epub(self, path: str | Path) -> Self:
         """Chemin vers l'EPUB source.
@@ -448,6 +449,50 @@ class PipelineBuilder:
         self._glossary = glossary
         return self
 
+    def glossary_seed(self, path: str | Path) -> Self:
+        """Fichier TOML préremplissant le glossaire.
+
+        Le seed s'applique au glossaire fourni par `glossary()` s'il y en a un,
+        sinon à un glossaire neuf. La résolution a lieu au `build()`, donc
+        l'ordre des deux appels est indifférent — un glossaire importé d'un
+        tome précédent peut être complété par un seed ciblé, et inversement.
+
+        Args:
+            path: Chemin du fichier de seed (voir `ebook_translator.glossary_seed`).
+
+        Returns:
+            self pour chaînage.
+
+        Example:
+            >>> PipelineBuilder().glossary_seed("bench/seeds/exemple.toml")  # doctest: +SKIP
+        """
+        self._glossary_seed = path if isinstance(path, Path) else Path(path)
+        return self
+
+    def _build_glossary(self) -> Glossary | None:
+        """Résout le glossaire de départ du run.
+
+        Import local : `glossary_seed` tire `glossary`, que ce module ne
+        charge qu'en annotation.
+
+        Returns:
+            Le glossaire prérempli, ou `None` si le run part à froid.
+
+        Raises:
+            FileNotFoundError: Si le fichier de seed n'existe pas.
+            ValueError: Si le fichier de seed est mal formé.
+        """
+        if self._glossary_seed is None:
+            return self._glossary
+
+        from ..glossary import Glossary
+        from ..glossary_seed import apply_seed
+
+        # `is None` et non `or` : `Glossary` définit `__len__`, donc un
+        # glossaire fourni mais encore vide serait remplacé sans bruit.
+        base = Glossary() if self._glossary is None else self._glossary
+        return apply_seed(base, self._glossary_seed)
+
     def bilingual_format(self, fmt: BilingualFormat) -> Self:
         """Format de rendu bilingue de l'EPUB de sortie (défaut: SEPARATE_TAG).
 
@@ -467,7 +512,9 @@ class PipelineBuilder:
             Tuple (pipeline, run_kwargs) prêt à appeler pipeline.run(**run_kwargs).
 
         Raises:
-            ValueError: Si epub, output, language, llm ou phases ne sont pas définis.
+            ValueError: Si epub, output, language, llm ou phases ne sont pas
+                définis, ou si le fichier de seed est mal formé.
+            FileNotFoundError: Si le fichier de seed n'existe pas.
         """
         if self._epub_path is None:
             raise ValueError("PipelineBuilder: .epub() requis")
@@ -505,8 +552,9 @@ class PipelineBuilder:
                 "bilingual_format": self._bilingual_format,
             }
         )
-        if self._glossary is not None:
-            run_kwargs["glossary"] = self._glossary
+        glossary = self._build_glossary()
+        if glossary is not None:
+            run_kwargs["glossary"] = glossary
 
         return pipeline, run_kwargs
 

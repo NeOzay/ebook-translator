@@ -119,6 +119,10 @@ Phase 0 is the only phase with structured output: it goes through Instructor on 
 
 **Glossary** ([glossary.py](src/ebook_translator/glossary.py)): learned from translations with weighted proposals, confidence and dominance scores, conflict detection. Populated by `GlossaryPhase`, exported to prompts for Phases 1 and 2.
 
+Confidence is `dominance × mass`, with `mass = w / (w + 2)`. Two thresholds follow, both derived rather than hard-coded: `DEFAULT_MIN_REINJECTION_WEIGHT` (3) decides whether the glossary phase prompt shows a term's proposals or only its surface form, and `converged_weight()` (5) is the unanimous weight needed for high confidence. A book shorter than 5 glossary chunks therefore converges nothing — re-emitting an unconverged term is the mechanism, not a fault.
+
+**Glossary seeding** ([glossary_seed.py](src/ebook_translator/glossary_seed.py)): fills the glossary before any LLM call, so selection mechanisms can be exercised without waiting for a full run. A TOML file states the *intent* — `niveau = "valide" | "arbitrer" | "emergent"`, matching the three groups of `glossary_existing_block.jinja` — and weights are derived from it. `user = true` yields a validated, authoritative entry. Wired through `PipelineBuilder.glossary()` / `.glossary_seed()`, both resolved at `build()` in any order. Example: [bench/seeds/exemple.toml](bench/seeds/exemple.toml).
+
 ## Phase 0: Literary Analysis
 
 `LiteraryAnalysisPhase` ([pipeline/phases/literary_analysis.py](src/ebook_translator/pipeline/phases/literary_analysis.py)) produces an `AnalyseChapter` per chapter block (5000 tokens, sequential, 1 worker), validated entirely by its Pydantic schema through Instructor — `content_checks = ()`.

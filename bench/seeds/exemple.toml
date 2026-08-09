@@ -1,0 +1,57 @@
+# Seed de glossaire — préremplissage déclaratif.
+#
+# Chaque entrée place un terme dans l'un des trois groupes de
+# `common/glossary_existing_block.jinja`, sans appel LLM. On écrit l'état visé
+# (`niveau`), pas le poids : les seuils restent l'affaire de `glossary.py`.
+#
+# Chargement : `ebook_translator.glossary_seed.load_seed(Path(...))`, ou
+# `PipelineBuilder().glossary_seed(path)`.
+
+# `valide` — confiance haute. Le prompt le montre sous « Termes validés » et
+# demande au modèle de NE PAS le réémettre. Sert à tester si le modèle respecte
+# cette exclusion sur un livre long.
+[[entree]]
+terme = "rick gladiolus"
+traduction = "Rick Gladiolus"
+type = "personnage"
+sexe = "m"
+niveau = "valide"
+
+# `arbitrer` — signal établi, pas encore stable. Le prompt montre les
+# propositions et leurs poids, et demande au modèle de trancher.
+[[entree]]
+terme = "nursery"
+traduction = "la nursery"
+type = "lieu"
+sexe = "f"
+niveau = "arbitrer"
+
+# Conflit fabriqué : deux propositions concurrentes, poids explicites. Teste
+# l'arbitrage proprement dit — `niveau` serait redondant, donc interdit ici.
+[[entree]]
+terme = "yellow wallpaper"
+type = "objet"
+sexe = "m"
+propositions = [
+  ["le papier peint jaune", 3],
+  ["la tapisserie jaune", 2],
+]
+
+# `emergent` — signal encore faible. Le prompt ne montre que la forme du terme,
+# sans traduction : une proposition isolée ancrerait le modèle sur une
+# supposition. Teste si le modèle réutilise la forme au lieu d'une variante.
+[[entree]]
+terme = "weir mitchell"
+traduction = "Weir Mitchell"
+type = "personnage"
+sexe = "m"
+niveau = "emergent"
+
+# Entrée validée à la main : priorité absolue, jamais soumise à l'arbitrage,
+# jamais écrasée par une proposition du LLM.
+[[entree]]
+terme = "matrix"
+traduction = "Matrice"
+type = "terme_technique"
+sexe = "f"
+user = true

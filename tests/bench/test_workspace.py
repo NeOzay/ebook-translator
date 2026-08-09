@@ -9,6 +9,7 @@ from ebook_translator.bench.workspace import (
     CACHE_DIRNAME,
     prepare_workspace,
     seed_shared_phases,
+    variant_logs_dir,
 )
 from ebook_translator.pipeline.base import PhaseName
 
@@ -20,6 +21,24 @@ def epub(tmp_path: Path) -> Path:
     source.parent.mkdir(parents=True)
     source.write_bytes(b"PK\x03\x04")
     return source
+
+
+class TestVariantLogsDir:
+    def test_dans_le_workspace_de_la_variante(self, tmp_path: Path):
+        chemin = variant_logs_dir(tmp_path / "work", "v1")
+
+        assert chemin == tmp_path / "work" / "v1" / "logs"
+
+    def test_pas_cree_par_la_derivation(self, tmp_path: Path):
+        # Le sous-processus se redirige avant que le workspace n'existe : la
+        # création revient au premier log (`LazyFileHandler`).
+        assert not variant_logs_dir(tmp_path / "work", "v1").exists()
+
+    def test_coherent_avec_run_env(self, tmp_path: Path, epub: Path):
+        env = prepare_workspace(tmp_path / "work", "v1", epub)
+
+        assert env.logs_dir == variant_logs_dir(tmp_path / "work", "v1")
+        assert env.logs_dir.parent == env.workspace
 
 
 class TestPrepareWorkspace:

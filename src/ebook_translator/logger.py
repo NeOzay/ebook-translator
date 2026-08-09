@@ -9,6 +9,8 @@ Fonctionnalités :
 - Regroupement des logs par session d'exécution dans logs/run_YYYYMMDD_HHMMSS/
 - Création différée des fichiers de log (évite fichiers vides)
 - Nommage contextuel des fichiers (chunk_042.log, llm_translation.log, etc.)
+- Redirection après coup de la session (`LogSession.redirect`), pour qu'un
+  programme puisse imposer son répertoire malgré des loggers déjà configurés
 """
 
 import logging
@@ -35,7 +37,8 @@ class LogSession:
     """
     Gestionnaire singleton pour regrouper tous les logs d'une exécution.
 
-    Crée un répertoire unique par session : logs/run_YYYYMMDD_HHMMSS/
+    Crée un répertoire unique par session : logs/run_YYYYMMDD_HHMMSS/, que
+    `redirect` permet de remplacer une fois les loggers déjà configurés.
     """
 
     _instance: LogSession | None = None
@@ -65,10 +68,34 @@ class LogSession:
         return cls._session_dir
 
     @classmethod
+    def redirect(cls, directory: Path | str) -> None:
+        """Re-cible la session, et avec elle tous les loggers déjà configurés.
+
+        Les loggers de module sont créés à l'**import** (`get_logger(__name__)`
+        au niveau module), donc bien avant qu'un programme ait pu lire ses
+        arguments. Chaque `LazyFileHandler` créé par `setup_logger` est pour
+        cette raison inscrit à un registre, que cette méthode parcourt pour
+        déplacer les fichiers de log sans recréer les loggers.
+
+        Les records déjà écrits restent dans l'ancien fichier : seuls les
+        suivants vont au nouvel emplacement.
+
+        Args:
+            directory: Nouveau répertoire de session. Créé au premier log.
+
+        Example:
+            >>> LogSession.redirect(Path("bench/runs/20260804_143000/logs"))
+        """
+        cls._session_dir = Path(directory)
+        for handler in _FILE_HANDLERS:
+            handler.set_directory(cls._session_dir)
+
+    @classmethod
     def reset(cls):
         """Reset la session (utile pour les tests)."""
         cls._instance = None
         cls._session_dir = None
+        _FILE_HANDLERS.clear()
 
 
 # ============================================================
@@ -121,6 +148,21 @@ class LazyFileHandler(logging.Handler):
         self.encoding = encoding
         self._handler: logging.FileHandler | None = None
 
+    def set_directory(self, directory: Path) -> None:
+        """Déplace les écritures à venir dans un autre répertoire.
+
+        Le nom du fichier est conservé — seul son répertoire change. Si le
+        fichier était déjà ouvert, il est fermé ; il sera rouvert au prochain
+        log, au nouvel emplacement.
+
+        Args:
+            directory: Répertoire cible. Créé au prochain log, pas ici.
+        """
+        if self._handler is not None:
+            self._handler.close()
+            self._handler = None
+        self.filename = directory / self.filename.name
+
     def _ensure_handler(self):
         """Crée le FileHandler sous-jacent si pas encore fait."""
         if self._handler is not None:
@@ -151,6 +193,15 @@ class LazyFileHandler(logging.Handler):
         if self._handler:
             self._handler.close()
         super().close()
+
+
+_FILE_HANDLERS: list[LazyFileHandler] = []
+"""Handlers fichier créés par `setup_logger`, cibles de `LogSession.redirect`.
+
+Les loggers de module étant configurés à l'import, il n'y a pas d'autre moyen de
+les re-cibler après coup : ce registre est le seul point où l'ensemble des
+fichiers de log ouverts par l'application reste joignable.
+"""
 
 
 # ============================================================
@@ -220,6 +271,7 @@ def setup_logger(
     file_handler.setLevel(file_level)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+    _FILE_HANDLERS.append(file_handler)
 
     return logger
 

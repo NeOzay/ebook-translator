@@ -111,6 +111,65 @@ plutôt qu'une variante, pas assez pour l'ancrer sur une proposition isolée.
 """
 
 
+DEFAULT_MAX_REINJECTED_TERMS = 80
+"""Borne du nombre de termes réinjectés dans le prompt de la phase glossaire.
+
+Borne de prompt, pas jugement de pertinence : sur un livre long au glossaire
+appris en cours de route, un bloc emploie une cinquantaine de termes connus au
+plus, et le plafond ne mord jamais. Il n'existe que pour le cas où le glossaire
+a été prérempli — import de plusieurs tomes, seed — où rien ne limiterait
+autrement la taille d'un fragment que son contenu variable empêche de mettre
+en cache.
+"""
+
+ReinjectionGroup = Literal["arbitrer", "emergent", "valide"]
+"""Groupe d'affichage d'un terme dans `glossary_existing_block.jinja`."""
+
+_ORDRE_REINJECTION: dict[ReinjectionGroup, int] = {
+    "arbitrer": 0,
+    "emergent": 1,
+    "valide": 2,
+}
+"""Priorité de conservation quand le plafond mord.
+
+Un terme *à arbitrer* est la raison d'être du bloc : le taire fige son conflit.
+Un terme *émergent* coûte quelques tokens et, invisible, revient sous une forme
+voisine qui divise son poids — c'est le mal que le bloc existe pour éviter. Un
+terme *validé* n'est là qu'en rappel : l'omettre fait au pire réémettre un terme
+déjà stable, qui ne bougera pas pour autant.
+"""
+
+
+def reinjection_group(
+    entry: GlossaryMultipleValueEntry,
+    min_reinjection_weight: int = DEFAULT_MIN_REINJECTION_WEIGHT,
+) -> ReinjectionGroup:
+    """Groupe sous lequel le prompt présentera ce terme.
+
+    Reproduit le découpage de `common/glossary_existing_block.jinja`, qui trie
+    sur les deux mêmes champs. Toute modification de l'un doit suivre dans
+    l'autre.
+
+    Args:
+        entry: Entrée multi-propositions du terme.
+        min_reinjection_weight: Poids à partir duquel les propositions sont
+            montrées.
+
+    Returns:
+        `valide`, `arbitrer` ou `emergent`.
+
+    Example:
+        >>> reinjection_group({"terme": "x", "traductions": [], "types": [],
+        ...                    "sexes": [], "weight": 1, "confidence": "low"})
+        'emergent'
+    """
+    if entry["confidence"] == "high":
+        return "valide"
+    if entry["weight"] >= min_reinjection_weight:
+        return "arbitrer"
+    return "emergent"
+
+
 def confidence_level(weights: Sequence[int]) -> Literal["low", "medium", "high"]:
     """Niveau de confiance d'une distribution de propositions.
 
@@ -258,13 +317,49 @@ class Glossary:
         """
         Enregistre une traduction observée.
 
+        Deux cas sont ignorés, l'un et l'autre parce que la question est déjà
+        tranchée :
+
+        - le terme est **validé manuellement** — l'entrée `user` fait autorité ;
+        - le terme a **convergé** (confiance haute). Le prompt le liste alors
+          sous « Termes validés — NE PAS inclure », consigne que le modèle
+          suit mal : mesuré sur un tome complet, 10 termes convergés sur 11
+          sont réémis, jusqu'à 13 fois pour le plus fréquent. Renforcer la
+          consigne n'y change rien et coûte du rappel ; le filtre est donc
+          posé ici, où il ne dépend pas de l'obéissance du modèle.
+
+        La comparaison porte sur la forme minuscule, seule forme sous laquelle
+        les clés `user` sont rangées — le LLM, lui, émet le terme dans sa casse
+        d'origine.
+
+        Note:
+            Le gel est total, contradictions comprises : une fois la confiance
+            haute atteinte, le terme n'est plus candidat à révision. Une entrée
+            `user` peut encore le **masquer** — `collect_entry` la place en tête
+            et écarte le terme appris — mais rien ne modifie plus la
+            distribution elle-même.
+
+            Compter les seules propositions divergentes aurait l'effet inverse
+            de celui recherché : la dominante cessant d'être alimentée, un
+            désaccord isolé suffirait à faire chuter la confiance d'un terme
+            pourtant stable.
+
         Args:
             term: Dictionnaire avec les clés "terme", "proposition_traduction", "type", "sexe"
         """
-        if term["terme"] in self._user:
+        source_term = term["terme"].lower()
+        if source_term in self._user:
             return
 
-        source_term = term["terme"].lower()
+        # `_glossary` est un defaultdict : passer par `get` pour ne pas créer
+        # l'entrée du terme au moment même où l'on teste s'il en a une.
+        connu = self._glossary.get(source_term)
+        if (
+            connu is not None
+            and confidence_level(list(connu["translations"].values())) == "high"
+        ):
+            return
+
         proposition = term["proposition_traduction"]
         translated_term = proposition.lower()
         term_type = cast(GlossaryEntryType, term["type"].lower())
@@ -384,23 +479,35 @@ class Glossary:
 
         Les traductions validées ont priorité sur celles apprises automatiquement.
 
+        La clé est normalisée en minuscules : les deux collecteurs cherchent le
+        terme dans un texte déjà passé en minuscules et excluent les entrées
+        apprises par `terme_lower in self._user`. Une clé conservée dans sa
+        casse d'origine ne serait jamais retrouvée, ni dans le texte ni dans
+        cette exclusion.
+
         Args:
-            source_term: Terme source
-            validated_translation: Traduction validée
+            terme: Terme source.
+            translation: Traduction validée.
+            sexe: Genre grammatical portant les accords en langue cible.
+            terme_type: Catégorie du terme.
+
+        Returns:
+            Le glossaire, pour chaînage.
 
         Example:
-            >>> glossary.validate_translation("Matrix", "Matrice")
+            >>> glossary.add_user_translation("Matrix", "Matrice", "f", "terme_technique")
             >>> # Cette traduction sera toujours utilisée
         """
+        cle = terme.lower()
         term: GlossaryEntry = {
-            "terme": terme.lower(),
+            "terme": cle,
             "traduction": translation,
             "type": terme_type,
             "sexe": sexe,
             "confidence": "high",
         }
 
-        self._user[terme] = term
+        self._user[cle] = term
         return self
 
     # =========================================================================
@@ -455,8 +562,10 @@ class Glossary:
         self,
         text: str,
         confidence_accumulate: float = 0.7,
+        max_terms: int = DEFAULT_MAX_REINJECTED_TERMS,
+        min_reinjection_weight: int = DEFAULT_MIN_REINJECTION_WEIGHT,
     ) -> list[GlossaryMultipleValueEntry]:
-        """Collecte tous les termes déjà appris que le bloc courant emploie.
+        """Collecte les termes déjà appris que le bloc courant emploie.
 
         Aucun filtre de poids : un terme trop léger pour être arbitré doit
         quand même être montré, sans quoi il reste invisible au LLM, qui le
@@ -465,16 +574,27 @@ class Glossary:
         propositions au-delà de `DEFAULT_MIN_REINJECTION_WEIGHT` et la seule
         forme du terme en deçà.
 
+        `max_terms` n'est pas un filtre mais une borne du prompt, et il ne
+        s'applique qu'au-delà de ce qu'un livre produit de lui-même. En deçà,
+        les entrées sortent dans l'ordre de découverte, inchangé. Quand il
+        mord, la troncature suit `_ORDRE_REINJECTION` avant les occurrences :
+        garder les termes les plus fréquents reviendrait à sacrifier d'abord
+        les émergents, rares par construction, qui sont précisément ceux que
+        l'invisibilité condamne à ne jamais converger.
+
         Args:
             text: Texte du bloc courant.
             confidence_accumulate: Couverture visée par les propositions listées.
+            max_terms: Nombre maximum de termes réinjectés.
+            min_reinjection_weight: Poids séparant les termes à arbitrer des
+                termes émergents, pour la priorité de troncature.
 
         Returns:
             Une entrée par terme appris présent dans le bloc, entrées `user`
-            exclues.
+            exclues, dans la limite de `max_terms`.
         """
         text = text.lower()
-        result: list[GlossaryMultipleValueEntry] = []
+        collected: list[tuple[int, int, GlossaryMultipleValueEntry]] = []
         for terme in self._glossary:
             terme_lower = terme.lower()
             if terme_lower in self._user:
@@ -484,9 +604,14 @@ class Glossary:
                 continue
             entry = self.get_translations_until_confidence(terme, confidence_accumulate)
             if entry:
-                result.append(entry)
+                groupe = reinjection_group(entry, min_reinjection_weight)
+                collected.append((_ORDRE_REINJECTION[groupe], count, entry))
 
-        return result
+        if len(collected) > max_terms:
+            collected.sort(key=lambda t: (t[0], -t[1], -t[2]["weight"]))
+            del collected[max_terms:]
+
+        return [entry for _, _, entry in collected]
 
     def get_conflicts(self) -> dict[str, GlossaryMultipleValueEntry]:
         """
@@ -683,10 +808,13 @@ class Glossary:
                     )
                     cible[surface] = cible.get(surface, 0) + count
 
-        # Entrées user : fusion sans decay (la traduction validée reste valide)
+        # Entrées user : fusion sans decay (la traduction validée reste valide).
+        # La clé est normalisée comme dans `add_user_translation` — un cache
+        # écrit avant cette normalisation peut porter des clés en casse mixte.
         for terme, entry in data.get("user", {}).items():
-            if terme not in self._user:
-                self._user[terme] = entry
+            cle = terme.lower()
+            if cle not in self._user:
+                self._user[cle] = entry
 
         self._entries_cache.clear()
 

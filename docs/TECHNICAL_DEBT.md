@@ -8,7 +8,8 @@ vérifiée dans le code — pas des idées d'amélioration : pour celles-ci, voi
 Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
-> Dernière vérification : 2026-08-04 (8 runs de banc, chantier `glossaire-precision`).
+> Dernière vérification : 2026-08-09 (banc + audit de la phase glossaire, chantier
+> `glossary-seeding`). Les entrées 1 à 10 n'ont pas été revérifiées à cette date.
 
 ---
 
@@ -323,7 +324,137 @@ impliquant Mistral doit être lu en vérifiant `chunks_processed` dans
 
 ---
 
-## 11. Points mineurs, laissés sciemment
+## 11. La clause « NE PAS inclure » du prompt glossaire ne tient pas
+
+**Constat** — `glossary_existing_block.jinja` liste les termes convergés sous
+« **Termes validés** (confiance haute) — NE PAS inclure dans la sortie ». Le
+modèle les réémet quand même.
+
+**Mesuré** — banc `bench/runs/20260809_170606`, variante `preremp`, 43 blocs.
+Sur 11 termes préremplis en confiance haute, **10 sont réémis**, jusqu'à 13 fois
+pour `flio`. Ce n'est pas la troncature à 80 termes : la médiane réinjectée est
+de 10 termes par bloc.
+
+**Deux hypothèses écartées par la mesure, pas par le raisonnement** :
+
+1. *Une contradiction interne au prompt.* `glossary_system.jinja:29` admettait
+   un terme qui « figure déjà au glossaire fourni », et la règle suivante fait
+   entrer tout nom propre dès sa première mention — les 11 termes en cause sont
+   des noms propres. Les deux portes ont été fermées par une règle d'exclusion
+   prioritaire, et mesurées (`bench/runs/20260809_173125`) : **123 contre 125**
+   de poids cumulé, soit rien. Un chunk de ce run montre `flio` et `belano`
+   listés comme validés, la règle prioritaire présente, et le modèle les émettant
+   dans la même réponse. La modification a été annulée — elle coûtait du rappel
+   sans rien rendre.
+2. *Un défaut du préremplissage.* Un run à froid est soumis à la même consigne
+   dès qu'un terme converge ; elle y est simplement moins visible.
+
+**Soldé côté ingestion** — `Glossary.learn` ignore désormais toute émission
+portant sur un terme en confiance haute, comme il ignorait déjà les termes
+`user`. Mesuré (`bench/runs/20260809_175457`) : le poids cumulé des 11 termes
+tombe à **55**, exactement leur poids initial, sans perte de rappel (169 termes
+uniques contre 161). Voir `tests/glossary/test_gel_convergence.py`.
+
+**Ce qui reste en dette** — le modèle produit toujours ces lignes : les tokens
+de sortie sont dépensés, et elles occupent la place d'autres termes dans une
+réponse bornée. Seule la comptabilité est protégée. La consigne demeure dans le
+prompt, où elle documente une intention que le modèle n'honore pas.
+
+**Pour solder** — rien qui vaille d'être tenté par la consigne : deux
+formulations ont échoué. La voie restante est de ne plus lister les termes
+convergés du tout, au prix de la connaissance qu'en a le modèle pour reprendre
+les formes établies — arbitrage à mesurer, le banc `config_glossaire_seed.py`
+sait le faire contre `froid`.
+
+*Identifié par `glossary-seeding`, audit du 2026-08-09 ; traité le même jour.*
+
+---
+
+## 12. Les clés du glossaire ne sont normalisées que sur la casse
+
+**Constat** — `Glossary.learn()`
+([glossary.py](../src/ebook_translator/glossary.py)) indexe un terme par
+`term["terme"].lower()`, sans autre normalisation. Deux graphies qui ne
+diffèrent que par la ponctuation produisent donc deux entrées distinctes.
+
+**Mesuré** — sur le même run, l'organisation `Adventurers’ Association` existe
+sous deux clés :
+
+| Clé | Poids |
+|---|---|
+| `adventurers’ association` (apostrophe typographique) | 10 |
+| `adventurers' association` (apostrophe droite) | 8 |
+
+18 émissions du même terme, scindées en deux distributions dont aucune n'atteint
+ce que leur somme aurait donné. Le livre source emploie la forme typographique ;
+le modèle produit les deux.
+
+**Pourquoi c'est gênant** — le fractionnement retarde ou empêche la convergence,
+qui est la fonction même du glossaire. Le terme est en outre réinjecté deux fois
+dans le prompt, sous deux formes concurrentes.
+
+**Pour solder** — normaliser les apostrophes (et les tirets, même famille de
+problème) dans la clé, au même endroit que le `.lower()`. Attention : la clé
+sert aussi à retrouver le terme dans le texte source
+(`collect_entry_with_conflicts` fait `text.count(terme)`), donc la recherche
+doit être normalisée du même geste, sans quoi les termes normalisés ne seraient
+plus jamais trouvés dans le bloc.
+
+*Identifié par `glossary-seeding`, audit du 2026-08-09.*
+
+---
+
+## 13. Les doctests ne sont exécutés par rien
+
+**Constat** — les `addopts` de `pyproject.toml` ne contiennent pas
+`--doctest-modules`, et aucune configuration ne collecte les doctests par
+ailleurs. Les blocs `Example:` des docstrings, exigés par
+[CODING_STANDARDS.md](CODING_STANDARDS.md), ne sont donc jamais vérifiés.
+
+**Ce n'est pas théorique** — le doctest de `LLMGlossaryModel`
+([template/phase/glossary_models.py](../src/template/phase/glossary_models.py))
+affirmait `'proposition_traduction': 'Alice'` alors que le code rendait
+`'alice'`. Il échouait, sans que rien ne le signale, pendant que le bug qu'il
+décrivait faisait perdre la casse de **tous** les noms propres du glossaire
+(entrée soldée depuis, cf. commit `23865dc` du sous-module). Le doctest disait
+juste ; personne ne l'écoutait.
+
+**Pour solder** — ajouter `--doctest-modules` aux `addopts`, après avoir passé
+en revue les doctests existants : plusieurs portent des `# doctest: +SKIP` et
+d'autres n'ont probablement jamais tourné. À coupler avec l'entrée 1, le seuil
+de couverture rendant déjà le code de sortie de `pytest` inexploitable.
+
+*Identifié par `glossary-seeding`, 2026-08-09.*
+
+---
+
+## 14. L'auditeur glossaire noie ses vrais constats sous les mots-outils
+
+**Constat** — `candidat-manque` (« entité nommée récurrente absente du
+glossaire ») repère les mots capitalisés en milieu de phrase
+([audit/glossary_auditor.py](../src/ebook_translator/audit/glossary_auditor.py)).
+Le critère attrape toute réplique de dialogue : sur les 118 relevés du run
+`audit/runs/20260809_171114-glossary`, l'instruction n'en retient qu'**environ
+18**. Les têtes de liste sont `yes` (35), `no` (30), `what` (27), `your` (20),
+`you` (19), `oh` (18) — et 14 possessifs (`flio's`) d'entités déjà au glossaire.
+
+C'est la catégorie la plus volumineuse du catalogue, et la moins exploitable.
+Elle gonfle aussi le total « termes touchés » affiché en tête de rapport :
+118 sur 158 annoncés, ~60-70 après tri.
+
+**Pourquoi c'est gênant** — l'audit est un outil de décision. Une catégorie dont
+85 % des entrées sont du bruit oblige à réinstruire le rapport à la main, ce que
+l'outil existe pour éviter.
+
+**Pour solder** — écarter les capitales suivant un guillemet ouvrant ou une
+ponctuation de fin de phrase, et replier les formes possessives sur leur base
+avant comparaison au glossaire.
+
+*Identifié par `glossary-seeding`, audit du 2026-08-09.*
+
+---
+
+## 15. Points mineurs, laissés sciemment
 
 - `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
   est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le
@@ -337,3 +468,16 @@ impliquant Mistral doit être lu en vérifiant `chunks_processed` dans
 - `docs/CHANGELOG_ARCHIVE.md` contient une cinquantaine de liens cassés vers
   des fichiers supprimés depuis. **Volontaire** : un changelog documente le
   code tel qu'il était, son entête le dit.
+- `Glossary.get_translation` **ne consulte pas les entrées `user`** : la branche
+  qui le ferait est du code commenté en tête de méthode. Sans conséquence
+  aujourd'hui — les prompts passent par `collect_entry`, qui les place en tête
+  et exclut le terme appris correspondant — mais l'API publique rend la valeur
+  apprise là où une traduction imposée existe. Piège pour tout futur appelant.
+  *Constaté par `glossary-seeding` le 2026-08-09, en écrivant
+  `tests/glossary/test_gel_convergence.py`.*
+- Le répertoire de session des logs LLM est partagé par toute la suite de tests,
+  et plusieurs fichiers y tombent dans la même seconde.
+  `test_llm_creates_log_without_context` identifiait « son » fichier par le
+  `st_mtime` le plus élevé, ce qui départageait au hasard : il passait par
+  chance. Corrigé sur place par une différence d'ensembles, mais la fragilité
+  reste ouverte pour tout test qui inspecterait ce répertoire de la même façon.

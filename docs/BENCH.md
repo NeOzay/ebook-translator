@@ -87,6 +87,21 @@ Vérification dans `metrics.md` : la phase partagée doit afficher `cache = chun
 La copie est délibérée — un symlink laisserait une variante corrompre la référence
 commune si elle recalculait une partie de la phase.
 
+### Faire varier le glossaire de départ
+
+Comparer des pipelines suppose parfois de faire varier non pas un réglage, mais l'**état
+initial** que la phase reçoit. Le cas type est le glossaire : à froid, il reste instable
+pendant l'essentiel du livre, puisqu'il faut cinq émissions unanimes pour qu'un terme
+converge. Les trois groupes du prompt ne sont donc réellement peuplés qu'à la fin.
+
+`PipelineBuilder.glossary(...)` et `.glossary_seed(...)` permettent de partir d'un
+glossaire hérité d'un tome précédent ou d'un seed déclaratif — voir
+[bench/config_glossaire_seed.py](../bench/config_glossaire_seed.py), qui oppose un run à
+froid à un run prérempli.
+
+Dans ce cas, la phase glossaire ne doit **surtout pas** figurer dans les phases partagées
+du `Seed` : elle est l'objet de la comparaison. Ne partager que l'analyse littéraire.
+
 ## Options de corpus
 
 | Option | Défaut | Effet |

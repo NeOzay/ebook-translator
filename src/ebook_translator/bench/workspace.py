@@ -19,7 +19,7 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
-from ebook_translator.bench.suite import RunEnv
+from ebook_translator.bench.suite import LOGS_DIRNAME, RunEnv
 from ebook_translator.logger import get_logger
 from ebook_translator.pipeline.base import PhaseName
 
@@ -30,6 +30,24 @@ CACHE_DIRNAME = "cache"
 
 OUTPUT_STEM_SUFFIX = " [traduit]"
 """Suffixe du nom de l'EPUB produit, pour le distinguer de la source liée."""
+
+
+def variant_logs_dir(work_root: Path, variant_id: str) -> Path:
+    """Répertoire des logs d'une variante.
+
+    Le chemin est dérivé plutôt que transmis : le sous-processus connaît déjà
+    `--work-root` et `--variant`, et doit se rediriger **avant** d'appeler
+    `prepare_workspace`. Un argument supplémentaire n'apporterait aucune
+    information et pourrait désynchroniser le père et le fils.
+
+    Args:
+        work_root: Répertoire parent des workspaces du run.
+        variant_id: Identifiant de la variante (ou du run d'amorçage).
+
+    Returns:
+        `<work_root>/<variant_id>/logs`, qui n'est pas créé ici.
+    """
+    return work_root / variant_id / LOGS_DIRNAME
 
 
 def prepare_workspace(work_root: Path, variant_id: str, epub: Path) -> RunEnv:

@@ -17,6 +17,7 @@ from ebook_translator.bench.runner import (
     run_suite,
 )
 from ebook_translator.bench.suite import SEED_ID
+from ebook_translator.logger import get_session_log_path
 
 SEED_EXTRA = "seed=Seed(build=build, phases=(PhaseName.LITERARY_ANALYSIS,)),"
 
@@ -78,6 +79,17 @@ class TestRunSuite:
         assert (run.root / CONFIG_COPY_NAME).read_text(
             encoding="utf-8"
         ) == config.read_text(encoding="utf-8")
+
+    def test_redirige_les_logs_du_harness_dans_le_run(
+        self, tmp_path: Path, write_config: Callable[..., Path], executions: list[str]
+    ):
+        config = write_config()
+
+        run = run_suite(config, runs_dir=tmp_path / "runs", run_id="essai")
+
+        # La collecte et le rapport s'exécutent ensuite dans ce processus : la
+        # redirection doit les couvrir aussi.
+        assert get_session_log_path("collect.log").parent == run.root / "logs"
 
     def test_only_restreint_la_selection(
         self, tmp_path: Path, write_config: Callable[..., Path], executions: list[str]
