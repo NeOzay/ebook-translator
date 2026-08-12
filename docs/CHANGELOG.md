@@ -10,12 +10,43 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié, `template` absorbé* | *3 effets de bord, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié, `template` absorbé, signatures du builder miroir des phases* | *3 effets de bord + 1 rupture d'API, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
 
 ## Non publié
+
+### 🔒 Les `add_*` du builder tirent leur signature de leur phase
+
+⚠️ **Rupture d'API** : le paramètre `llm_config` des `PhasesBuilder.add_*`
+s'appelle désormais `llm`, comme le champ de phase qu'il a toujours alimenté.
+
+`_skip_none(**overrides) -> dict[str, Any]` était déballé dans les sept appels
+du builder. Un `dict[str, Any]` déballé rend basedpyright aveugle aux arguments
+inexistants : le motif avait déjà produit quatre bugs dans l'API publique, tous
+fatals à l'exécution et tous invisibles au type-checker.
+
+Chaque `add_*` est maintenant décoré par `_mirrors(PhaseCls)` et **prend la
+signature du `__init__` de sa phase** (`ParamSpec`). Aucun default n'est recopié
+dans le builder — c'est ce qui distingue la solution d'un sous-builder par
+phase — et un argument inconnu est signalé statiquement comme à l'exécution.
+
+Conséquences visibles :
+
+- `head_tail_balance` devient réglable sur les trois phases qui chevauchent ; il
+  n'était exposé par aucun `add_*` et n'était couvert par aucun test. Il l'est
+  désormais, dans `tests/segmentation/test_helper.py`.
+- Les champs `field(init=False)` restent fermés sans traitement particulier :
+  `overlap_ratio` sur la Phase 0, `max_workers` sur la Phase 2.
+- `PhasesBuilder.add(PhaseCls, …)` est publique : point d'extension pour une
+  phase maison, et chemin d'exécution des `add_*`.
+- `PipelineBuilder.build()` retourne `(pipeline, RunArgs)` — un `TypedDict` en
+  place du `dict[str, object]`, ce qui a fait tomber les deux
+  `ignore[arg-type]` du builder et du banc d'essais.
+
+La signature n'étant plus lisible dans `builder.py`, la docstring de chaque
+méthode renvoie à sa phase et liste les options communes.
 
 ### 🧹 `template` n'est plus un sous-module git
 

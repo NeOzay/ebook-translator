@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from ebook_translator.htmlpage import BilingualFormat
 from ebook_translator.llm import LLM
 from ebook_translator.llm.clients.deepseek import Deepseek, DeepseekModels
 from ebook_translator.llm.llm_config import GenericLLMConfig
@@ -164,10 +165,14 @@ class TestPhasesBuilder:
             "add_refinement",
         ],
     )
-    def test_llm_config_is_accepted(self, method: str) -> None:
-        """`llm_config` alimente le champ `llm` de la phase, pas un `llm_config`."""
+    def test_llm_is_accepted(self, method: str) -> None:
+        """Le paramètre porte le nom du champ de la phase : `llm`.
+
+        Il s'appelait `llm_config` tant que le builder recopiait les signatures ;
+        le miroir de `_mirrors` interdit désormais l'écart entre les deux.
+        """
         config = GenericLLMConfig(temperature=0.3)
-        phases = getattr(PhasesBuilder(), method)(llm_config=config).build()
+        phases = getattr(PhasesBuilder(), method)(llm=config).build()
 
         assert phases[0].llm is config  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -180,14 +185,14 @@ class TestPhasesBuilder:
             "add_refinement",
         ],
     )
-    def test_llm_config_accepts_a_client(self, method: str) -> None:
+    def test_llm_accepts_a_client(self, method: str) -> None:
         """Une phase peut substituer son propre client au client par défaut.
 
         `LLM.query` remplace `self.client` quand la config reçue *est* un
-        `ClientProviderProtocol` — d'où le type élargi sur `llm_config`.
+        `ClientProviderProtocol` — d'où le type élargi sur `llm`.
         """
         client = Deepseek(DeepseekModels.PRO, thinking=True)
-        phases = getattr(PhasesBuilder(), method)(llm_config=client).build()
+        phases = getattr(PhasesBuilder(), method)(llm=client).build()
 
         assert phases[0].llm is client  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -207,6 +212,42 @@ class TestPhasesBuilder:
         assert phase.max_tokens == 2000
         assert phase.overlap_ratio == 0.1
         assert phase.get_worker_count() == 3
+
+    def test_head_tail_balance_reaches_the_phase(self) -> None:
+        """Champ ouvert par le miroir : il n'était exposé par aucun `add_*`."""
+        phases = PhasesBuilder().add_refinement(head_tail_balance=0.6).build()
+
+        assert phases[0].head_tail_balance == 0.6
+
+    @pytest.mark.parametrize(
+        ("method", "unknown"),
+        [
+            ("add_literary_analysis", {"overlap_ratio": 0.3}),
+            ("add_glossary_generation", {"max_workers": 2}),
+            ("add_initial_translation", {"llm_config": None}),
+            ("add_refinement", {"max_workers": 2}),
+        ],
+    )
+    def test_unknown_argument_is_rejected(
+        self, method: str, unknown: dict[str, object]
+    ) -> None:
+        """Le miroir refuse ce que la phase n'accepte pas.
+
+        C'est la dette n°2 épinglée côté exécution : basedpyright signale déjà
+        ces appels, ce test garantit qu'ils ne passent pas non plus en silence
+        si quelqu'un contourne le type-checker. Les cas couverts sont réels —
+        `max_workers` sur une phase séquentielle, `overlap_ratio` sur la Phase 0
+        qui le fixe à 0.0 (`field(init=False)`), et l'ancien nom `llm_config`.
+        """
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            _ = getattr(PhasesBuilder(), method)(**unknown)
+
+    def test_add_accepts_any_phase_class(self) -> None:
+        """`add()` est le chemin d'exécution des `add_*` et le point d'extension."""
+        phases = PhasesBuilder().add(RefinementPhase, max_tokens=400).build()
+
+        assert isinstance(phases[0], RefinementPhase)
+        assert phases[0].max_tokens == 400
 
     def test_at_least_one_phase_required(self) -> None:
         with pytest.raises(ValueError, match="au moins une phase"):
@@ -244,27 +285,34 @@ class TestPipelineBuilder:
             .cache_dir(tmp_path / "cache")
         )
 
-    def test_build_returns_pipeline_and_run_kwargs(
+    def test_build_returns_pipeline_and_run_args(
         self, epub_path: Path, tmp_path: Path
     ) -> None:
-        pipeline, run_kwargs = self._complete(epub_path, tmp_path).build()
+        pipeline, run_args = self._complete(epub_path, tmp_path).build()
 
         assert len(pipeline.phases) == 2
-        assert run_kwargs["target_language"] == Language.FRENCH
-        assert run_kwargs["output_epub"] == tmp_path / "out.epub"
+        assert run_args["target_language"] == Language.FRENCH
+        assert run_args["output_epub"] == tmp_path / "out.epub"
 
-    def test_run_kwargs_match_pipeline_run_signature(
-        self, epub_path: Path, tmp_path: Path
-    ) -> None:
-        """`run()` fait `pipeline.run(**run_kwargs)` : les clés doivent exister."""
-        import inspect
+    def test_run_args_are_complete(self, epub_path: Path, tmp_path: Path) -> None:
+        """`run()` fait `pipeline.run(**run_args)` : le contrat est `RunArgs`.
 
-        from ebook_translator.pipeline.pipeline import Pipeline
+        La conformité des clés à `Pipeline.run` est désormais vérifiée par
+        basedpyright — `RunArgs` est un `TypedDict`, plus un `dict[str, object]`.
+        Ce test garde trace du contrat côté exécution : les quatre clés sont
+        toujours présentes, y compris `glossary` à `None` quand le run part à
+        froid, et `bilingual_format` que le builder résout au lieu de l'omettre.
+        """
+        _, run_args = self._complete(epub_path, tmp_path).build()
 
-        _, run_kwargs = self._complete(epub_path, tmp_path).build()
-        accepted = set(inspect.signature(Pipeline.run).parameters) - {"self"}
-
-        assert set(run_kwargs) <= accepted
+        assert set(run_args) == {
+            "target_language",
+            "output_epub",
+            "bilingual_format",
+            "glossary",
+        }
+        assert run_args["glossary"] is None
+        assert run_args["bilingual_format"] is BilingualFormat.SEPARATE_TAG
 
     @pytest.mark.parametrize(
         ("omit", "message"),

@@ -8,8 +8,15 @@ vérifiée dans le code — pas des idées d'amélioration : pour celles-ci, voi
 Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
-> Dernière vérification : 2026-08-09 (relecture doc/code après l'absorption du
-> sous-module `template`).
+> Dernière vérification : 2026-08-12 (chantier `builder-signatures`).
+>
+> Soldé le 2026-08-12 par le chantier `builder-signatures` : *« Le déballage
+> `**kwargs` masque encore les appels du builder »*. `_skip_none` a disparu de
+> `src/` : les `PhasesBuilder.add_*` tirent désormais leur signature du
+> `__init__` de leur phase (décorateur `_mirrors`, `ParamSpec`), et
+> `PipelineBuilder.build()` rend un `RunArgs` typé — ce qui a fait tomber les
+> deux `ignore[arg-type]` que le `dict[str, object]` imposait, dans le builder
+> et dans `bench/worker.py`. Les entrées suivantes ont été renumérotées.
 >
 > Soldé le 2026-08-09 : *« La couverture de tests ne passe pas son propre seuil »*.
 > Elle est à **83,72 %** — le `--cov-fail-under=80` de `pyproject.toml` est tenu et
@@ -59,33 +66,7 @@ est plus honnête si la politique par check n'a pas d'usage prévu.
 
 ---
 
-## 2. Le déballage `**kwargs` masque encore les appels du builder
-
-**Constat** — `_skip_none(**overrides) -> dict[str, Any]`
-([pipeline/builder.py](../src/ebook_translator/pipeline/builder.py)) reste
-utilisé à **7 endroits**. Un `dict[str, Any]` déballé dans un appel rend
-basedpyright aveugle aux arguments inexistants.
-
-**Ce n'est pas théorique** : ce motif a produit **quatre bugs** dans l'API
-publique, tous invisibles au type-checker et tous fatals à l'exécution —
-`LLM(model_name=…)`, `GlossaryPhase(overrides=…)`, `Phase(llm_config=…)` sur
-les quatre phases, et un `build()` qui levait `AttributeError`. Ils ont été
-corrigés, mais le motif qui les a permis subsiste.
-
-**Atténuation en place** — `tests/pipeline/test_builder.py` couvre désormais
-chaque `add_*` et chaque champ requis, y compris un test qui compare les clés
-de `run_kwargs` à la signature réelle de `Pipeline.run`. Une régression du même
-type serait attrapée par les tests, plus par le typage.
-
-**Pour solder** — remplacer les `_skip_none` par des appels explicites, comme
-cela a été fait pour `LLMBuilder.build()` : porter les defaults dans le
-builder plutôt que de filtrer des `None`.
-
-*Identifié par `docs-realignment`, étape 1.*
-
----
-
-## 3. Écarts entre le refactor `PhaseBase` et sa cible
+## 2. Écarts entre le refactor `PhaseBase` et sa cible
 
 Le plan du refactor, archivé dans
 `.claude/implementation/done/2026-07-30-refactor-phasebase.md`, annonçait huit
@@ -116,7 +97,7 @@ la dette réelle.
 
 ---
 
-## 4. Template orphelin
+## 3. Template orphelin
 
 **Constat** — `template/common/literary_context_layered_block.jinja`
 (77 lignes) n'a **aucun référent**, ni dans `src/ebook_translator/`, ni dans
@@ -136,7 +117,7 @@ l'injection stratifiée est souhaitée) ou le supprimer.
 
 ---
 
-## 5. Le glossaire est peuplé depuis un hook asynchrone
+## 4. Le glossaire est peuplé depuis un hook asynchrone
 
 **Constat** — `GlossaryPhase.on_save()` appelle `_populate_glossary()`. `on_save`
 est exécuté par le `SaveWorker`, sur son propre thread. L'executor, lui,
@@ -165,7 +146,7 @@ la phase glossaire (coûteux, elle est déjà séquentielle).
 
 ---
 
-## 6. `LLM.max_retries` pilote deux mécanismes différents
+## 5. `LLM.max_retries` pilote deux mécanismes différents
 
 **Constat** — la même valeur (défaut 3) règle deux politiques sans rapport :
 
@@ -195,7 +176,7 @@ l'appelant décide.
 
 ---
 
-## 7. La Phase 2 ne s'exécute jamais
+## 6. La Phase 2 ne s'exécute jamais
 
 **Constat** — `LineIndexedPersister.is_chunk_cached`
 ([persistence/line_indexed_persister.py](../src/ebook_translator/persistence/line_indexed_persister.py))
@@ -236,7 +217,7 @@ Phase 2 réellement coûteuse en appels LLM, ce qu'elle aurait toujours dû êtr
 
 ---
 
-## 8. Une ligne manquante en Phase 1 fait perdre tout un chunk en Phase 2
+## 7. Une ligne manquante en Phase 1 fait perdre tout un chunk en Phase 2
 
 **Constat** — la Phase 1 sauve délibérément des chunks **partiels** : après
 épuisement des tentatives, les `relevant_indices` en échec sont abandonnés et le
@@ -266,7 +247,7 @@ de tentatives sur l'échec de schéma côté executor.
 
 ---
 
-## 9. La clause « NE PAS inclure » du prompt glossaire ne tient pas
+## 8. La clause « NE PAS inclure » du prompt glossaire ne tient pas
 
 **Constat** — `glossary_existing_block.jinja` liste les termes convergés sous
 « **Termes validés** (confiance haute) — NE PAS inclure dans la sortie ». Le
@@ -312,7 +293,7 @@ sait le faire contre `froid`.
 
 ---
 
-## 10. Les clés du glossaire ne sont normalisées que sur la casse
+## 9. Les clés du glossaire ne sont normalisées que sur la casse
 
 **Constat** — `Glossary.learn()`
 ([glossary.py](../src/ebook_translator/glossary.py)) indexe un terme par
@@ -346,7 +327,7 @@ plus jamais trouvés dans le bloc.
 
 ---
 
-## 11. Les doctests ne sont exécutés par rien
+## 10. Les doctests ne sont exécutés par rien
 
 **Constat** — les `addopts` de `pyproject.toml` ne contiennent pas
 `--doctest-modules`, et aucune configuration ne collecte les doctests par
@@ -370,7 +351,7 @@ d'autres n'ont probablement jamais tourné.
 
 ---
 
-## 12. L'auditeur glossaire noie ses vrais constats sous les mots-outils
+## 11. L'auditeur glossaire noie ses vrais constats sous les mots-outils
 
 **Constat** — `candidat-manque` (« entité nommée récurrente absente du
 glossaire ») repère les mots capitalisés en milieu de phrase
@@ -396,7 +377,7 @@ avant comparaison au glossaire.
 
 ---
 
-## 13. Points mineurs, laissés sciemment
+## 12. Points mineurs, laissés sciemment
 
 - `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
   est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le

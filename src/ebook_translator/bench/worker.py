@@ -80,10 +80,10 @@ def execute(config_path: Path, variant_id: str, work_root: Path) -> VariantResul
 
     try:
         builder = suite.factory(variant_id)(env)
-        pipeline, run_kwargs = builder.build()
+        pipeline, run_args = builder.build()
         _check_env_honored(pipeline.epub_path, pipeline.cache_dir, env)
 
-        stats = pipeline.run(**run_kwargs)  # pyright: ignore[reportArgumentType]
+        stats = pipeline.run(**run_args)
 
         phases = tuple(PhaseResult.from_stats(s) for s in stats.values())
         status = compute_status(phases)

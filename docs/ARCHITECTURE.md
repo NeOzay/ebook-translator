@@ -48,8 +48,8 @@ stats = (
 ```
 
 - `LLMBuilder` — porte les options de `LLM` (`prompt_dir`, `max_retries`, `retry_delay`, `glossary_max_terms`). Le **modèle, le mode thinking et la température appartiennent au client** (`.default_client(...)`) : `base_url` est un attribut de classe du provider et chaque provider expose sa propre enum de modèles.
-- `PhasesBuilder` — `add_literary_analysis()`, `add_glossary_generation()`, `add_initial_translation()`, `add_refinement()`. Chaque `add_*` accepte des overrides (`max_tokens`, `overlap_ratio`, `max_workers`, `llm_config`) ; les valeurs omises retombent sur les defaults de la phase.
-- `PipelineBuilder` — `.build()` retourne `(pipeline, run_kwargs)`, `.run()` enchaîne directement.
+- `PhasesBuilder` — `add_literary_analysis()`, `add_glossary_generation()`, `add_initial_translation()`, `add_refinement()`, plus `add(PhaseCls, …)` pour une phase maison. Chaque `add_*` est décoré par `_mirrors(PhaseCls)` : **sa signature est celle du `__init__` de la phase** (`max_tokens`, `overlap_ratio`, `head_tail_balance`, `max_workers`, `llm`), les champs `field(init=False)` en moins. Aucun default n'est recopié dans le builder, et basedpyright vérifie les arguments. Le fichier ne montre donc plus les paramètres — la docstring de chaque méthode renvoie à sa phase.
+- `PipelineBuilder` — `.build()` retourne `(pipeline, run_args)` où `run_args` est le `TypedDict` `RunArgs`, `.run()` enchaîne directement.
 
 ---
 

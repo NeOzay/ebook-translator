@@ -93,6 +93,7 @@ class PhaseProtocol[ChunkType: ChunkProtocol = Any, DT: Any = Any, M: Any = Any]
     execution_mode: ExecutionMode
     max_tokens: int
     overlap_ratio: float
+    head_tail_balance: float
     chunk_type: type[ChunkType]
     payload_type: type[M]
     data_type: type[DT]

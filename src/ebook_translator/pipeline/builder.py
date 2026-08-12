@@ -23,14 +23,14 @@ Exemple d'utilisation :
     )
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Concatenate, Self, TypedDict
 
 from ..htmlpage import BilingualFormat
 from ..llm import LLM
 from ..llm.clients.client import ClientProviderProtocol
 from ..llm.llm import DEFAULT_RATE_LIMIT_BUDGET
-from ..llm.llm_config import FullKwargs, LLMConfig, UserKwargs
 from ..llm.rate_limit import RateLimiter, provider_key_for
 from ..llm.template_renderers import DEFAULT_PROMPT_DIR
 from ..pipeline.phases import (
@@ -46,9 +46,71 @@ if TYPE_CHECKING:
     from ..glossary import Glossary
 
 
-def _skip_none(**overrides: Any) -> dict[str, Any]:
-    """Retourne uniquement les overrides explicitement fournis (non-None)."""
-    return {k: v for k, v in overrides.items() if v is not None}
+class RunArgs(TypedDict):
+    """Arguments de `Pipeline.run`, tels que `PipelineBuilder.build` les résout.
+
+    Typé plutôt que `dict[str, object]` : `pipeline.run(**run_args)` est alors
+    vérifié par basedpyright, là où le dictionnaire imposait un
+    `ignore[arg-type]` au builder comme au banc d'essais.
+    """
+
+    target_language: str
+    output_epub: Path
+    bilingual_format: BilingualFormat
+    glossary: "Glossary | None"
+
+
+def _mirrors[**P](
+    phase_cls: Callable[P, PhaseProtocol],
+) -> Callable[
+    [Callable[..., "PhasesBuilder"]],
+    Callable[Concatenate["PhasesBuilder", P], "PhasesBuilder"],
+]:
+    """Aligne la signature publique d'un `add_*` sur celle de sa phase.
+
+    La méthode décorée ne porte plus que sa docstring : le décorateur lui
+    substitue un corps qui délègue à `PhasesBuilder.add`, et lui donne le type
+    du `__init__` de `phase_cls`. Les defaults ne sont donc jamais recopiés dans
+    le builder, et basedpyright vérifie les arguments — ce qu'un déballage
+    d'overrides typé `dict[str, Any]` empêchait (dette n°2, quatre bugs).
+
+    Les champs `field(init=False)` de la phase sont absents du miroir, sans
+    traitement particulier : ils ne sont pas dans son `__init__`.
+
+    Args:
+        phase_cls: Classe de phase dont la signature sert de modèle.
+
+    Returns:
+        Décorateur retypant la méthode sur `phase_cls.__init__`.
+
+    Example:
+        >>> class _Doc:  # doctest: +SKIP
+        ...     @_mirrors(InitialTranslationPhase)
+        ...     def add_initial_translation(self) -> "PhasesBuilder":
+        ...         '''Ajoute la Phase 1.'''
+        ...         ...
+    """
+
+    def decorate(
+        documented: Callable[..., "PhasesBuilder"],
+    ) -> Callable[Concatenate["PhasesBuilder", P], "PhasesBuilder"]:
+        def adder(self: "PhasesBuilder", *args: Any, **kwargs: Any) -> "PhasesBuilder":
+            return self.add(phase_cls, *args, **kwargs)
+
+        # Attributs recopiés à la main plutôt que par `functools.wraps` : celui-ci
+        # pose aussi `__wrapped__`, que `inspect.signature` suit jusqu'au stub
+        # documenté — elle annoncerait alors `(self)`, soit aucun argument. Sans
+        # lui, elle annonce `(self, *args, **kwargs)` : moins précis que le typage
+        # statique, mais exact. Publier la vraie signature de la phase n'est pas
+        # possible ici : `inspect.signature(phase_cls)` lève `NameError`, les
+        # annotations de `PhaseBase` n'étant pas résolvables à l'exécution
+        # (`PhaseContext` est importé sous `TYPE_CHECKING`).
+        adder.__name__ = documented.__name__
+        adder.__qualname__ = documented.__qualname__
+        adder.__doc__ = documented.__doc__
+        return adder
+
+    return decorate
 
 
 class LLMBuilder:
@@ -225,134 +287,106 @@ class PhasesBuilder:
     def __init__(self) -> None:
         self._phases: list[PhaseProtocol] = []
 
-    def add_literary_analysis(
+    def add[**P](
         self,
-        max_tokens: int | None = None,
-        llm_config: (
-            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
-        ) = None,
+        phase_cls: Callable[P, PhaseProtocol],
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> PhasesBuilder:
+        """Ajoute une phase quelconque, construite avec les arguments donnés.
+
+        Chemin d'exécution des `add_*`, et point d'extension pour une phase
+        maison : les arguments sont vérifiés contre le `__init__` de
+        `phase_cls`.
+
+        Args:
+            phase_cls: Classe de phase à instancier.
+            *args: Arguments positionnels du constructeur de la phase.
+            **kwargs: Arguments nommés du constructeur de la phase.
+
+        Returns:
+            self pour chaînage.
+
+        Example:
+            >>> PhasesBuilder().add(RefinementPhase, max_tokens=400)  # doctest: +SKIP
+        """
+        self._phases.append(phase_cls(*args, **kwargs))
+        return self
+
+    @_mirrors(LiteraryAnalysisPhase)
+    def add_literary_analysis(self) -> PhasesBuilder:
         """Ajoute la Phase 0 : analyse littéraire du livre avant traduction.
 
-        Les valeurs non fournies utilisent les defaults de LiteraryAnalysisPhase.
+        Signature miroir de `LiteraryAnalysisPhase`. Elle n'expose que
+        `max_tokens` et `llm` : `overlap_ratio` et `head_tail_balance` y sont
+        `field(init=False)`, la phase fixant le chevauchement à 0.0 (un
+        chapitre entier par chunk).
 
-        Args:
-            max_tokens: Tokens maximum par chunk de chapitre. `overlap_ratio`
-                n'est pas paramétrable : la phase le fixe à 0.0 (un chapitre
-                entier par chunk, aucun chevauchement).
-            llm_config: Overrides LLM pour cette phase (ex: temperature, max_tokens).
-                La sortie structurée est portée par le schéma `AnalyseChapter`
-                via Instructor.
+        La sortie structurée est portée par le schéma `AnalyseChapter` via
+        Instructor, pas par un argument d'ici.
 
         Returns:
             self pour chaînage.
-        """
-        self._phases.append(
-            LiteraryAnalysisPhase(
-                **_skip_none(
-                    max_tokens=max_tokens,
-                    llm=llm_config,
-                )
-            )
-        )
-        return self
 
-    def add_glossary_generation(
-        self,
-        max_tokens: int | None = None,
-        llm_config: (
-            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
-        ) = None,
-        overlap_ratio: float | None = None,
-    ) -> Self:
+        Example:
+            >>> PhasesBuilder().add_literary_analysis(max_tokens=5000)  # doctest: +SKIP
+        """
+        ...  # corps fourni par `_mirrors`
+
+    @_mirrors(GlossaryPhase)
+    def add_glossary_generation(self) -> PhasesBuilder:
         """Ajoute la phase glossaire : extraction des termes avant traduction.
 
-        Les valeurs non fournies utilisent les defaults de GlossaryPhase.
-
-        Args:
-            max_tokens: Tokens maximum par chunk de chapitre.
-            llm_config: Overrides LLM pour cette phase.
-            overlap_ratio: Ratio de chevauchement entre chunks.
+        Signature miroir de `GlossaryPhase` : `max_tokens`, `overlap_ratio`,
+        `head_tail_balance` et `llm` (voir `PhaseBase` pour leur sémantique).
+        Les valeurs omises sont les defaults de la phase.
 
         Returns:
             self pour chaînage.
-        """
-        self._phases.append(
-            GlossaryPhase(
-                **_skip_none(
-                    llm=llm_config,
-                    max_tokens=max_tokens,
-                    overlap_ratio=overlap_ratio,
-                )
-            )
-        )
-        return self
 
-    def add_initial_translation(
-        self,
-        max_tokens: int | None = None,
-        overlap_ratio: float | None = None,
-        max_workers: int | None = None,
-        llm_config: (
-            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
-        ) = None,
-    ) -> Self:
+        Example:
+            >>> PhasesBuilder().add_glossary_generation(overlap_ratio=0.25)  # doctest: +SKIP
+        """
+        ...  # corps fourni par `_mirrors`
+
+    @_mirrors(InitialTranslationPhase)
+    def add_initial_translation(self) -> PhasesBuilder:
         """Ajoute la Phase 1 : traduction initiale en parallèle.
 
-        Les valeurs non fournies utilisent les defaults de InitialTranslationPhase.
+        Signature miroir de `InitialTranslationPhase` : tout champ de la phase
+        se passe en argument nommé, et les valeurs omises sont les defaults de
+        la phase — jamais des copies portées ici.
 
-        Args:
-            max_tokens: Tokens maximum par chunk.
-            overlap_ratio: Ratio de chevauchement entre chunks.
-            max_workers: Nombre de workers parallèles.
-            llm_config: Overrides LLM pour cette phase (ex: temperature, use_reasoning).
+        Options courantes (voir `PhaseBase` pour leur sémantique) :
+        `max_tokens`, `overlap_ratio`, `head_tail_balance`, `max_workers`, et
+        `llm` pour des overrides LLM propres à la phase (une `LLMConfig` ou un
+        client, qui remplace alors le client par défaut).
 
         Returns:
             self pour chaînage.
-        """
-        self._phases.append(
-            InitialTranslationPhase(
-                **_skip_none(
-                    max_tokens=max_tokens,
-                    overlap_ratio=overlap_ratio,
-                    max_workers=max_workers,
-                    llm=llm_config,
-                )
-            )
-        )
-        return self
 
-    def add_refinement(
-        self,
-        max_tokens: int | None = None,
-        overlap_ratio: float | None = None,
-        llm_config: (
-            LLMConfig[UserKwargs, FullKwargs] | ClientProviderProtocol[Any, Any] | None
-        ) = None,
-    ) -> Self:
+        Example:
+            >>> PhasesBuilder().add_initial_translation(max_tokens=2000)  # doctest: +SKIP
+        """
+        ...  # corps fourni par `_mirrors`
+
+    @_mirrors(RefinementPhase)
+    def add_refinement(self) -> PhasesBuilder:
         """Ajoute la Phase 2 : affinage séquentiel avec glossaire.
 
-        Requiert que la Phase 1 (add_initial_translation) soit ajoutée avant.
-        Les valeurs non fournies utilisent les defaults de RefinementPhase.
+        Requiert que la Phase 1 (`add_initial_translation`) soit ajoutée avant.
 
-        Args:
-            max_tokens: Tokens maximum par chunk.
-            overlap_ratio: Ratio de chevauchement.
-            llm_config: Overrides LLM pour cette phase (ex: temperature, use_reasoning).
+        Signature miroir de `RefinementPhase` : `max_tokens`, `overlap_ratio`,
+        `head_tail_balance` et `llm` (voir `PhaseBase`). `max_workers` n'y
+        figure pas — la phase est séquentielle et le fixe à 1.
 
         Returns:
             self pour chaînage.
+
+        Example:
+            >>> PhasesBuilder().add_initial_translation().add_refinement()  # doctest: +SKIP
         """
-        self._phases.append(
-            RefinementPhase(
-                **_skip_none(
-                    max_tokens=max_tokens,
-                    overlap_ratio=overlap_ratio,
-                    llm=llm_config,
-                )
-            )
-        )
-        return self
+        ...  # corps fourni par `_mirrors`
 
     def build(self) -> list[PhaseProtocol]:
         """Construit la liste de phases.
@@ -390,9 +424,11 @@ class PipelineBuilder:
         self._target_language: str | None = None
         self._llm_builder: LLMBuilder | None = None
         self._phases_builder: PhasesBuilder | None = None
-        self._num_validation_workers: int | None = 2
+        # Defaults portés ici plutôt que filtrés à l'appel : `Pipeline(...)` et
+        # `Pipeline.run(...)` sont appelés explicitement, donc vérifiés.
+        self._num_validation_workers: int = 2
         self._cache_dir: Path | None = None
-        self._bilingual_format: BilingualFormat | None = None
+        self._bilingual_format: BilingualFormat = BilingualFormat.SEPARATE_TAG
         self._glossary: Glossary | None = None
         self._glossary_seed: Path | None = None
 
@@ -562,11 +598,11 @@ class PipelineBuilder:
         self._bilingual_format = fmt
         return self
 
-    def build(self) -> tuple[Pipeline, dict[str, object]]:
+    def build(self) -> tuple[Pipeline, RunArgs]:
         """Construit l'instance Pipeline et les paramètres de run().
 
         Returns:
-            Tuple (pipeline, run_kwargs) prêt à appeler pipeline.run(**run_kwargs).
+            Tuple (pipeline, run_args) prêt à appeler pipeline.run(**run_args).
 
         Raises:
             ValueError: Si epub, output, language, llm ou phases ne sont pas
@@ -593,27 +629,21 @@ class PipelineBuilder:
         phases = self._phases_builder.build()
 
         pipeline = Pipeline(
-            **_skip_none(
-                llm=llm,
-                epub_path=self._epub_path,
-                phases=phases,
-                cache_dir=self._cache_dir,
-                num_validation_workers=self._num_validation_workers,
-            )
+            llm=llm,
+            epub_path=self._epub_path,
+            phases=phases,
+            cache_dir=self._cache_dir,
+            num_validation_workers=self._num_validation_workers,
         )
 
-        run_kwargs: dict[str, object] = _skip_none(
-            **{
-                "target_language": self._target_language,
-                "output_epub": self._output_epub,
-                "bilingual_format": self._bilingual_format,
-            }
-        )
-        glossary = self._build_glossary()
-        if glossary is not None:
-            run_kwargs["glossary"] = glossary
+        run_args: RunArgs = {
+            "target_language": self._target_language,
+            "output_epub": self._output_epub,
+            "bilingual_format": self._bilingual_format,
+            "glossary": self._build_glossary(),
+        }
 
-        return pipeline, run_kwargs
+        return pipeline, run_args
 
     def run(self) -> dict[PhaseName, PhaseStats]:
         """Construit le pipeline et lance l'exécution complète.
@@ -624,5 +654,5 @@ class PipelineBuilder:
         Raises:
             ValueError: Si la configuration est incomplète.
         """
-        pipeline, run_kwargs = self.build()
-        return pipeline.run(**run_kwargs)  # type: ignore[arg-type]
+        pipeline, run_args = self.build()
+        return pipeline.run(**run_args)

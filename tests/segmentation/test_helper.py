@@ -1,3 +1,5 @@
+import pytest
+
 from ebook_translator.htmlpage import TagKey
 from ebook_translator.segmentation import Chunk
 from ebook_translator.segmentation.helper import (
@@ -93,6 +95,58 @@ class TestTurnResourceToChunks:
 
         assert len(chunks) >= 2
         assert chunks[1].get_head_size() > 0
+
+    def _overlapping_chunks(self, balance: float) -> list[Chunk]:
+        """Chunks à chevauchement, à `head_tail_balance` près.
+
+        "word " ≈ 1 token, max_tokens=10 → ~10 items par chunk, et un budget de
+        chevauchement de 10 tokens (`max_tokens * overlap_ratio * 2`) que
+        `balance` répartit entre head et tail.
+        """
+        items = self._make_items(["word "] * 50)
+        return list(
+            turn_resource_to_chunks(
+                iter(items),
+                max_tokens=10,
+                overlap_ratio=0.5,
+                head_tail_balance=balance,
+            )
+        )
+
+    @pytest.mark.parametrize("balance", [-0.1, 1.1])
+    def test_balance_out_of_range_is_rejected(self, balance: float) -> None:
+        """Hors de [0, 1], la répartition n'a pas de sens."""
+        with pytest.raises(
+            ValueError, match="head_tail_balance must be between 0 and 1"
+        ):
+            _ = list(
+                turn_resource_to_chunks(
+                    iter(self._make_items(["word "] * 5)),
+                    max_tokens=10,
+                    head_tail_balance=balance,
+                )
+            )
+
+    def test_higher_balance_gives_a_bigger_head(self) -> None:
+        """`balance` est la part du budget de chevauchement allouée au head."""
+        head_light = self._overlapping_chunks(0.2)[1].get_head_size()
+        head_heavy = self._overlapping_chunks(0.8)[1].get_head_size()
+
+        assert head_heavy > head_light
+
+    def test_balance_one_puts_everything_in_the_head(self) -> None:
+        """Tout au head : les chunks n'ont plus de tail du tout."""
+        chunks = self._overlapping_chunks(1.0)
+
+        assert chunks[1].get_head_size() > 0
+        assert all(chunk.get_tail_size() == 0 for chunk in chunks)
+
+    def test_balance_zero_puts_everything_in_the_tail(self) -> None:
+        """Tout au tail : plus aucun head, le contexte passe par l'aval."""
+        chunks = self._overlapping_chunks(0.0)
+
+        assert all(chunk.get_head_size() == 0 for chunk in chunks)
+        assert any(chunk.get_tail_size() > 0 for chunk in chunks)
 
     def test_chunks_have_sequential_indices(self):
         """Les indices des chunks sont 0, 1, 2, ..."""
