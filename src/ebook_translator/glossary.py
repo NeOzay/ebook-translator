@@ -15,6 +15,7 @@ Utilisé à la fois pour :
 
 import json
 import math
+import unicodedata
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -28,6 +29,112 @@ if TYPE_CHECKING:
         GlossaryMultipleValueEntry,
         LLMTermeGlossary,
     )
+
+
+_EQUIVALENCES_TYPOGRAPHIQUES = str.maketrans(
+    {
+        # Apostrophes et quotes simples : ‘ ’ ‚ ‛ ʼ ʹ ′ ´
+        "‘": "'",
+        "’": "'",
+        "‚": "'",
+        "‛": "'",
+        "ʼ": "'",
+        "ʹ": "'",
+        "′": "'",
+        "´": "'",
+        # Guillemets doubles : “ ” „ ‟ ″ « »
+        "“": '"',
+        "”": '"',
+        "„": '"',
+        "‟": '"',
+        "″": '"',
+        "«": '"',
+        "»": '"',
+        # Tirets et traits d'union : ‐ ‑ ‒ – — ― −
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "–": "-",
+        "—": "-",
+        "―": "-",
+        "−": "-",
+        # Invisibles : largeurs nulles, jointeurs, BOM, trait d'union
+        # conditionnel. Jamais significatifs dans un terme, donc supprimés.
+        # Notés par leur codepoint : illisibles autrement, et indistinguables
+        # les uns des autres.
+        "​": "",  # ZERO WIDTH SPACE
+        "‌": "",  # ZERO WIDTH NON-JOINER
+        "‍": "",  # ZERO WIDTH JOINER
+        "⁠": "",  # WORD JOINER
+        "﻿": "",  # ZERO WIDTH NO-BREAK SPACE (BOM)
+        "­": "",  # SOFT HYPHEN
+    }
+)
+"""Variantes typographiques que `NFKC` laisse passer, ramenées à l'ASCII.
+
+`NFKC` traite les espaces insécables, l'ellipse et la pleine chasse, mais **pas**
+les apostrophes courbes, les guillemets, les tirets longs ni les caractères de
+largeur nulle — précisément les familles qui scindent une entrée de glossaire en
+deux.
+"""
+
+
+def normalize_for_matching(text: str) -> str:
+    """Ramène un texte à la forme sous laquelle un terme est indexé et cherché.
+
+    La même fonction sert aux deux usages, et c'est ce qui les garde cohérents :
+    elle produit la **clé** d'une entrée de glossaire, et elle prépare le
+    **texte d'un bloc** dans lequel cette clé est ensuite comptée. Normaliser
+    l'un sans l'autre rendrait les termes normalisés introuvables dans le texte.
+
+    L'enchaînement est : `NFKC`, puis les équivalences typographiques que `NFKC`
+    ignore, puis la casse, puis la compression des blancs. Ce dernier geste rend
+    aussi détectable un terme que la mise en page a coupé par un retour à la
+    ligne.
+
+    Deux normalisations sont volontairement absentes :
+
+    - `casefold()`, qui fusionnerait `Straße` et `strasse` — la forme minuscule
+      suffit et reste alignée sur le décompte des propositions ;
+    - le dépouillement des diacritiques, qui confondrait `côte` et `cote`, deux
+      termes réellement distincts en langue cible.
+
+    Args:
+        text: Terme ou texte brut.
+
+    Returns:
+        La forme normalisée, comparable.
+
+    Example:
+        >>> normalize_for_matching("Adventurers’ Association")
+        "adventurers' association"
+        >>> normalize_for_matching("Demi‑Dieu") == normalize_for_matching("demi-dieu")
+        True
+    """
+    normalized = unicodedata.normalize("NFKC", text)
+    normalized = normalized.translate(_EQUIVALENCES_TYPOGRAPHIQUES)
+    return collapse_blanks(normalized.lower())
+
+
+def collapse_blanks(text: str) -> str:
+    """Ramène toute suite de blancs à une espace simple, et rogne les bords.
+
+    Sert aux deux bouts de la même chaîne : à la clé, via
+    `normalize_for_matching`, et à la **graphie mémorisée**, qui part telle
+    quelle dans un prompt où un terme occupe une ligne. Un terme que la mise en
+    page a coupé par un retour à la ligne y casserait la liste.
+
+    Args:
+        text: Texte brut.
+
+    Returns:
+        Le texte sans blancs superflus.
+
+    Example:
+        >>> collapse_blanks("Guilde des\\nOmbres")
+        'Guilde des Ombres'
+    """
+    return " ".join(text.split())
 
 
 def _get_most_frequent[S: str](d: dict[S, int]) -> S | None:
@@ -212,33 +319,56 @@ def converged_weight(search_limit: int = 100) -> int:
     return search_limit
 
 
+def _bump_surface(graphies: dict[str, int], surface: str) -> None:
+    """Enregistre une graphie observée.
+
+    Args:
+        graphies: Graphies mémorisées, avec leur effectif. Modifié sur place.
+        surface: Forme telle qu'elle a été écrite.
+    """
+    graphies[surface] = graphies.get(surface, 0) + 1
+
+
+def _preferred_surface(graphies: dict[str, int], fallback: str) -> str:
+    """Graphie à restituer.
+
+    Args:
+        graphies: Graphies mémorisées, avec leur effectif.
+        fallback: Forme normalisée, rendue si rien n'a été mémorisé.
+
+    Returns:
+        La graphie la plus fréquemment observée. À effectif égal, la plus grande
+        dans l'ordre lexicographique — un départage arbitraire, mais stable d'un
+        run à l'autre.
+    """
+    if not graphies:
+        return fallback
+    return max(graphies, key=lambda forme: (graphies[forme], forme))
+
+
 def _bump_casing(casing: dict[str, dict[str, int]], key: str, surface: str) -> None:
     """Enregistre une graphie observée pour une proposition.
 
     Args:
-        casing: Graphies mémorisées du terme, par proposition minuscule.
-        key: Proposition en minuscules, clé de décompte.
+        casing: Graphies mémorisées du terme, par proposition normalisée.
+        key: Proposition normalisée, clé de décompte.
         surface: Proposition telle que le LLM l'a écrite.
     """
-    graphies = casing.setdefault(key, {})
-    graphies[surface] = graphies.get(surface, 0) + 1
+    _bump_surface(casing.setdefault(key, {}), surface)
 
 
 def _preferred_casing(casing: dict[str, dict[str, int]], key: str) -> str:
     """Graphie à restituer pour une proposition.
 
     Args:
-        casing: Graphies mémorisées du terme, par proposition minuscule.
-        key: Proposition en minuscules.
+        casing: Graphies mémorisées du terme, par proposition normalisée.
+        key: Proposition normalisée.
 
     Returns:
-        La graphie la plus fréquemment observée, ou la clé minuscule si aucune
+        La graphie la plus fréquemment observée, ou la clé normalisée si aucune
         n'a été mémorisée — cas d'un cache écrit avant que la casse soit suivie.
     """
-    graphies = casing.get(key)
-    if not graphies:
-        return key
-    return max(graphies, key=lambda forme: (graphies[forme], forme))
+    return _preferred_surface(casing.get(key) or {}, key)
 
 
 class GlossaryStatistics(TypedDict):
@@ -253,6 +383,7 @@ class Glossary:
         term_types: dict[GlossaryEntryType, int]
         sexes: dict[GlossaryEntrySexe, int]
         translation_casing: dict[str, dict[str, int]]
+        source_casing: dict[str, int]
 
     @staticmethod
     def _new_entry() -> Glossary._Entry:
@@ -261,6 +392,9 @@ class Glossary:
             "term_types": defaultdict(int),
             "sexes": defaultdict(int),
             "translation_casing": defaultdict(lambda: defaultdict(int)),
+            # Un seul niveau, contrairement à `translation_casing` : une entrée
+            # n'a qu'un terme source, là où elle a plusieurs propositions.
+            "source_casing": defaultdict(int),
         }
 
     """
@@ -328,9 +462,10 @@ class Glossary:
           consigne n'y change rien et coûte du rappel ; le filtre est donc
           posé ici, où il ne dépend pas de l'obéissance du modèle.
 
-        La comparaison porte sur la forme minuscule, seule forme sous laquelle
-        les clés `user` sont rangées — le LLM, lui, émet le terme dans sa casse
-        d'origine.
+        La comparaison porte sur la forme normalisée
+        (`normalize_for_matching`), seule forme sous laquelle les clés sont
+        rangées — le LLM, lui, émet le terme dans la graphie du livre, dont
+        `source_casing` garde la trace.
 
         Note:
             Le gel est total, contradictions comprises : une fois la confiance
@@ -347,7 +482,13 @@ class Glossary:
         Args:
             term: Dictionnaire avec les clés "terme", "proposition_traduction", "type", "sexe"
         """
-        source_term = term["terme"].lower()
+        source_term = normalize_for_matching(term["terme"])
+        # Un terme qui ne survit pas à la normalisation — vide, ou réduit à des
+        # caractères invisibles — donnerait la clé `""`. Elle serait trouvée
+        # dans tous les blocs (`text.count("")` vaut `len(text) + 1`) et
+        # remonterait en tête du tri par occurrences, pour un terme inexistant.
+        if not source_term:
+            return
         if source_term in self._user:
             return
 
@@ -360,19 +501,26 @@ class Glossary:
         ):
             return
 
-        proposition = term["proposition_traduction"]
-        translated_term = proposition.lower()
+        proposition = collapse_blanks(term["proposition_traduction"])
+        translated_term = normalize_for_matching(proposition)
+        if not translated_term:
+            return
         term_type = cast(GlossaryEntryType, term["type"].lower())
         sexe = cast(GlossaryEntrySexe, term["sexe"].lower())
 
         entry = self._glossary[source_term]
-        # Incrémenter le compteur. Le décompte porte sur la forme minuscule :
+        # Incrémenter le compteur. Le décompte porte sur la forme normalisée :
         # `Jean` et `jean` sont la même proposition et doivent cumuler leur
-        # poids. La graphie, elle, est retenue à part pour être restituée.
+        # poids, comme `l’Ancien` et `l'Ancien`. La graphie, elle, est retenue à
+        # part pour être restituée.
         entry["translations"][translated_term] += 1
         entry["term_types"][term_type] += 1
         entry["sexes"][sexe] += 1
         _bump_casing(entry["translation_casing"], translated_term, proposition)
+        # La graphie du terme source, telle que le modèle l'a copiée du livre.
+        # C'est elle que les phases 1 et 2 doivent revoir : leur montrer la clé
+        # normalisée reviendrait à leur montrer une forme absente du texte.
+        _bump_surface(entry["source_casing"], collapse_blanks(term["terme"]))
 
         self._entries_cache.pop(source_term, None)
 
@@ -386,9 +534,12 @@ class Glossary:
         Retourne la traduction validée, ou à défaut la plus fréquente
         si elle dépasse le seuil de confiance.
 
+        Le terme est normalisé à l'entrée : l'appelant interroge le glossaire
+        avec la graphie qu'il a sous la main, pas avec une clé qu'il aurait à
+        reconstruire.
+
         Args:
-            source_term: Le terme à traduire
-            min_confidence: Seuil de confiance minimum (ratio de la traduction dominante)
+            source_term: Le terme à traduire, dans n'importe quelle graphie.
 
         Returns:
             Traduction recommandée, ou None si aucune traduction fiable
@@ -399,6 +550,8 @@ class Glossary:
             >>> glossary.get_translation("UnknownTerm")
             None
         """
+        source_term = normalize_for_matching(source_term)
+
         # 1. Vérifier s'il y a une traduction validée manuellement
         # if source_term in self._validated:
         #     return self._validated[source_term]
@@ -426,7 +579,7 @@ class Glossary:
         weight = sum(term["translations"].values())
 
         entry: GlossaryEntry = {
-            "terme": source_term,
+            "terme": _preferred_surface(term["source_casing"], source_term),
             "traduction": _preferred_casing(term["translation_casing"], translation),
             "type": term_type,
             "sexe": sexe,
@@ -441,7 +594,10 @@ class Glossary:
     ) -> GlossaryMultipleValueEntry | None:
         """
         Revoir les traductions possibles d'un terme jusqu'à atteindre un seuil de confiance cumulé.
+
+        Le terme est normalisé à l'entrée, comme dans `get_translation`.
         """
+        source_term = normalize_for_matching(source_term)
         if source_term not in self._glossary:
             return None
         if source_term in self._user:
@@ -454,7 +610,7 @@ class Glossary:
         v = _compute_confidence(list(term["translations"].values()))
 
         return {
-            "terme": source_term,
+            "terme": _preferred_surface(term["source_casing"], source_term),
             "traductions": [
                 (_preferred_casing(term["translation_casing"], proposition), poids)
                 for proposition, poids in _get_possible_translations(
@@ -479,11 +635,14 @@ class Glossary:
 
         Les traductions validées ont priorité sur celles apprises automatiquement.
 
-        La clé est normalisée en minuscules : les deux collecteurs cherchent le
-        terme dans un texte déjà passé en minuscules et excluent les entrées
-        apprises par `terme_lower in self._user`. Une clé conservée dans sa
-        casse d'origine ne serait jamais retrouvée, ni dans le texte ni dans
-        cette exclusion.
+        La clé passe par `normalize_for_matching` : les deux collecteurs
+        cherchent le terme dans un texte normalisé du même geste, et excluent
+        les entrées apprises par appartenance à `self._user`. Une clé conservée
+        dans sa graphie d'origine ne serait jamais retrouvée, ni dans le texte
+        ni dans cette exclusion.
+
+        La graphie fournie, elle, est conservée dans le champ `terme` : c'est
+        celle que le prompt revoit, et l'utilisateur l'a écrite comme le livre.
 
         Args:
             terme: Terme source.
@@ -494,13 +653,23 @@ class Glossary:
         Returns:
             Le glossaire, pour chaînage.
 
+        Raises:
+            ValueError: Si le terme ne survit pas à la normalisation. Une entrée
+                `user` vient d'une saisie humaine : l'erreur se signale, là où
+                `learn` — alimenté par le modèle — écarte silencieusement.
+
         Example:
             >>> glossary.add_user_translation("Matrix", "Matrice", "f", "terme_technique")
             >>> # Cette traduction sera toujours utilisée
         """
-        cle = terme.lower()
+        cle = normalize_for_matching(terme)
+        if not cle:
+            raise ValueError(
+                f"terme `{terme!r}` vide une fois normalisé : une clé vide serait "
+                "trouvée dans tous les blocs"
+            )
         term: GlossaryEntry = {
-            "terme": cle,
+            "terme": collapse_blanks(terme),
             "traduction": translation,
             "type": terme_type,
             "sexe": sexe,
@@ -533,7 +702,10 @@ class Glossary:
             >>> entries = glossary.collect_entry(chunk)
             >>> # [GlossaryEntry(term='Matrix', traduction='Matrice', ...), ...]
         """
-        text = text.lower()
+        # Le texte est normalisé du même geste que les clés : c'est la seule
+        # façon d'y retrouver un terme dont la clé a perdu ses apostrophes
+        # typographiques et ses tirets longs.
+        text = normalize_for_matching(text)
         result: list[GlossaryEntry] = []
         for terme in self._user:
             if terme in text:
@@ -544,10 +716,9 @@ class Glossary:
 
         entries: list[tuple[int, GlossaryEntry]] = []
         for terme in self._glossary:
-            terme_lower = terme.lower()
-            if terme_lower in self._user:
+            if terme in self._user:
                 continue
-            count = text.count(terme_lower)
+            count = text.count(terme)
             if count == 0:
                 continue
             entry = self.get_translation(terme)
@@ -593,13 +764,12 @@ class Glossary:
             Une entrée par terme appris présent dans le bloc, entrées `user`
             exclues, dans la limite de `max_terms`.
         """
-        text = text.lower()
+        text = normalize_for_matching(text)
         collected: list[tuple[int, int, GlossaryMultipleValueEntry]] = []
         for terme in self._glossary:
-            terme_lower = terme.lower()
-            if terme_lower in self._user:
+            if terme in self._user:
                 continue
-            count = text.count(terme_lower)
+            count = text.count(terme)
             if count == 0:
                 continue
             entry = self.get_translations_until_confidence(terme, confidence_accumulate)
@@ -789,31 +959,46 @@ class Glossary:
             print(f"⚠️ Erreur lors du chargement du glossaire précédent: {e}")
             return
 
+        # Les clés du fichier repassent par `normalize_for_matching`. C'est ce
+        # geste, et lui seul, qui fusionne les entrées d'un cache écrit quand la
+        # clé n'était normalisée que sur la casse : deux graphies d'un même
+        # terme y occupent deux entrées, et leurs distributions s'additionnent
+        # ici parce que la boucle accumule au lieu d'écraser.
         for source, entry in data.get("glossary", {}).items():
+            cle_source = normalize_for_matching(source)
+            # Même écart que dans `learn` : une clé vide serait trouvée dans
+            # tous les blocs. Un cache écrit avant ce contrôle peut en porter.
+            if not cle_source:
+                continue
+            cible = self._glossary[cle_source]
             for trans, count in entry.get("translations", {}).items():
                 decayed = max(1, math.ceil(count * decay))
-                self._glossary[source]["translations"][trans] += decayed
+                cible["translations"][normalize_for_matching(trans)] += decayed
             for term_type, count in entry.get("term_types", {}).items():
                 decayed = max(1, math.ceil(count * decay))
-                self._glossary[source]["term_types"][term_type] += decayed
+                cible["term_types"][term_type] += decayed
             for sexe, count in entry.get("sexes", {}).items():
                 decayed = max(1, math.ceil(count * decay))
-                self._glossary[source]["sexes"][sexe] += decayed
+                cible["sexes"][sexe] += decayed
             # Les graphies ne subissent pas le decay : elles ne pondèrent rien,
             # elles départagent l'écriture d'une proposition déjà pondérée.
             for proposition, graphies in entry.get("translation_casing", {}).items():
                 for surface, count in graphies.items():
-                    cible = self._glossary[source]["translation_casing"].setdefault(
-                        proposition, {}
+                    graphies_cible = cible["translation_casing"].setdefault(
+                        normalize_for_matching(proposition), {}
                     )
-                    cible[surface] = cible.get(surface, 0) + count
+                    graphies_cible[surface] = graphies_cible.get(surface, 0) + count
+            for surface, count in entry.get("source_casing", {}).items():
+                cible["source_casing"][surface] = (
+                    cible["source_casing"].get(surface, 0) + count
+                )
 
         # Entrées user : fusion sans decay (la traduction validée reste valide).
         # La clé est normalisée comme dans `add_user_translation` — un cache
-        # écrit avant cette normalisation peut porter des clés en casse mixte.
+        # écrit avant cette normalisation peut porter des clés non normalisées.
         for terme, entry in data.get("user", {}).items():
-            cle = terme.lower()
-            if cle not in self._user:
+            cle = normalize_for_matching(terme)
+            if cle and cle not in self._user:
                 self._user[cle] = entry
 
         self._entries_cache.clear()

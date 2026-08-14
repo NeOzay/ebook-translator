@@ -10,12 +10,57 @@
 
 | Version | Date | Fonctionnalité principale | Impact |
 |---------|------|---------------------------|--------|
-| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié, `template` absorbé, signatures du builder miroir des phases* | *3 effets de bord + 1 rupture d'API, voir ci-dessous* |
+| *Non publié* | — | *Hooks de phase dédoublés, routage des workers par phase, glossaire source en lecture seule, sortie glossaire tabulaire, sélection du glossaire, plafond de débit LLM et statut de variante vérifié, `template` absorbé, signatures du builder miroir des phases, clés de glossaire normalisées* | *3 effets de bord + 1 rupture d'API, voir ci-dessous* |
 | **0.12.0** | **2026-07-30** | **Pivot TypedDict, persistance stratifiée, validation unifiée** | **-8274 lignes, 9 bugs corrigés** |
 
 ---
 
 ## Non publié
+
+### 🔑 Les clés du glossaire absorbent toutes les variantes de caractères
+
+Un terme était indexé par `term["terme"].lower()`, sans autre normalisation.
+Deux graphies ne différant que par la ponctuation occupaient donc deux entrées :
+mesuré sur un tome complet, `Adventurers’ Association` existait sous
+`adventurers’ association` (poids 10) et `adventurers' association` (poids 8) —
+18 émissions du même terme scindées en deux distributions dont aucune n'atteint
+ce que leur somme aurait donné. Le fractionnement retarde la convergence, qui
+est la fonction même du glossaire, et fait réinjecter le terme deux fois sous
+deux formes concurrentes.
+
+`normalize_for_matching` ([glossary.py](../src/ebook_translator/glossary.py))
+enchaîne `NFKC`, un repli explicite des apostrophes, guillemets, tirets et
+caractères invisibles, la casse, puis la compression des blancs. La table de
+repli n'est pas redondante avec `NFKC` : celui-ci ramène bien les espaces
+insécables et la pleine chasse, mais laisse intacts `’`, `“ ”`, `– — ‐` et les
+largeurs nulles — précisément les familles en cause.
+
+La même fonction produit la clé **et** prépare le texte du bloc où elle est
+cherchée : les normaliser séparément rendrait les clés introuvables. La
+compression des blancs a un effet de bord bienvenu — un terme coupé par un
+retour à la ligne redevient détectable.
+
+Deux normalisations sont volontairement absentes : `casefold()`, qui
+fusionnerait `Straße` et `strasse`, et le dépouillement des diacritiques, qui
+confondrait `côte` et `cote`.
+
+Conséquences visibles :
+
+- **La graphie du livre survit** dans un champ `source_casing`, symétrique du
+  `translation_casing` existant. C'est elle que les prompts revoient : leur
+  montrer la clé normalisée reviendrait à leur montrer une forme absente du
+  texte. Une entrée `user` conserve de même la graphie saisie, là où elle
+  recevait jusqu'ici la clé.
+- **Les caches déjà écrits fusionnent leurs entrées scindées au chargement.**
+  `import_from_volume` accumulait déjà par clé ; normaliser à la lecture a
+  suffi, aucun outil de migration n'a été nécessaire. Les propositions de
+  traduction sont renormalisées du même geste — le fractionnement frappait
+  identiquement le côté cible.
+- Un cache antérieur, sans graphie mémorisée, se replie sur la clé.
+
+Solde *« Les clés du glossaire ne sont normalisées que sur la casse »* de
+[TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) — citée par son titre, les numéros
+bougeant à chaque solde.
 
 ### 🔒 Les `add_*` du builder tirent leur signature de leur phase
 

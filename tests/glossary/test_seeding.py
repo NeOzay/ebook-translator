@@ -127,7 +127,7 @@ class TestEntreeUser:
 
     def test_injectee_dans_les_prompts_de_traduction(self, glossaire: Glossary) -> None:
         entree = next(
-            e for e in glossaire.collect_entry(BLOC) if e["terme"] == "matrix"
+            e for e in glossaire.collect_entry(BLOC) if e["terme"] == "Matrix"
         )
 
         assert entree["traduction"] == "Matrice"

@@ -1,11 +1,14 @@
-"""Entrées validées manuellement : la casse ne doit pas les rendre invisibles.
+"""Entrées validées manuellement : la graphie ne doit pas les rendre invisibles.
 
-Les clés `user` sont rangées en minuscules parce que toutes les lectures les
-cherchent sous cette forme — `collect_entry` dans un texte déjà abaissé, les
-deux collecteurs dans leur exclusion des entrées apprises, `learn` dans son
-court-circuit. Une clé conservée dans sa casse d'origine traverse le glossaire
-sans jamais être trouvée : le terme n'est ni injecté dans les prompts de
-traduction, ni protégé des propositions du LLM.
+Les clés `user` sont rangées sous leur forme normalisée parce que toutes les
+lectures les cherchent ainsi — `collect_entry` dans un texte normalisé du même
+geste, les deux collecteurs dans leur exclusion des entrées apprises, `learn`
+dans son court-circuit. Une clé conservée dans sa graphie d'origine traverse le
+glossaire sans jamais être trouvée : le terme n'est ni injecté dans les prompts
+de traduction, ni protégé des propositions du LLM.
+
+La graphie saisie, elle, survit dans le champ `terme` : c'est elle que les
+prompts revoient, et l'utilisateur l'a écrite comme le livre.
 """
 
 from __future__ import annotations
@@ -52,14 +55,14 @@ class TestCollecte:
     """Ce que l'entrée user devient face au texte."""
 
     def test_entree_user_retrouvee_dans_le_texte(self, glossaire: Glossary) -> None:
-        """`collect_entry` cherche dans un texte abaissé : une clé `Matrix` n'y est jamais."""
+        """La clé cherchée est normalisée ; la graphie saisie est ce qui ressort."""
         termes = {e["terme"] for e in glossaire.collect_entry(BLOC)}
 
-        assert "matrix" in termes
+        assert "Matrix" in termes
 
     def test_traduction_validee_conservee(self, glossaire: Glossary) -> None:
         entree = next(
-            e for e in glossaire.collect_entry(BLOC) if e["terme"] == "matrix"
+            e for e in glossaire.collect_entry(BLOC) if e["terme"] == "Matrix"
         )
 
         assert entree["traduction"] == "Matrice"
@@ -81,7 +84,7 @@ class TestAutorite:
 
         termes = [e["terme"] for e in glossaire.collect_entry(BLOC)]
 
-        assert termes.count("matrix") == 1
+        assert termes.count("Matrix") == 1
 
     def test_terme_user_absent_des_conflits(self, glossaire: Glossary) -> None:
         glossaire.learn(_terme("Matrix", "la Matrice"))
@@ -123,4 +126,4 @@ class TestPersistance:
         recharge = Glossary(chemin)
 
         assert recharge.get_statistics()["user_terms"] == 1
-        assert {e["terme"] for e in recharge.collect_entry(BLOC)} == {"matrix"}
+        assert {e["terme"] for e in recharge.collect_entry(BLOC)} == {"Matrix"}

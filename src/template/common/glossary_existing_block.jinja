@@ -69,9 +69,9 @@ Règles :
 {% endif -%}
 
 {% if emerging|length > 0 -%}
-**Termes déjà extraits** (signal encore faible) — formes normalisées :
+**Termes déjà extraits** (signal encore faible) :
 
 {% for entry in emerging %}`{{ entry.terme }}`{% if not loop.last %}, {% endif %}{% endfor %}
 
-Ces termes ont été relevés ailleurs dans le livre, sans traduction encore assez appuyée pour t'être soumise. Les conditions d'admission s'appliquent comme pour tout autre terme : n'inclus dans ta sortie que ceux que le bloc courant justifie. Les formes ci-dessus sont normalisées en minuscules : si tu en retiens un, reprends la graphie telle qu'elle apparaît dans le bloc courant, et non la forme listée. Une seule ligne par terme.
+Ces termes ont été relevés ailleurs dans le livre, sans traduction encore assez appuyée pour t'être soumise. Les conditions d'admission s'appliquent comme pour tout autre terme : n'inclus dans ta sortie que ceux que le bloc courant justifie. Les formes ci-dessus sont celles relevées dans le livre : si tu en retiens un, reprends la graphie du bloc courant, qui devrait leur correspondre. Une seule ligne par terme.
 {% endif -%}

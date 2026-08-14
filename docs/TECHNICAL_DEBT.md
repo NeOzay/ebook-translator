@@ -8,7 +8,18 @@ vérifiée dans le code — pas des idées d'amélioration : pour celles-ci, voi
 Chaque entrée indique le chantier qui l'a identifiée. Une entrée soldée est
 retirée, pas barrée.
 
-> Dernière vérification : 2026-08-12 (chantier `builder-signatures`).
+> Dernière vérification : 2026-08-14 (chantier `glossary-key-normalization`).
+>
+> Soldé le 2026-08-14 par le chantier `glossary-key-normalization` : *« Les clés
+> du glossaire ne sont normalisées que sur la casse »*. `normalize_for_matching`
+> (NFKC, puis repli des apostrophes, guillemets, tirets et invisibles, puis
+> casse et compression des blancs) produit désormais la clé **et** prépare le
+> texte du bloc où elle est cherchée. La graphie du livre survit dans
+> `source_casing`, symétrique de `translation_casing` : c'est elle que le prompt
+> revoit, pas la clé. Les caches déjà écrits fusionnent leurs entrées scindées
+> au chargement — `import_from_volume` accumule par clé, il suffisait de
+> normaliser à la lecture, aucun outil de migration n'a été nécessaire. Les
+> entrées suivantes ont été renumérotées.
 >
 > Soldé le 2026-08-12 par le chantier `builder-signatures` : *« Le déballage
 > `**kwargs` masque encore les appels du builder »*. `_skip_none` a disparu de
@@ -293,41 +304,7 @@ sait le faire contre `froid`.
 
 ---
 
-## 9. Les clés du glossaire ne sont normalisées que sur la casse
-
-**Constat** — `Glossary.learn()`
-([glossary.py](../src/ebook_translator/glossary.py)) indexe un terme par
-`term["terme"].lower()`, sans autre normalisation. Deux graphies qui ne
-diffèrent que par la ponctuation produisent donc deux entrées distinctes.
-
-**Mesuré** — sur le même run, l'organisation `Adventurers’ Association` existe
-sous deux clés :
-
-| Clé | Poids |
-|---|---|
-| `adventurers’ association` (apostrophe typographique) | 10 |
-| `adventurers' association` (apostrophe droite) | 8 |
-
-18 émissions du même terme, scindées en deux distributions dont aucune n'atteint
-ce que leur somme aurait donné. Le livre source emploie la forme typographique ;
-le modèle produit les deux.
-
-**Pourquoi c'est gênant** — le fractionnement retarde ou empêche la convergence,
-qui est la fonction même du glossaire. Le terme est en outre réinjecté deux fois
-dans le prompt, sous deux formes concurrentes.
-
-**Pour solder** — normaliser les apostrophes (et les tirets, même famille de
-problème) dans la clé, au même endroit que le `.lower()`. Attention : la clé
-sert aussi à retrouver le terme dans le texte source
-(`collect_entry_with_conflicts` fait `text.count(terme)`), donc la recherche
-doit être normalisée du même geste, sans quoi les termes normalisés ne seraient
-plus jamais trouvés dans le bloc.
-
-*Identifié par `glossary-seeding`, audit du 2026-08-09.*
-
----
-
-## 10. Les doctests ne sont exécutés par rien
+## 9. Les doctests ne sont exécutés par rien
 
 **Constat** — les `addopts` de `pyproject.toml` ne contiennent pas
 `--doctest-modules`, et aucune configuration ne collecte les doctests par
@@ -351,7 +328,7 @@ d'autres n'ont probablement jamais tourné.
 
 ---
 
-## 11. L'auditeur glossaire noie ses vrais constats sous les mots-outils
+## 10. L'auditeur glossaire noie ses vrais constats sous les mots-outils
 
 **Constat** — `candidat-manque` (« entité nommée récurrente absente du
 glossaire ») repère les mots capitalisés en milieu de phrase
@@ -377,7 +354,7 @@ avant comparaison au glossaire.
 
 ---
 
-## 12. Points mineurs, laissés sciemment
+## 11. Points mineurs, laissés sciemment
 
 - `PhaseStats.chunks_validated` ([pipeline/context.py](../src/ebook_translator/pipeline/context.py))
   est déclaré, formaté et affiché en fin de run, mais **jamais incrémenté** : le

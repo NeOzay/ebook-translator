@@ -69,8 +69,8 @@ class TestApprentissage:
         assert entry is not None
         assert entry["traduction"] == "Jean"
 
-    def test_terme_source_reste_minuscule(self) -> None:
-        """La clé source est une clé d'agrégation, cherchée dans un texte minusculé."""
+    def test_cle_source_reste_normalisee(self) -> None:
+        """La clé source est une clé d'agrégation, cherchée dans un texte normalisé."""
         g = Glossary()
         g.learn(_terme("John", "Jean"))
 
@@ -91,6 +91,78 @@ class TestApprentissage:
 
         entrees = g.collect_entry("they entered the matrix at dawn")
         assert [e["traduction"] for e in entrees] == ["Matrice"]
+
+
+class TestGraphieSource:
+    """Ce que le prompt revoit du terme source.
+
+    La clé est une forme normalisée, faite pour agréger et pour être cherchée
+    dans un texte lui-même normalisé. La montrer telle quelle au modèle
+    reviendrait à lui présenter une graphie absente du livre : c'est la surface
+    observée qui ressort.
+    """
+
+    def test_graphie_du_livre_restituee(self) -> None:
+        g = Glossary()
+        g.learn(_terme("John", "Jean"))
+
+        entry = g.get_translation("john")
+        assert entry is not None
+        assert entry["terme"] == "John"
+
+    def test_graphie_dominante_l_emporte(self) -> None:
+        g = Glossary()
+        g.learn(_terme("john", "Jean"))
+        g.learn(_terme("John", "Jean"))
+        g.learn(_terme("John", "Jean"))
+
+        entry = g.get_translation("john")
+        assert entry is not None
+        assert entry["terme"] == "John"
+
+    def test_restituee_aussi_dans_les_conflits(self) -> None:
+        g = Glossary()
+        g.learn(_terme("John", "Jean"))
+        g.learn(_terme("John", "Johnny"))
+
+        detail = g.get_translations_until_confidence("john", confidence=1)
+        assert detail is not None
+        assert detail["terme"] == "John"
+
+    def test_repli_sur_la_cle_sans_graphie(self, tmp_path: Path) -> None:
+        """Un cache antérieur à ce suivi n'a pas de graphie source."""
+        chemin = tmp_path / "glossary.json"
+        _ = chemin.write_text(
+            json.dumps(
+                {
+                    "glossary": {
+                        "john": {
+                            "translations": {"jean": 3},
+                            "term_types": {"personnage": 3},
+                            "sexes": {"m": 3},
+                        }
+                    },
+                    "user": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        entry = Glossary(chemin).get_translation("john")
+
+        assert entry is not None
+        assert entry["terme"] == "john"
+
+    def test_graphie_survit_a_l_aller_retour(self, tmp_path: Path) -> None:
+        chemin = tmp_path / "glossary.json"
+        g = Glossary()
+        g.learn(_terme("John", "Jean"))
+        g.save(chemin)
+
+        entry = Glossary(chemin).get_translation("john")
+
+        assert entry is not None
+        assert entry["terme"] == "John"
 
 
 class TestPersistance:
